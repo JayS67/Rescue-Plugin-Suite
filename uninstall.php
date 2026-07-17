@@ -3,6 +3,12 @@ if (!defined('WP_UNINSTALL_PLUGIN')) exit;
 
 global $wpdb;
 
+$settings = get_option('plugin_ui_suite_settings_v83', []);
+if (empty($settings['global']['delete_data_on_uninstall'])) {
+  wp_clear_scheduled_hook('plugin_suite_retry_webhooks_cron');
+  return;
+}
+
 $options = [
   'plugin_ui_suite_settings_v83',
   'plugin_ui_suite_snapshots_v1',
@@ -18,6 +24,15 @@ $options = [
   'plugin_adopted_ui_options',
   'plugin_stats_ui_options',
   'plugin_ui_suite_provider_diagnostics',
+  'plugin_ui_suite_schema_version',
+  'plugin_ui_suite_ignored_update_version',
+  'plugin_payments_settings_v1',
+  'plugin_payments_audit_v1',
+  'plugin_payments_webhook_events_v1',
+  'plugin_payments_payment_events_v1',
+  'plugin_payments_subscription_events_v1',
+  'plugin_payments_gocardless_pending_v1',
+  'plugin_payments_gift_aid_v1',
 ];
 
 wp_clear_scheduled_hook('plugin_suite_retry_webhooks_cron');
