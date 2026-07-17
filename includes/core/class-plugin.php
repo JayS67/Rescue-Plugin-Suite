@@ -72,6 +72,7 @@ final class StraySafe_UI_Suite_Plugin {
     require_once STRAYSAFE_SUITE_PATH . 'includes/modules/adopted/class-module.php';
     require_once STRAYSAFE_SUITE_PATH . 'includes/modules/statistics/class-module.php';
     require_once STRAYSAFE_SUITE_PATH . 'includes/modules/asm-proxy/class-module.php';
+    require_once STRAYSAFE_SUITE_PATH . 'includes/modules/payments/class-module.php';
   }
 
   public static function default_settings() {
