@@ -15,7 +15,9 @@ define('PLUGIN_SUITE_URL', plugin_dir_url(__FILE__));
 require_once PLUGIN_SUITE_PATH . 'includes/core/helpers.php';
 require_once PLUGIN_SUITE_PATH . 'includes/core/class-plugin.php';
 require_once PLUGIN_SUITE_PATH . 'includes/core/class-seo.php';
+require_once PLUGIN_SUITE_PATH . 'includes/core/class-updater.php';
 
 Plugin_UI_Suite_Plugin::init();
 Plugin_UI_Suite_SEO::init();
+Plugin_UI_Suite_Updater::init();
 register_activation_hook(__FILE__, ['Plugin_UI_Suite_Plugin', 'activate']);

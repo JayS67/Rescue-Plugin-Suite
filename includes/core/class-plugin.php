@@ -10,6 +10,8 @@ final class Plugin_UI_Suite_Plugin {
   const ANALYTICS_KEY = 'plugin_suite_analytics_v1';
   const WEBHOOK_AUDIT_KEY = 'plugin_suite_webhook_audit_v1';
   const WEBHOOK_CRON_HOOK = 'plugin_suite_retry_webhooks_cron';
+  const SCHEMA_VERSION_KEY = 'plugin_ui_suite_schema_version';
+  const SCHEMA_VERSION = '1.2.0';
 
   public static function init() {
     self::include_modules();
@@ -52,6 +54,7 @@ final class Plugin_UI_Suite_Plugin {
     add_action('wp_ajax_plugin_suite_track', [__CLASS__, 'handle_track_event']);
     add_action('wp_ajax_nopriv_plugin_suite_track', [__CLASS__, 'handle_track_event']);
     self::ensure_webhook_retry_schedule();
+    self::maybe_run_migrations();
   }
 
   public static function activate() {
@@ -83,6 +86,7 @@ final class Plugin_UI_Suite_Plugin {
         'cache_adopted_seconds' => 120,
         'cache_stats_seconds' => 60,
         'bypass_plugin_cache' => 0,
+        'delete_data_on_uninstall' => 0,
         'adoptables_page_url' => '',
         'adopted_page_url' => '',
         'brand_color' => '#401268',
@@ -291,6 +295,30 @@ final class Plugin_UI_Suite_Plugin {
       $defaults = self::merge_with_defaults($defaults, $saved_defaults);
     }
     return $defaults;
+  }
+
+
+  public static function maybe_run_migrations() {
+    $current = get_option(self::SCHEMA_VERSION_KEY, '0.0.0');
+    if (version_compare($current, self::SCHEMA_VERSION, '>=')) return;
+    $lock = 'plugin_ui_suite_migration_lock';
+    if (get_transient($lock)) return;
+    set_transient($lock, 1, 5 * MINUTE_IN_SECONDS);
+    $target = $current;
+    if (version_compare($target, '1.1.0', '<')) {
+      add_option(self::SCHEMA_VERSION_KEY, '1.1.0', '', false);
+      $target = '1.1.0';
+    }
+    if (version_compare($target, '1.2.0', '<')) {
+      $settings = self::get_settings();
+      if (!isset($settings['global']['delete_data_on_uninstall'])) {
+        $settings['global']['delete_data_on_uninstall'] = 0;
+        update_option(self::OPT_KEY, $settings, false);
+      }
+      $target = '1.2.0';
+    }
+    update_option(self::SCHEMA_VERSION_KEY, self::SCHEMA_VERSION, false);
+    delete_transient($lock);
   }
 
   private static function candidate_option_keys() {
@@ -834,6 +862,7 @@ final class Plugin_UI_Suite_Plugin {
       $clean['global']['cache_adopted_seconds'] = self::sanitise_int($g['cache_adopted_seconds'] ?? '', $clean['global']['cache_adopted_seconds'] ?? $defaults['global']['cache_adopted_seconds'], 0, 600);
       $clean['global']['cache_stats_seconds'] = self::sanitise_int($g['cache_stats_seconds'] ?? '', $clean['global']['cache_stats_seconds'] ?? $defaults['global']['cache_stats_seconds'], 0, 600);
       if (array_key_exists('bypass_plugin_cache', $g) || array_key_exists('bypa' . 'plugin_cache', $g)) $clean['global']['bypass_plugin_cache'] = (!empty($g['bypass_plugin_cache']) || !empty($g['bypa' . 'plugin_cache'])) ? 1 : 0;
+      $clean['global']['delete_data_on_uninstall'] = !empty($g['delete_data_on_uninstall']) ? 1 : 0;
       foreach (['adoptables_page_url','adopted_page_url'] as $k) $clean['global'][$k] = esc_url_raw($g[$k] ?? ($clean['global'][$k] ?? ''));
       foreach (['adoptables_style_source','adopted_style_source','stats_style_source'] as $k) {
         $style_source = $g[$k] ?? ($clean['global'][$k] ?? 'auto');
@@ -1077,13 +1106,16 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) return;
     $settings = self::get_settings();
     $tab = sanitize_key($_GET['tab'] ?? 'global');
-    if (!in_array($tab,['global','adoptables','layout','adopted','stats','widgets','quiz','forms','proxy','diagnostics','help'], true)) $tab='global';
+    if (!in_array($tab,['global','adoptables','layout','adopted','stats','widgets','payments','quiz','forms','proxy','diagnostics','help'], true)) $tab='global';
     echo '<div class="wrap"><h1>Rescue Plugin Suite</h1><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
     self::start_wrap();
     echo '<div class="plugin-suite-tabs">';
-    foreach (['global'=>'Global','adoptables'=>'Adoptables','layout'=>'Layout builder','adopted'=>'Adopted','stats'=>'Statistics','widgets'=>'Widgets','quiz'=>'Match quiz','forms'=>'Forms','proxy'=>'Proxy','diagnostics'=>'Diagnostics','help'=>'Help / Guide'] as $key=>$label) printf('<a class="plugin-suite-tab %s" href="%s">%s</a>', $tab===$key?'active':'', esc_url(add_query_arg(['page'=>'plugin-ui-suite','tab'=>$key], admin_url('options-general.php'))), esc_html($label));
+    foreach (['global'=>'Global','adoptables'=>'Adoptables','layout'=>'Layout builder','adopted'=>'Adopted','stats'=>'Statistics','widgets'=>'Widgets','payments'=>'Payments','quiz'=>'Match quiz','forms'=>'Forms','proxy'=>'Proxy','diagnostics'=>'Diagnostics','help'=>'Help / Guide'] as $key=>$label) {
+      $href = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$key], admin_url('options-general.php'));
+      printf('<a class="plugin-suite-tab %s" href="%s">%s</a>', $tab===$key?'active':'', esc_url($href), esc_html($label));
+    }
     echo '</div><div class="plugin-suite-panel">';
     if ($tab === 'global') self::render_global_tab($settings);
     elseif ($tab === 'adoptables') self::render_adoptables_tab($settings['adoptables'], $settings['global']);
@@ -1091,6 +1123,7 @@ final class Plugin_UI_Suite_Plugin {
     elseif ($tab === 'adopted') self::render_adopted_tab($settings['adopted'], $settings['global']);
     elseif ($tab === 'stats') self::render_stats_tab($settings['stats'], $settings['global']);
     elseif ($tab === 'widgets') self::render_widgets_tab($settings);
+    elseif ($tab === 'payments' && class_exists('Plugin_Payments_Module')) Plugin_Payments_Module::render_admin_page(true);
     elseif ($tab === 'quiz') self::render_quiz_tab($settings);
     elseif ($tab === 'forms') self::render_forms_tab($settings);
     elseif ($tab === 'proxy') self::render_proxy_tab($settings);
@@ -1109,7 +1142,8 @@ final class Plugin_UI_Suite_Plugin {
     echo '<div class="plugin-suite-card"><h2>Global behaviour</h2><table class="form-table">';
     ob_start(); self::select_input('global','style_behavior',$s['global']['style_behavior'], ['original_ui_defaults'=>'Original UI defaults first','global_style_first'=>'Global style first']); self::row('UI style behaviour', ob_get_clean());
     foreach ([['cache_adoptables_seconds','Adoptables cache seconds'],['cache_adopted_seconds','Adopted cache seconds'],['cache_stats_seconds','Statistics cache seconds']] as $r){ ob_start(); self::number_input('global',$r[0],$s['global'][$r[0]],0,600); self::row($r[1], ob_get_clean()); }
-    ob_start(); self::checkbox_input('global','bypass_plugin_cache',$s['global']['bypass_plugin_cache'] ?? 0,'Bypass suite transients and request fresh ASM/Custom API data'); self::row('Cache bypass', ob_get_clean() . '<p class="description">When enabled, adoptables, adopted animals, statistics and SEO profile feeds skip the plugin cache. This may increase requests to ASM or your custom API.</p>');
+    ob_start(); self::checkbox_input('global','bypass_plugin_cache',$s['global']['bypass_plugin_cache'] ?? 0,'Bypass suite transients and request fresh API data'); self::row('Cache bypass', ob_get_clean() . '<p class="description">When enabled, adoptables, adopted animals, statistics and SEO profile feeds skip the plugin cache. This may increase requests to your configured API.</p>');
+    ob_start(); self::checkbox_input('global','delete_data_on_uninstall',$s['global']['delete_data_on_uninstall'] ?? 0,'Delete all Rescue Plugin Suite data when uninstalling'); self::row('Uninstall data removal', ob_get_clean() . '<p class="description">Leave disabled to preserve settings, API keys, payment configuration, campaigns and user preferences during updates or uninstall/reinstall workflows.</p>');
     self::row('Adoptables UI page URL', '<input type="url" name="suite[global][adoptables_page_url]" value="' . esc_attr($s['global']['adoptables_page_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/adopt/')) . '" /><p class="description">Used by the featured animal widget and adoptable modal share links. Set this to the page containing the Adoptables UI shortcode.</p>');
     self::row('Adopted UI page URL', '<input type="url" name="suite[global][adopted_page_url]" value="' . esc_attr($s['global']['adopted_page_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/happy-endings/')) . '" /><p class="description">Used by adopted modal share links and adoption story widgets. Set this to the page containing the Adopted UI shortcode.</p>');
     ob_start(); self::select_input('global','adoptables_style_source',$s['global']['adoptables_style_source'],['auto'=>'Auto','global'=>'Always use global','custom'=>'Always use custom']); self::row('Adoptables style source', ob_get_clean());
