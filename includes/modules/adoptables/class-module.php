@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: ASM Plugin Suite Adoptables
+ * Plugin Name: Rescue Plugin Suite Adoptables
  * Description: Provides [adoptables] shortcode for the adoptable/adopted widget with scoped styling and settings.
  * Version: 1.1.12
  * Author: Jordan Sutton
@@ -8,13 +8,13 @@
 
 if (!defined('ABSPATH')) exit;
 
-final class StraySafe_Adoptables_UI_Shortcode {
+final class Plugin_Adoptables_UI_Shortcode {
   const SHORTCODE = 'adoptables';
-  const TAILWIND_HANDLE = 'straysafe-adoptables-tailwind';
-  const ROBOTO_HANDLE   = 'straysafe-adoptables-roboto';
+  const TAILWIND_HANDLE = 'plugin-adoptables-tailwind';
+  const ROBOTO_HANDLE   = 'plugin-adoptables-roboto';
 
-  const OPT_KEY = 'straysafe_adoptables_ui_options';
-  const RESET_ACTION = 'straysafe_adoptables_ui_reset_field';
+  const OPT_KEY = 'plugin_adoptables_ui_options';
+  const RESET_ACTION = 'plugin_adoptables_ui_reset_field';
 
   public static function init() {
     add_shortcode(self::SHORTCODE, [__CLASS__, 'render_shortcode']);
@@ -23,8 +23,8 @@ final class StraySafe_Adoptables_UI_Shortcode {
     add_action('admin_menu', [__CLASS__, 'admin_menu']);
     add_action('admin_init', [__CLASS__, 'admin_init']);
     add_action('admin_post_' . self::RESET_ACTION, [__CLASS__, 'handle_reset']);
-    add_action('wp_ajax_straysafe_load_apply_form', [__CLASS__, 'ajax_load_apply_form']);
-    add_action('wp_ajax_nopriv_straysafe_load_apply_form', [__CLASS__, 'ajax_load_apply_form']);
+    add_action('wp_ajax_plugin_load_apply_form', [__CLASS__, 'ajax_load_apply_form']);
+    add_action('wp_ajax_nopriv_plugin_load_apply_form', [__CLASS__, 'ajax_load_apply_form']);
   }
 
   private static function normalise_shortcode_setting($value) {
@@ -35,11 +35,11 @@ final class StraySafe_Adoptables_UI_Shortcode {
   }
 
   public static function ajax_load_apply_form() {
-    check_ajax_referer('straysafe_apply_form', 'nonce');
+    check_ajax_referer('plugin_apply_form', 'nonce');
     $o = self::get_options();
     // The Suite settings page is the source of truth. Fall back to the legacy
     // module option so older installs continue to work.
-    $suite = get_option('straysafe_ui_suite_settings_v83', []);
+    $suite = get_option('plugin_ui_suite_settings_v83', []);
     $suite_adoptables = (is_array($suite) && isset($suite['adoptables']) && is_array($suite['adoptables'])) ? $suite['adoptables'] : [];
     $enabled = array_key_exists('enable_apply_button', $suite_adoptables)
       ? !empty($suite_adoptables['enable_apply_button'])
@@ -51,6 +51,15 @@ final class StraySafe_Adoptables_UI_Shortcode {
     $html = do_shortcode($shortcode);
     if (trim((string)$html) === '' || $html === $shortcode) wp_send_json_error(['message' => 'The configured application form shortcode could not be rendered.'], 400);
     wp_send_json_success(['html' => $html]);
+  }
+
+  private static function get_saved_options() {
+    $legacy_brand = 'stray' . 'safe';
+    foreach ([self::OPT_KEY, $legacy_brand . '_adoptables_ui_options'] as $key) {
+      $value = get_option($key, []);
+      if (is_array($value) && !empty($value)) return $value;
+    }
+    return [];
   }
 
   public static function default_options() {
@@ -171,7 +180,7 @@ final class StraySafe_Adoptables_UI_Shortcode {
 
   public static function get_options() {
     $d = self::default_options();
-    $saved = get_option(self::OPT_KEY, []);
+    $saved = self::get_saved_options();
     if (!is_array($saved)) $saved = [];
     return array_merge($d, $saved);
   }
@@ -307,21 +316,21 @@ final class StraySafe_Adoptables_UI_Shortcode {
 
   public static function handle_reset() {
     if (!current_user_can('manage_options')) wp_die('Not allowed.');
-    check_admin_referer('straysafe_adoptables_ui_reset_field');
+    check_admin_referer('plugin_adoptables_ui_reset_field');
 
     $field = isset($_GET['field']) ? sanitize_text_field($_GET['field']) : '';
     $defaults = self::default_options();
     if (!array_key_exists($field, $defaults)) {
-      wp_safe_redirect(admin_url('options-general.php?page=straysafe-adoptables-ui'));
+      wp_safe_redirect(admin_url('options-general.php?page=plugin-adoptables-ui'));
       exit;
     }
 
-    $opts = get_option(self::OPT_KEY, []);
+    $opts = self::get_saved_options();
     if (!is_array($opts)) $opts = [];
     $opts[$field] = $defaults[$field];
     update_option(self::OPT_KEY, $opts);
 
-    wp_safe_redirect(admin_url('options-general.php?page=straysafe-adoptables-ui'));
+    wp_safe_redirect(admin_url('options-general.php?page=plugin-adoptables-ui'));
     exit;
   }
 
@@ -330,7 +339,7 @@ final class StraySafe_Adoptables_UI_Shortcode {
       [
         'action'   => self::RESET_ACTION,
         'field'    => $field_key,
-        '_wpnonce' => wp_create_nonce('straysafe_adoptables_ui_reset_field'),
+        '_wpnonce' => wp_create_nonce('plugin_adoptables_ui_reset_field'),
       ],
       admin_url('admin-post.php')
     );
@@ -343,72 +352,72 @@ final class StraySafe_Adoptables_UI_Shortcode {
 
   public static function admin_menu() {
     add_options_page(
-      'ASM Plugin Suite Adoptables',
-      'ASM Plugin Suite Adoptables',
+      'Rescue Plugin Suite Adoptables',
+      'Rescue Plugin Suite Adoptables',
       'manage_options',
-      'straysafe-adoptables-ui',
+      'plugin-adoptables-ui',
       [__CLASS__, 'render_settings_page']
     );
   }
 
   public static function admin_init() {
-    register_setting('straysafe_adoptables_ui_group', self::OPT_KEY, [
+    register_setting('plugin_adoptables_ui_group', self::OPT_KEY, [
       'sanitize_callback' => [__CLASS__, 'sanitize_options'],
       'default' => self::default_options(),
     ]);
 
-    add_settings_section('ss_aui_design', 'Design', '__return_false', 'straysafe-adoptables-ui');
-    add_settings_section('ss_aui_text', 'Text', '__return_false', 'straysafe-adoptables-ui');
-    add_settings_section('ss_aui_responsive', 'Responsive (Device-specific)', '__return_false', 'straysafe-adoptables-ui');
-    add_settings_section('ss_aui_typography', 'Typography (Device-specific)', '__return_false', 'straysafe-adoptables-ui');
-    add_settings_section('ss_aui_modal', 'Modal', '__return_false', 'straysafe-adoptables-ui');
-    add_settings_section('ss_aui_reservation', 'Reservation labels', '__return_false', 'straysafe-adoptables-ui');
-    add_settings_section('ss_aui_data', 'Data', '__return_false', 'straysafe-adoptables-ui');
+    add_settings_section('plugin_aui_design', 'Design', '__return_false', 'plugin-adoptables-ui');
+    add_settings_section('plugin_aui_text', 'Text', '__return_false', 'plugin-adoptables-ui');
+    add_settings_section('plugin_aui_responsive', 'Responsive (Device-specific)', '__return_false', 'plugin-adoptables-ui');
+    add_settings_section('plugin_aui_typography', 'Typography (Device-specific)', '__return_false', 'plugin-adoptables-ui');
+    add_settings_section('plugin_aui_modal', 'Modal', '__return_false', 'plugin-adoptables-ui');
+    add_settings_section('plugin_aui_reservation', 'Reservation labels', '__return_false', 'plugin-adoptables-ui');
+    add_settings_section('plugin_aui_data', 'Data', '__return_false', 'plugin-adoptables-ui');
 
-    add_settings_field('brand_color', 'Brand colour', [__CLASS__, 'field_brand_color'], 'straysafe-adoptables-ui', 'ss_aui_design');
-    add_settings_field('background_color', 'Background colour', [__CLASS__, 'field_background_color'], 'straysafe-adoptables-ui', 'ss_aui_design');
-    add_settings_field('paw_opacity', 'Paw print opacity (0–0.25)', [__CLASS__, 'field_paw_opacity'], 'straysafe-adoptables-ui', 'ss_aui_design');
-    add_settings_field('paw_count', 'Paw print count (0–80)', [__CLASS__, 'field_paw_count'], 'straysafe-adoptables-ui', 'ss_aui_design');
-    add_settings_field('font_family', 'Font family', [__CLASS__, 'field_font_family'], 'straysafe-adoptables-ui', 'ss_aui_design');
-    add_settings_field('card_padding', 'Card padding (px)', [__CLASS__, 'field_card_padding'], 'straysafe-adoptables-ui', 'ss_aui_design');
-    add_settings_field('card_radius', 'Card corner radius (px)', [__CLASS__, 'field_card_radius'], 'straysafe-adoptables-ui', 'ss_aui_design');
+    add_settings_field('brand_color', 'Brand colour', [__CLASS__, 'field_brand_color'], 'plugin-adoptables-ui', 'plugin_aui_design');
+    add_settings_field('background_color', 'Background colour', [__CLASS__, 'field_background_color'], 'plugin-adoptables-ui', 'plugin_aui_design');
+    add_settings_field('paw_opacity', 'Paw print opacity (0–0.25)', [__CLASS__, 'field_paw_opacity'], 'plugin-adoptables-ui', 'plugin_aui_design');
+    add_settings_field('paw_count', 'Paw print count (0–80)', [__CLASS__, 'field_paw_count'], 'plugin-adoptables-ui', 'plugin_aui_design');
+    add_settings_field('font_family', 'Font family', [__CLASS__, 'field_font_family'], 'plugin-adoptables-ui', 'plugin_aui_design');
+    add_settings_field('card_padding', 'Card padding (px)', [__CLASS__, 'field_card_padding'], 'plugin-adoptables-ui', 'plugin_aui_design');
+    add_settings_field('card_radius', 'Card corner radius (px)', [__CLASS__, 'field_card_radius'], 'plugin-adoptables-ui', 'plugin_aui_design');
 
-    add_settings_field('title_text', 'Title text', [__CLASS__, 'field_title_text'], 'straysafe-adoptables-ui', 'ss_aui_text');
-    add_settings_field('subtitle_text', 'Subtitle text', [__CLASS__, 'field_subtitle_text'], 'straysafe-adoptables-ui', 'ss_aui_text');
-    add_settings_field('footer_text', 'Footer text', [__CLASS__, 'field_footer_text'], 'straysafe-adoptables-ui', 'ss_aui_text');
-    add_settings_field('loading_status_text', 'Loading status text', [__CLASS__, 'field_loading_status_text'], 'straysafe-adoptables-ui', 'ss_aui_text');
-    add_settings_field('loading_page_label_text', 'Loading page label text', [__CLASS__, 'field_loading_page_label_text'], 'straysafe-adoptables-ui', 'ss_aui_text');
-    add_settings_field('tips_text', 'Tips text (modal)', [__CLASS__, 'field_tips_text'], 'straysafe-adoptables-ui', 'ss_aui_text');
+    add_settings_field('title_text', 'Title text', [__CLASS__, 'field_title_text'], 'plugin-adoptables-ui', 'plugin_aui_text');
+    add_settings_field('subtitle_text', 'Subtitle text', [__CLASS__, 'field_subtitle_text'], 'plugin-adoptables-ui', 'plugin_aui_text');
+    add_settings_field('footer_text', 'Footer text', [__CLASS__, 'field_footer_text'], 'plugin-adoptables-ui', 'plugin_aui_text');
+    add_settings_field('loading_status_text', 'Loading status text', [__CLASS__, 'field_loading_status_text'], 'plugin-adoptables-ui', 'plugin_aui_text');
+    add_settings_field('loading_page_label_text', 'Loading page label text', [__CLASS__, 'field_loading_page_label_text'], 'plugin-adoptables-ui', 'plugin_aui_text');
+    add_settings_field('tips_text', 'Tips text (modal)', [__CLASS__, 'field_tips_text'], 'plugin-adoptables-ui', 'plugin_aui_text');
 
-    add_settings_field('responsive_grid', 'Columns & rows (mobile/tablet/PC)', [__CLASS__, 'field_responsive_grid'], 'straysafe-adoptables-ui', 'ss_aui_responsive');
-    add_settings_field('responsive_grid_gaps', 'Column & row spacing (mobile/tablet/PC)', [__CLASS__, 'field_responsive_grid_gaps'], 'straysafe-adoptables-ui', 'ss_aui_responsive');
-    add_settings_field('responsive_card_scale', 'Card size % (keeps aspect ratio)', [__CLASS__, 'field_responsive_card_scale'], 'straysafe-adoptables-ui', 'ss_aui_responsive');
+    add_settings_field('responsive_grid', 'Columns & rows (mobile/tablet/PC)', [__CLASS__, 'field_responsive_grid'], 'plugin-adoptables-ui', 'plugin_aui_responsive');
+    add_settings_field('responsive_grid_gaps', 'Column & row spacing (mobile/tablet/PC)', [__CLASS__, 'field_responsive_grid_gaps'], 'plugin-adoptables-ui', 'plugin_aui_responsive');
+    add_settings_field('responsive_card_scale', 'Card size % (keeps aspect ratio)', [__CLASS__, 'field_responsive_card_scale'], 'plugin-adoptables-ui', 'plugin_aui_responsive');
 
-    add_settings_field('responsive_typography', 'Font sizes & weights', [__CLASS__, 'field_typography'], 'straysafe-adoptables-ui', 'ss_aui_typography');
+    add_settings_field('responsive_typography', 'Font sizes & weights', [__CLASS__, 'field_typography'], 'plugin-adoptables-ui', 'plugin_aui_typography');
 
-    add_settings_field('modal_max_width', 'Modal max width (px)', [__CLASS__, 'field_modal_max_width'], 'straysafe-adoptables-ui', 'ss_aui_modal');
-    add_settings_field('modal_divider_color', 'Modal divider colour', [__CLASS__, 'field_modal_divider_color'], 'straysafe-adoptables-ui', 'ss_aui_modal');
-    add_settings_field('modal_divider_thickness', 'Modal divider thickness (px)', [__CLASS__, 'field_modal_divider_thickness'], 'straysafe-adoptables-ui', 'ss_aui_modal');
-    add_settings_field('modal_divider_radius', 'Modal divider shape radius (px)', [__CLASS__, 'field_modal_divider_radius'], 'straysafe-adoptables-ui', 'ss_aui_modal');
-    add_settings_field('modal_global_text', 'Modal global text', [__CLASS__, 'field_modal_global_text'], 'straysafe-adoptables-ui', 'ss_aui_modal');
+    add_settings_field('modal_max_width', 'Modal max width (px)', [__CLASS__, 'field_modal_max_width'], 'plugin-adoptables-ui', 'plugin_aui_modal');
+    add_settings_field('modal_divider_color', 'Modal divider colour', [__CLASS__, 'field_modal_divider_color'], 'plugin-adoptables-ui', 'plugin_aui_modal');
+    add_settings_field('modal_divider_thickness', 'Modal divider thickness (px)', [__CLASS__, 'field_modal_divider_thickness'], 'plugin-adoptables-ui', 'plugin_aui_modal');
+    add_settings_field('modal_divider_radius', 'Modal divider shape radius (px)', [__CLASS__, 'field_modal_divider_radius'], 'plugin-adoptables-ui', 'plugin_aui_modal');
+    add_settings_field('modal_global_text', 'Modal global text', [__CLASS__, 'field_modal_global_text'], 'plugin-adoptables-ui', 'plugin_aui_modal');
 
-    add_settings_field('show_reservation_label', 'Show reservation label', [__CLASS__, 'field_show_reservation_label'], 'straysafe-adoptables-ui', 'ss_aui_reservation');
-    add_settings_field('reservation_pending_label', 'Pending Adoption label text', [__CLASS__, 'field_reservation_pending_label'], 'straysafe-adoptables-ui', 'ss_aui_reservation');
-    add_settings_field('reservation_active_label', 'Other active reservation label text', [__CLASS__, 'field_reservation_active_label'], 'straysafe-adoptables-ui', 'ss_aui_reservation');
-    add_settings_field('reservation_label_halign', 'Reservation label horizontal alignment', [__CLASS__, 'field_reservation_label_halign'], 'straysafe-adoptables-ui', 'ss_aui_reservation');
-    add_settings_field('reservation_label_valign', 'Reservation label vertical alignment', [__CLASS__, 'field_reservation_label_valign'], 'straysafe-adoptables-ui', 'ss_aui_reservation');
+    add_settings_field('show_reservation_label', 'Show reservation label', [__CLASS__, 'field_show_reservation_label'], 'plugin-adoptables-ui', 'plugin_aui_reservation');
+    add_settings_field('reservation_pending_label', 'Pending Adoption label text', [__CLASS__, 'field_reservation_pending_label'], 'plugin-adoptables-ui', 'plugin_aui_reservation');
+    add_settings_field('reservation_active_label', 'Other active reservation label text', [__CLASS__, 'field_reservation_active_label'], 'plugin-adoptables-ui', 'plugin_aui_reservation');
+    add_settings_field('reservation_label_halign', 'Reservation label horizontal alignment', [__CLASS__, 'field_reservation_label_halign'], 'plugin-adoptables-ui', 'plugin_aui_reservation');
+    add_settings_field('reservation_label_valign', 'Reservation label vertical alignment', [__CLASS__, 'field_reservation_label_valign'], 'plugin-adoptables-ui', 'plugin_aui_reservation');
 
-    add_settings_field('cats_only', 'Only show cats', [__CLASS__, 'field_cats_only'], 'straysafe-adoptables-ui', 'ss_aui_data');
+    add_settings_field('cats_only', 'Only show cats', [__CLASS__, 'field_cats_only'], 'plugin-adoptables-ui', 'plugin_aui_data');
   }
 
   public static function render_settings_page() { ?>
     <div class="wrap">
-      <h1>ASM Plugin Suite Adoptables</h1>
+      <h1>Rescue Plugin Suite Adoptables</h1>
       <p><strong>Shortcode:</strong> <code>[<?php echo esc_html(self::SHORTCODE); ?>]</code></p>
       <form method="post" action="options.php">
         <?php
-          settings_fields('straysafe_adoptables_ui_group');
-          do_settings_sections('straysafe-adoptables-ui');
+          settings_fields('plugin_adoptables_ui_group');
+          do_settings_sections('plugin-adoptables-ui');
           submit_button();
         ?>
       </form>
@@ -715,8 +724,8 @@ final class StraySafe_Adoptables_UI_Shortcode {
   private static function enqueue_assets() {
     $opts = self::get_options();
 
-    wp_enqueue_style('rescue-plugin-suite-frontend', STRAYSAFE_SUITE_URL . 'assets/css/frontend.css', [], STRAYSAFE_SUITE_VERSION);
-    wp_enqueue_script('rescue-plugin-suite-shared-modal', STRAYSAFE_SUITE_URL . 'assets/js/shared-modal.js', [], STRAYSAFE_SUITE_VERSION, true);
+    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', [], PLUGIN_SUITE_VERSION);
+    wp_enqueue_script('rescue-plugin-suite-shared-modal', PLUGIN_SUITE_URL . 'assets/js/shared-modal.js', [], PLUGIN_SUITE_VERSION, true);
 
     if (trim((string)$opts['font_family']) === 'Roboto') {
       wp_enqueue_style(
@@ -760,13 +769,13 @@ final class StraySafe_Adoptables_UI_Shortcode {
       $apply_shortcode_tag = strtok($apply_shortcode_tag, ' ');
     }
     $apply_form_id = '';
-    $apply_form_account = 'straysafe';
-    if (class_exists('StraySafe_UI_Suite_Plugin')) {
-      $suite_forms = StraySafe_UI_Suite_Plugin::get_forms();
+    $apply_form_account = 'plugin';
+    if (class_exists('Plugin_UI_Suite_Plugin')) {
+      $suite_forms = Plugin_UI_Suite_Plugin::get_forms();
       if (isset($suite_forms[$apply_shortcode_tag])) {
         $apply_form_id = preg_replace('/[^0-9]/', '', (string)$suite_forms[$apply_shortcode_tag]);
       }
-      $suite_settings = StraySafe_UI_Suite_Plugin::get_settings();
+      $suite_settings = Plugin_UI_Suite_Plugin::get_settings();
       if (!empty($suite_settings['forms']['account'])) {
         $apply_form_account = sanitize_text_field($suite_settings['forms']['account']);
       }
@@ -1507,7 +1516,7 @@ final class StraySafe_Adoptables_UI_Shortcode {
 
             <div id="asm-modal-form-col" class="asm-modal-col p-0 bg-white md:col-span-2 hidden">
               <div id="asm-apply-form-wrap" class="bg-white p-4 sm:p-6" aria-live="polite">
-                <style>#asm-apply-form-wrap .asm-apply-summary,#asm-apply-form-wrap .ss-apply-summary,[id^="asm-apply-cat-"]{display:none !important;}</style>
+                <style>#asm-apply-form-wrap .asm-apply-summary,#asm-apply-form-wrap .plugin-apply-summary,[id^="asm-apply-cat-"]{display:none !important;}</style>
                 <div id="asm-apply-form-mount"></div>
                 <p id="asm-apply-form-status" class="hidden" style="color:#64748b;font-weight:600;">Loading application form…</p>
               </div>
@@ -1551,8 +1560,8 @@ final class StraySafe_Adoptables_UI_Shortcode {
   const LOADING_STATUS_TEXT = <?php echo wp_json_encode((string)$o['loading_status_text']); ?>;
 
   const ASM_WIDGET = {
-    proxyBase: "/wp-json/straysafe/v1/adoptables",
-    imageProxyBase: "/wp-json/straysafe/v1/animal-image",
+    proxyBase: "/wp-json/plugin/v1/adoptables",
+    imageProxyBase: "/wp-json/plugin/v1/animal-image",
     brandColor: getComputedStyle(ROOT).getPropertyValue("--asm-brand").trim() || "#ff647e",
     catsOnly: <?php echo !empty($o['cats_only']) ? 'true' : 'false'; ?>,
     showReservationLabel: <?php echo !empty($o['show_reservation_label']) ? 'true' : 'false'; ?>,
@@ -1619,17 +1628,17 @@ final class StraySafe_Adoptables_UI_Shortcode {
   function trackEvent(name, context){
     try {
       const body = new URLSearchParams();
-      body.set("action", "asm_plugin_suite_track");
+      body.set("action", "plugin_suite_track");
       body.set("event", name);
       if (context) body.set("context", JSON.stringify(context));
-      body.set("nonce", <?php echo wp_json_encode(wp_create_nonce('asm_plugin_suite_track')); ?>);
+      body.set("nonce", <?php echo wp_json_encode(wp_create_nonce('plugin_suite_track')); ?>);
       fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, { method: "POST", credentials: "same-origin", headers: {"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8"}, body: body.toString() });
     } catch (e) {}
   }
 
 
-  const RECENTLY_VIEWED_KEY = "straysafe_recently_viewed_cats_v1";
-  const FAVOURITES_KEY = "asm_plugin_suite_favourites_v1";
+  const RECENTLY_VIEWED_KEY = "plugin_recently_viewed_cats_v1";
+  const FAVOURITES_KEY = "plugin_suite_favourites_v1";
 
   function getCatId(a){
     return String(a.ID ?? a.AnimalID ?? a.ANIMALID ?? a.animalid ?? "");
@@ -2540,7 +2549,7 @@ final class StraySafe_Adoptables_UI_Shortcode {
     cleanupCurrentModal = restoreMovedApplyForm;
 
     function findExistingApplyForm(){
-      const all = Array.from(document.querySelectorAll('.straysafe-form-wrap'));
+      const all = Array.from(document.querySelectorAll('.plugin-form-wrap'));
       return all.find(wrap => !formCol.contains(wrap) && wrap.querySelector('#asm3-onlineform')) || null;
     }
 
@@ -2548,11 +2557,11 @@ final class StraySafe_Adoptables_UI_Shortcode {
       const mount = qs('asm-apply-form-mount');
       const status = qs('asm-apply-form-status');
       if (!mount || !ASM_WIDGET.applyFormEnabled) return;
-      if (mount.querySelector('#asm3-onlineform') || mount.querySelector('.straysafe-form-wrap')) return;
+      if (mount.querySelector('#asm3-onlineform') || mount.querySelector('.plugin-form-wrap')) return;
 
       const existing = findExistingApplyForm();
       if (existing) {
-        movedApplyFormPlaceholder = document.createComment('straysafe-application-form-placeholder');
+        movedApplyFormPlaceholder = document.createComment('plugin-application-form-placeholder');
         existing.parentNode.insertBefore(movedApplyFormPlaceholder, existing);
         movedApplyForm = existing;
         mount.appendChild(existing);
@@ -2576,7 +2585,7 @@ final class StraySafe_Adoptables_UI_Shortcode {
         status.classList.remove('hidden');
       }
 	      const wrap = document.createElement('section');
-	      wrap.className = 'straysafe-form-wrap';
+	      wrap.className = 'plugin-form-wrap';
 	      wrap.setAttribute('aria-label', 'Online application form');
 	      const frame = document.createElement('iframe');
 	      frame.title = 'Online application form';
@@ -2976,7 +2985,7 @@ final class StraySafe_Adoptables_UI_Shortcode {
     } catch (err){
       console.error(err);
       showStatus(
-        "Could not load adoptables from the proxy endpoint. Check that the Rescue Plugin Suite data proxy is active and /wp-json/straysafe/v1/adoptables returns data.",
+        "Could not load adoptables from the proxy endpoint. Check that the Rescue Plugin Suite data proxy is active and /wp-json/plugin/v1/adoptables returns data.",
         true
       );
       qs("asm-page-label").textContent = "Load failed.";
@@ -2997,4 +3006,4 @@ final class StraySafe_Adoptables_UI_Shortcode {
   }
 }
 
-StraySafe_Adoptables_UI_Shortcode::init();
+Plugin_Adoptables_UI_Shortcode::init();

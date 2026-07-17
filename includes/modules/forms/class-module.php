@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Rescue Plugin Suite Forms Shortcodes
- * Description: Provides separate shortcodes for rescue management online forms ([straysafe_adoption_form], [straysafe_volunteer_form], [straysafe_waiting_list_form], [straysafe_lost_cat_form]).
+ * Description: Provides separate shortcodes for rescue management online forms ([plugin_adoption_form], [plugin_volunteer_form], [plugin_waiting_list_form], [plugin_lost_cat_form]).
  * Version: 1.0.0
  * Author: Rescue Plugin Suite
  */
@@ -10,16 +10,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-final class StraySafe_Forms_Shortcodes {
+final class Plugin_Forms_Shortcodes {
 
     public static function init() {
-        add_shortcode('straysafe_adoption_form', [__CLASS__, 'render_adoption']);
+        add_shortcode('plugin_adoption_form', [__CLASS__, 'render_adoption']);
         // Backwards-compatible aliases used by earlier Suite releases and saved settings.
         add_shortcode('adoption_form', [__CLASS__, 'render_adoption']);
-        add_shortcode('straysafe_volunteer_form', [__CLASS__, 'render_volunteer']);
+        add_shortcode('plugin_volunteer_form', [__CLASS__, 'render_volunteer']);
         add_shortcode('volunteer_form', [__CLASS__, 'render_volunteer']);
-        add_shortcode('straysafe_waiting_list_form', [__CLASS__, 'render_waiting_list']);
-        add_shortcode('straysafe_lost_cat_form', [__CLASS__, 'render_lost_cat']);
+        add_shortcode('plugin_waiting_list_form', [__CLASS__, 'render_waiting_list']);
+        add_shortcode('plugin_lost_cat_form', [__CLASS__, 'render_lost_cat']);
     }
 
     public static function render_adoption($atts = []) {
@@ -40,7 +40,7 @@ final class StraySafe_Forms_Shortcodes {
 
     private static function render_form($form_id) {
         $form_id = sanitize_text_field($form_id);
-        $settings = get_option('straysafe_ui_suite_settings_v83', []);
+        $settings = get_option('plugin_ui_suite_settings_v83', []);
         $account = '';
         if (is_array($settings) && !empty($settings['forms']['account'])) {
             $account = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$settings['forms']['account']);
@@ -71,4 +71,4 @@ final class StraySafe_Forms_Shortcodes {
     }
 }
 
-StraySafe_Forms_Shortcodes::init();
+Plugin_Forms_Shortcodes::init();

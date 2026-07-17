@@ -68,7 +68,7 @@
 - Top adoptables page label removed; bottom pager retained
 - Stats header emoji removed
 
-ASM Plugin Suite v12.5.1
+Rescue Plugin Suite v12.5.1
 SEO FEATURES (V14.0.0)
 ======================
 The suite keeps its interactive modal interfaces while also exposing canonical, crawlable animal profile pages.

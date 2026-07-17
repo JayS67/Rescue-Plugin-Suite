@@ -1,4 +1,4 @@
-.ss-payments-widget {
+.plugin-payments-widget {
   --ssp-focus: color-mix(in srgb, var(--ssp-primary) 55%, transparent);
   box-sizing: border-box;
   inline-size: min(100%, 38rem);
@@ -12,54 +12,54 @@
   font-family: inherit;
 }
 
-.ss-payments-widget,
-.ss-payments-widget * {
+.plugin-payments-widget,
+.plugin-payments-widget * {
   box-sizing: border-box;
 }
 
-.ss-payments-widget :where(h2, p) {
+.plugin-payments-widget :where(h2, p) {
   margin-block-start: 0;
 }
 
-.ss-payments-widget h2 {
+.plugin-payments-widget h2 {
   color: inherit;
   font-size: clamp(1.5rem, 5vw, 2.25rem);
   line-height: 1.15;
   margin-block-end: .5rem;
 }
 
-.ss-payments-subtitle {
+.plugin-payments-subtitle {
   color: color-mix(in srgb, var(--ssp-text) 78%, transparent);
   font-size: clamp(1rem, 3vw, 1.15rem);
   line-height: 1.5;
   margin-block-end: 1rem;
 }
 
-.ss-payments-intro {
+.plugin-payments-intro {
   line-height: 1.6;
 }
 
-.ss-payments-types,
-.ss-payments-amounts {
+.plugin-payments-types,
+.plugin-payments-amounts {
   display: grid;
   gap: .75rem;
   margin-block: 1rem;
 }
 
-.ss-payments-types {
+.plugin-payments-types {
   grid-template-columns: 1fr;
 }
 
-.ss-payments-amounts {
+.plugin-payments-amounts {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.ss-payments-widget button,
-.ss-payments-widget input {
+.plugin-payments-widget button,
+.plugin-payments-widget input {
   font: inherit;
 }
 
-.ss-payments-widget button {
+.plugin-payments-widget button {
   min-block-size: 2.75rem;
   border: 2px solid var(--ssp-primary);
   border-radius: calc(var(--ssp-radius) / 1.6);
@@ -71,24 +71,24 @@
   cursor: pointer;
 }
 
-.ss-payments-widget button:hover:not(:disabled) {
+.plugin-payments-widget button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--ssp-primary) 10%, var(--ssp-bg));
 }
 
-.ss-payments-widget button.is-active,
-.ss-payments-widget .ss-payments-continue:not(:disabled) {
+.plugin-payments-widget button.is-active,
+.plugin-payments-widget .plugin-payments-continue:not(:disabled) {
   background: var(--ssp-primary);
   color: var(--ssp-on-primary, #fff);
 }
 
-.ss-payments-widget button:focus-visible,
-.ss-payments-widget input:focus-visible,
-.ss-payments-learn:focus-visible {
+.plugin-payments-widget button:focus-visible,
+.plugin-payments-widget input:focus-visible,
+.plugin-payments-learn:focus-visible {
   outline: 3px solid var(--ssp-focus);
   outline-offset: 3px;
 }
 
-.ss-payments-widget label {
+.plugin-payments-widget label {
   display: flex;
   flex-direction: column;
   grid-column: 1 / -1;
@@ -97,7 +97,7 @@
   font-weight: 700;
 }
 
-.ss-payments-widget input {
+.plugin-payments-widget input {
   inline-size: 100%;
   min-block-size: 2.75rem;
   border: 1px solid color-mix(in srgb, var(--ssp-text) 28%, transparent);
@@ -107,81 +107,81 @@
   padding: .75rem .9rem;
 }
 
-.ss-payments-hint,
-.ss-payments-impact,
-.ss-payments-error {
+.plugin-payments-hint,
+.plugin-payments-impact,
+.plugin-payments-error {
   font-size: .95rem;
   line-height: 1.5;
 }
 
-.ss-payments-hint {
+.plugin-payments-hint {
   color: color-mix(in srgb, var(--ssp-text) 68%, transparent);
   font-weight: 400;
 }
 
-.ss-payments-impact {
+.plugin-payments-impact {
   min-block-size: 1.5rem;
   color: color-mix(in srgb, var(--ssp-text) 82%, transparent);
   font-weight: 700;
 }
 
-.ss-payments-error {
+.plugin-payments-error {
   min-block-size: 1.5rem;
   color: #b42318;
   font-weight: 700;
 }
 
-.ss-payments-dark .ss-payments-error {
+.plugin-payments-dark .plugin-payments-error {
   color: #ffb4ab;
 }
 
-.ss-payments-continue {
+.plugin-payments-continue {
   inline-size: 100%;
   margin-block-start: .25rem;
 }
 
-.ss-payments-continue:disabled {
+.plugin-payments-continue:disabled {
   opacity: .55;
   cursor: not-allowed;
 }
 
-.ss-payments-learn {
+.plugin-payments-learn {
   color: var(--ssp-primary);
   font-weight: 700;
 }
 
-.ss-payments-dark {
+.plugin-payments-dark {
   color-scheme: dark;
   --ssp-bg: #111827;
   --ssp-text: #f9fafb;
 }
 
-.ss-payments-dark button,
-.ss-payments-dark input {
+.plugin-payments-dark button,
+.plugin-payments-dark input {
   background: #1f2937;
 }
 
 @media (min-width: 36rem) {
-  .ss-payments-widget {
+  .plugin-payments-widget {
     margin-block: 1.5rem;
   }
 
-  .ss-payments-types {
+  .plugin-payments-types {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .ss-payments-amounts {
+  .plugin-payments-amounts {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .ss-payments-widget button {
+  .plugin-payments-widget button {
     transition: background-color .18s ease, color .18s ease, border-color .18s ease;
   }
 }
 
-.ss-payments-campaign-image {
+.plugin-payments-campaign-image {
   display: block;
   inline-size: 100%;
   block-size: auto;
@@ -191,7 +191,7 @@
   margin-block-end: 1rem;
 }
 
-.ss-payments-campaign-progress {
+.plugin-payments-campaign-progress {
   overflow: hidden;
   block-size: .75rem;
   background: color-mix(in srgb, var(--ssp-text) 12%, transparent);
@@ -199,7 +199,7 @@
   margin-block: .75rem .35rem;
 }
 
-.ss-payments-campaign-progress span {
+.plugin-payments-campaign-progress span {
   display: block;
   block-size: 100%;
   background: var(--ssp-primary);
@@ -207,7 +207,7 @@
 }
 
 
-.ss-payments-gift-aid {
+.plugin-payments-gift-aid {
   align-items: flex-start;
   flex-direction: row;
   gap: .65rem;
@@ -216,13 +216,13 @@
   line-height: 1.5;
 }
 
-.ss-payments-gift-aid input {
+.plugin-payments-gift-aid input {
   inline-size: auto;
   min-block-size: auto;
   margin-block-start: .25rem;
 }
 
-.ss-payments-fee-recovery {
+.plugin-payments-fee-recovery {
   align-items: flex-start;
   flex-direction: row;
   gap: .65rem;
@@ -231,13 +231,13 @@
   line-height: 1.5;
 }
 
-.ss-payments-fee-recovery input {
+.plugin-payments-fee-recovery input {
   inline-size: auto;
   min-block-size: auto;
   margin-block-start: .25rem;
 }
 
-.ss-payments-total {
+.plugin-payments-total {
   color: color-mix(in srgb, var(--ssp-text) 86%, transparent);
   font-weight: 800;
 }

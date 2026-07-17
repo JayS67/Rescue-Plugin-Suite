@@ -4,7 +4,7 @@
  */
 if (!defined('ABSPATH')) exit;
 
-interface StraySafe_Payment_Provider_Interface {
+interface Plugin_Payment_Provider_Interface {
   public function get_id();
   public function get_name();
   public function get_capabilities();
@@ -13,47 +13,47 @@ interface StraySafe_Payment_Provider_Interface {
   public function create_checkout(array $request, array $settings);
 }
 
-abstract class StraySafe_Abstract_Payment_Provider implements StraySafe_Payment_Provider_Interface {
+abstract class Plugin_Abstract_Payment_Provider implements Plugin_Payment_Provider_Interface {
   protected $id = '';
   protected $name = '';
   protected $capabilities = [];
   protected $fields = [];
   public function get_id() { return $this->id; }
   public function get_name() { return $this->name; }
-  public function get_capabilities() { return wp_parse_args($this->capabilities, StraySafe_Payment_Gateway_Manager::default_capabilities()); }
+  public function get_capabilities() { return wp_parse_args($this->capabilities, Plugin_Payment_Gateway_Manager::default_capabilities()); }
   public function get_configuration_fields() { return $this->fields; }
   public function validate_configuration(array $settings) {
     $missing = [];
     foreach ($this->fields as $key => $field) {
       if (!empty($field['required']) && empty($settings[$key])) $missing[] = $field['label'];
     }
-    return ['connected' => empty($missing), 'message' => empty($missing) ? __('Configuration present. Live credential checks can be added by the provider adapter.', 'straysafe-ui-suite') : sprintf(__('Missing: %s', 'straysafe-ui-suite'), implode(', ', $missing))];
+    return ['connected' => empty($missing), 'message' => empty($missing) ? __('Configuration present. Live credential checks can be added by the provider adapter.', 'plugin-ui-suite') : sprintf(__('Missing: %s', 'plugin-ui-suite'), implode(', ', $missing))];
   }
   public function create_checkout(array $request, array $settings) {
-    return new WP_Error('provider_not_connected', __('This provider adapter is ready for credentials but does not include a remote API implementation yet.', 'straysafe-ui-suite'));
+    return new WP_Error('provider_not_connected', __('This provider adapter is ready for credentials but does not include a remote API implementation yet.', 'plugin-ui-suite'));
   }
 }
 
-final class StraySafe_Stripe_Payment_Provider extends StraySafe_Abstract_Payment_Provider {
+final class Plugin_Stripe_Payment_Provider extends Plugin_Abstract_Payment_Provider {
   const API_BASE = 'https://api.stripe.com/v1/';
   public function __construct(){ $this->id='stripe'; $this->name='Stripe'; $this->capabilities=['subscriptions'=>true,'variable_subscriptions'=>true,'variable_one_off_amounts'=>true,'apple_pay'=>true,'google_pay'=>true,'link'=>true,'gift_aid'=>true,'fee_recovery'=>true,'saved_cards'=>true,'embedded_checkout'=>true]; $this->fields=['publishable_key'=>['label'=>'Publishable Key','type'=>'text','required'=>true],'secret_key'=>['label'=>'Secret Key','type'=>'password','required'=>true],'webhook_secret'=>['label'=>'Webhook Secret','type'=>'password','required'=>false],'test_mode'=>['label'=>'Test Mode','type'=>'checkbox','required'=>false]]; }
   public function validate_configuration(array $settings) {
     $status = parent::validate_configuration($settings);
     if (!$status['connected']) return $status;
-    if (strpos((string)$settings['secret_key'], 'sk_') !== 0) return ['connected'=>false,'message'=>__('Stripe secret keys must start with sk_.', 'straysafe-ui-suite')];
-    if (strpos((string)$settings['publishable_key'], 'pk_') !== 0) return ['connected'=>false,'message'=>__('Stripe publishable keys must start with pk_.', 'straysafe-ui-suite')];
-    return ['connected'=>true,'message'=>__('Stripe credentials are configured. Checkout will use Stripe Checkout with automatic payment methods.', 'straysafe-ui-suite')];
+    if (strpos((string)$settings['secret_key'], 'sk_') !== 0) return ['connected'=>false,'message'=>__('Stripe secret keys must start with sk_.', 'plugin-ui-suite')];
+    if (strpos((string)$settings['publishable_key'], 'pk_') !== 0) return ['connected'=>false,'message'=>__('Stripe publishable keys must start with pk_.', 'plugin-ui-suite')];
+    return ['connected'=>true,'message'=>__('Stripe credentials are configured. Checkout will use Stripe Checkout with automatic payment methods.', 'plugin-ui-suite')];
   }
   public function create_checkout(array $request, array $settings) {
     $status = $this->validate_configuration($settings);
     if (empty($status['connected'])) return new WP_Error('stripe_not_configured', $status['message']);
     $amount = isset($request['amount']) ? (float)$request['amount'] : 0;
-    if ($amount <= 0) return new WP_Error('stripe_invalid_amount', __('Please choose a valid donation amount.', 'straysafe-ui-suite'));
+    if ($amount <= 0) return new WP_Error('stripe_invalid_amount', __('Please choose a valid donation amount.', 'plugin-ui-suite'));
     $currency = strtolower(preg_replace('/[^a-zA-Z]/', '', $request['currency'] ?? 'gbp')) ?: 'gbp';
     $unit_amount = $this->unit_amount($amount, $currency);
-    if ($unit_amount < 1) return new WP_Error('stripe_invalid_amount', __('The selected amount is too small for Stripe.', 'straysafe-ui-suite'));
+    if ($unit_amount < 1) return new WP_Error('stripe_invalid_amount', __('The selected amount is too small for Stripe.', 'plugin-ui-suite'));
     $is_recurring = ($request['type'] ?? 'one_off') === 'recurring';
-    $line_item = $is_recurring ? ['price'=>$this->recurring_price($settings, $unit_amount, $currency), 'quantity'=>1] : ['price_data'=>['currency'=>$currency,'product_data'=>['name'=>__('Donation', 'straysafe-ui-suite')],'unit_amount'=>$unit_amount], 'quantity'=>1];
+    $line_item = $is_recurring ? ['price'=>$this->recurring_price($settings, $unit_amount, $currency), 'quantity'=>1] : ['price_data'=>['currency'=>$currency,'product_data'=>['name'=>__('Donation', 'plugin-ui-suite')],'unit_amount'=>$unit_amount], 'quantity'=>1];
     if (is_wp_error($line_item['price'] ?? null)) return $line_item['price'];
     $body = [
       'mode' => $is_recurring ? 'subscription' : 'payment',
@@ -61,17 +61,17 @@ final class StraySafe_Stripe_Payment_Provider extends StraySafe_Abstract_Payment
       'cancel_url' => esc_url_raw($request['cancel_url'] ?? home_url('/')),
       'automatic_payment_methods' => ['enabled' => 'true'],
       'line_items' => [$line_item],
-      'metadata' => ['source'=>'straysafe_payments','donation_type'=>$is_recurring?'recurring':'one_off','amount'=>(string)$amount,'currency'=>strtoupper($currency)],
+      'metadata' => ['source'=>'plugin_payments','donation_type'=>$is_recurring?'recurring':'one_off','amount'=>(string)$amount,'currency'=>strtoupper($currency)],
     ];
     if ($is_recurring) $body['subscription_data'] = ['metadata'=>$body['metadata']];
     else $body['payment_intent_data'] = ['metadata'=>$body['metadata']];
     $session = $this->request('checkout/sessions', $settings, $body);
     if (is_wp_error($session)) return $session;
-    if (empty($session['url'])) return new WP_Error('stripe_checkout_missing_url', __('Stripe did not return a Checkout URL.', 'straysafe-ui-suite'));
+    if (empty($session['url'])) return new WP_Error('stripe_checkout_missing_url', __('Stripe did not return a Checkout URL.', 'plugin-ui-suite'));
     return ['url'=>esc_url_raw($session['url']),'id'=>sanitize_text_field($session['id'] ?? ''),'provider'=>'stripe'];
   }
   private function recurring_price(array $settings, $unit_amount, $currency) {
-    $lookup_key = 'straysafe_donation_monthly_' . strtolower($currency) . '_' . (int)$unit_amount;
+    $lookup_key = 'plugin_donation_monthly_' . strtolower($currency) . '_' . (int)$unit_amount;
     $existing = $this->request('prices', $settings, ['active'=>'true','limit'=>1,'lookup_keys'=>[$lookup_key]], 'GET');
     if (is_wp_error($existing)) return $existing;
     if (!empty($existing['data'][0]['id'])) return sanitize_text_field($existing['data'][0]['id']);
@@ -80,9 +80,9 @@ final class StraySafe_Stripe_Payment_Provider extends StraySafe_Abstract_Payment
     foreach (($matching['data'] ?? []) as $candidate) {
       if ((int)($candidate['unit_amount'] ?? 0) === (int)$unit_amount && ($candidate['recurring']['interval'] ?? '') === 'month' && !empty($candidate['id'])) return sanitize_text_field($candidate['id']);
     }
-    $price = $this->request('prices', $settings, ['currency'=>$currency,'unit_amount'=>(int)$unit_amount,'recurring'=>['interval'=>'month'],'product_data'=>['name'=>__('Monthly donation', 'straysafe-ui-suite')],'lookup_key'=>$lookup_key], 'POST');
+    $price = $this->request('prices', $settings, ['currency'=>$currency,'unit_amount'=>(int)$unit_amount,'recurring'=>['interval'=>'month'],'product_data'=>['name'=>__('Monthly donation', 'plugin-ui-suite')],'lookup_key'=>$lookup_key], 'POST');
     if (is_wp_error($price)) return $price;
-    if (empty($price['id'])) return new WP_Error('stripe_price_missing_id', __('Stripe did not return a recurring Price ID.', 'straysafe-ui-suite'));
+    if (empty($price['id'])) return new WP_Error('stripe_price_missing_id', __('Stripe did not return a recurring Price ID.', 'plugin-ui-suite'));
     return sanitize_text_field($price['id']);
   }
   private function unit_amount($amount, $currency) {
@@ -91,36 +91,36 @@ final class StraySafe_Stripe_Payment_Provider extends StraySafe_Abstract_Payment
   }
   private function request($endpoint, array $settings, array $body=[], $method='POST') {
     $secret = trim((string)($settings['secret_key'] ?? ''));
-    if ($secret === '') return new WP_Error('stripe_missing_secret', __('Stripe secret key is not configured.', 'straysafe-ui-suite'));
+    if ($secret === '') return new WP_Error('stripe_missing_secret', __('Stripe secret key is not configured.', 'plugin-ui-suite'));
     $url = self::API_BASE . ltrim($endpoint, '/');
     $args = ['method'=>$method,'timeout'=>20,'headers'=>['Authorization'=>'Bearer '.$secret,'Content-Type'=>'application/x-www-form-urlencoded']];
     if ($method === 'GET' && !empty($body)) $url = add_query_arg($body, $url); else $args['body'] = http_build_query($body, '', '&');
     $response = wp_remote_request($url, $args);
-    if (is_wp_error($response)) return new WP_Error('stripe_request_failed', sprintf(__('Stripe request failed: %s', 'straysafe-ui-suite'), $response->get_error_message()));
+    if (is_wp_error($response)) return new WP_Error('stripe_request_failed', sprintf(__('Stripe request failed: %s', 'plugin-ui-suite'), $response->get_error_message()));
     $code = (int) wp_remote_retrieve_response_code($response);
     $json = json_decode((string) wp_remote_retrieve_body($response), true);
     if ($code < 200 || $code >= 300) {
-      $message = $json['error']['message'] ?? __('Stripe returned an error while creating checkout.', 'straysafe-ui-suite');
+      $message = $json['error']['message'] ?? __('Stripe returned an error while creating checkout.', 'plugin-ui-suite');
       return new WP_Error('stripe_api_error', sanitize_text_field($message), ['status'=>$code]);
     }
-    return is_array($json) ? $json : new WP_Error('stripe_invalid_response', __('Stripe returned an invalid response.', 'straysafe-ui-suite'));
+    return is_array($json) ? $json : new WP_Error('stripe_invalid_response', __('Stripe returned an invalid response.', 'plugin-ui-suite'));
   }
 }
-final class StraySafe_PayPal_Payment_Provider extends StraySafe_Abstract_Payment_Provider {
+final class Plugin_PayPal_Payment_Provider extends Plugin_Abstract_Payment_Provider {
   const LIVE_API = 'https://api-m.paypal.com/';
   const SANDBOX_API = 'https://api-m.sandbox.paypal.com/';
-  const PLAN_CACHE_KEY = 'straysafe_payments_paypal_plan_cache_v1';
+  const PLAN_CACHE_KEY = 'plugin_payments_paypal_plan_cache_v1';
   public function __construct(){ $this->id='paypal'; $this->name='PayPal'; $this->capabilities=['subscriptions'=>true,'variable_subscriptions'=>true,'variable_one_off_amounts'=>true,'apple_pay'=>false,'google_pay'=>false,'fee_recovery'=>true,'saved_cards'=>false,'embedded_checkout'=>false]; $this->fields=['client_id'=>['label'=>'Client ID','type'=>'text','required'=>true],'secret'=>['label'=>'Secret','type'=>'password','required'=>true],'webhook_id'=>['label'=>'Webhook ID','type'=>'text','required'=>false],'sandbox_mode'=>['label'=>'Sandbox Mode','type'=>'checkbox','required'=>false]]; }
   public function validate_configuration(array $settings) {
     $status = parent::validate_configuration($settings);
     if (!$status['connected']) return $status;
-    return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('PayPal sandbox credentials are configured.', 'straysafe-ui-suite') : __('PayPal live credentials are configured.', 'straysafe-ui-suite')];
+    return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('PayPal sandbox credentials are configured.', 'plugin-ui-suite') : __('PayPal live credentials are configured.', 'plugin-ui-suite')];
   }
   public function create_checkout(array $request, array $settings) {
     $status = $this->validate_configuration($settings);
     if (empty($status['connected'])) return new WP_Error('paypal_not_configured', $status['message']);
     $amount = isset($request['amount']) ? (float)$request['amount'] : 0;
-    if ($amount <= 0) return new WP_Error('paypal_invalid_amount', __('Please choose a valid donation amount.', 'straysafe-ui-suite'));
+    if ($amount <= 0) return new WP_Error('paypal_invalid_amount', __('Please choose a valid donation amount.', 'plugin-ui-suite'));
     $currency = strtoupper(preg_replace('/[^a-zA-Z]/', '', $request['currency'] ?? 'GBP')) ?: 'GBP';
     $value = number_format($amount, 2, '.', '');
     $success = esc_url_raw($request['success_url'] ?? home_url('/'));
@@ -129,13 +129,13 @@ final class StraySafe_PayPal_Payment_Provider extends StraySafe_Abstract_Payment
     if ($is_recurring) {
       $plan_id = $this->subscription_plan($settings, $value, $currency);
       if (is_wp_error($plan_id)) return $plan_id;
-      $checkout = $this->request('v1/billing/subscriptions', $settings, ['plan_id'=>$plan_id,'custom_id'=>'straysafe_payments','application_context'=>['brand_name'=>get_bloginfo('name'),'user_action'=>'SUBSCRIBE_NOW','return_url'=>$success,'cancel_url'=>$cancel]], 'POST');
+      $checkout = $this->request('v1/billing/subscriptions', $settings, ['plan_id'=>$plan_id,'custom_id'=>'plugin_payments','application_context'=>['brand_name'=>get_bloginfo('name'),'user_action'=>'SUBSCRIBE_NOW','return_url'=>$success,'cancel_url'=>$cancel]], 'POST');
     } else {
-      $checkout = $this->request('v2/checkout/orders', $settings, ['intent'=>'CAPTURE','purchase_units'=>[['description'=>__('Donation', 'straysafe-ui-suite'),'custom_id'=>'straysafe_payments','amount'=>['currency_code'=>$currency,'value'=>$value]]],'application_context'=>['brand_name'=>get_bloginfo('name'),'user_action'=>'PAY_NOW','return_url'=>$success,'cancel_url'=>$cancel]], 'POST');
+      $checkout = $this->request('v2/checkout/orders', $settings, ['intent'=>'CAPTURE','purchase_units'=>[['description'=>__('Donation', 'plugin-ui-suite'),'custom_id'=>'plugin_payments','amount'=>['currency_code'=>$currency,'value'=>$value]]],'application_context'=>['brand_name'=>get_bloginfo('name'),'user_action'=>'PAY_NOW','return_url'=>$success,'cancel_url'=>$cancel]], 'POST');
     }
     if (is_wp_error($checkout)) return $checkout;
     $url = $this->approval_url($checkout['links'] ?? []);
-    if (!$url) return new WP_Error('paypal_checkout_missing_url', __('PayPal did not return an approval URL.', 'straysafe-ui-suite'));
+    if (!$url) return new WP_Error('paypal_checkout_missing_url', __('PayPal did not return an approval URL.', 'plugin-ui-suite'));
     return ['url'=>esc_url_raw($url),'id'=>sanitize_text_field($checkout['id'] ?? ''),'provider'=>'paypal'];
   }
   private function subscription_plan(array $settings, $value, $currency) {
@@ -143,12 +143,12 @@ final class StraySafe_PayPal_Payment_Provider extends StraySafe_Abstract_Payment
     $mode = !empty($settings['sandbox_mode']) ? 'sandbox' : 'live';
     $key = $mode . '_' . strtolower($currency) . '_' . str_replace('.', '_', $value);
     if (!empty($cache[$key])) return sanitize_text_field($cache[$key]);
-    $product = $this->request('v1/catalogs/products', $settings, ['name'=>__('Monthly donation', 'straysafe-ui-suite'),'type'=>'SERVICE','category'=>'NONPROFIT'], 'POST');
+    $product = $this->request('v1/catalogs/products', $settings, ['name'=>__('Monthly donation', 'plugin-ui-suite'),'type'=>'SERVICE','category'=>'NONPROFIT'], 'POST');
     if (is_wp_error($product)) return $product;
-    if (empty($product['id'])) return new WP_Error('paypal_product_missing_id', __('PayPal did not return a product ID for subscriptions.', 'straysafe-ui-suite'));
-    $plan = $this->request('v1/billing/plans', $settings, ['product_id'=>$product['id'],'name'=>sprintf(__('Monthly donation %1$s %2$s', 'straysafe-ui-suite'), $currency, $value),'status'=>'ACTIVE','billing_cycles'=>[['frequency'=>['interval_unit'=>'MONTH','interval_count'=>1],'tenure_type'=>'REGULAR','sequence'=>1,'total_cycles'=>0,'pricing_scheme'=>['fixed_price'=>['currency_code'=>$currency,'value'=>$value]]]],'payment_preferences'=>['auto_bill_outstanding'=>true,'setup_fee_failure_action'=>'CONTINUE','payment_failure_threshold'=>3]], 'POST');
+    if (empty($product['id'])) return new WP_Error('paypal_product_missing_id', __('PayPal did not return a product ID for subscriptions.', 'plugin-ui-suite'));
+    $plan = $this->request('v1/billing/plans', $settings, ['product_id'=>$product['id'],'name'=>sprintf(__('Monthly donation %1$s %2$s', 'plugin-ui-suite'), $currency, $value),'status'=>'ACTIVE','billing_cycles'=>[['frequency'=>['interval_unit'=>'MONTH','interval_count'=>1],'tenure_type'=>'REGULAR','sequence'=>1,'total_cycles'=>0,'pricing_scheme'=>['fixed_price'=>['currency_code'=>$currency,'value'=>$value]]]],'payment_preferences'=>['auto_bill_outstanding'=>true,'setup_fee_failure_action'=>'CONTINUE','payment_failure_threshold'=>3]], 'POST');
     if (is_wp_error($plan)) return $plan;
-    if (empty($plan['id'])) return new WP_Error('paypal_plan_missing_id', __('PayPal did not return a subscription plan ID.', 'straysafe-ui-suite'));
+    if (empty($plan['id'])) return new WP_Error('paypal_plan_missing_id', __('PayPal did not return a subscription plan ID.', 'plugin-ui-suite'));
     $cache[$key] = sanitize_text_field($plan['id']);
     update_option(self::PLAN_CACHE_KEY, array_slice($cache, -200, null, true), false);
     return $cache[$key];
@@ -158,24 +158,24 @@ final class StraySafe_PayPal_Payment_Provider extends StraySafe_Abstract_Payment
     $token = $this->access_token($settings);
     if (is_wp_error($token)) return $token;
     $response = wp_remote_request($this->base_url($settings).ltrim($endpoint,'/'), ['method'=>$method,'timeout'=>20,'headers'=>['Authorization'=>'Bearer '.$token,'Content-Type'=>'application/json','Accept'=>'application/json'],'body'=>empty($body)?null:wp_json_encode($body)]);
-    if (is_wp_error($response)) return new WP_Error('paypal_request_failed', sprintf(__('PayPal request failed: %s', 'straysafe-ui-suite'), $response->get_error_message()));
+    if (is_wp_error($response)) return new WP_Error('paypal_request_failed', sprintf(__('PayPal request failed: %s', 'plugin-ui-suite'), $response->get_error_message()));
     $code = (int) wp_remote_retrieve_response_code($response);
     $json = json_decode((string) wp_remote_retrieve_body($response), true);
-    if ($code < 200 || $code >= 300) return new WP_Error('paypal_api_error', sanitize_text_field($json['message'] ?? $json['details'][0]['description'] ?? __('PayPal returned an error while creating checkout.', 'straysafe-ui-suite')), ['status'=>$code]);
-    return is_array($json) ? $json : new WP_Error('paypal_invalid_response', __('PayPal returned an invalid response.', 'straysafe-ui-suite'));
+    if ($code < 200 || $code >= 300) return new WP_Error('paypal_api_error', sanitize_text_field($json['message'] ?? $json['details'][0]['description'] ?? __('PayPal returned an error while creating checkout.', 'plugin-ui-suite')), ['status'=>$code]);
+    return is_array($json) ? $json : new WP_Error('paypal_invalid_response', __('PayPal returned an invalid response.', 'plugin-ui-suite'));
   }
   private function access_token(array $settings) {
     $client = trim((string)($settings['client_id'] ?? '')); $secret = trim((string)($settings['secret'] ?? ''));
-    if ($client === '' || $secret === '') return new WP_Error('paypal_missing_credentials', __('PayPal client ID and secret are required.', 'straysafe-ui-suite'));
+    if ($client === '' || $secret === '') return new WP_Error('paypal_missing_credentials', __('PayPal client ID and secret are required.', 'plugin-ui-suite'));
     $response = wp_remote_post($this->base_url($settings).'v1/oauth2/token', ['timeout'=>20,'headers'=>['Authorization'=>'Basic '.base64_encode($client.':'.$secret),'Accept'=>'application/json','Accept-Language'=>'en_US'],'body'=>['grant_type'=>'client_credentials']]);
-    if (is_wp_error($response)) return new WP_Error('paypal_token_failed', sprintf(__('PayPal authentication failed: %s', 'straysafe-ui-suite'), $response->get_error_message()));
+    if (is_wp_error($response)) return new WP_Error('paypal_token_failed', sprintf(__('PayPal authentication failed: %s', 'plugin-ui-suite'), $response->get_error_message()));
     $json = json_decode((string) wp_remote_retrieve_body($response), true);
-    if ((int)wp_remote_retrieve_response_code($response) >= 300 || empty($json['access_token'])) return new WP_Error('paypal_token_failed', sanitize_text_field($json['error_description'] ?? __('PayPal authentication failed.', 'straysafe-ui-suite')));
+    if ((int)wp_remote_retrieve_response_code($response) >= 300 || empty($json['access_token'])) return new WP_Error('paypal_token_failed', sanitize_text_field($json['error_description'] ?? __('PayPal authentication failed.', 'plugin-ui-suite')));
     return sanitize_text_field($json['access_token']);
   }
   private function base_url(array $settings) { return !empty($settings['sandbox_mode']) ? self::SANDBOX_API : self::LIVE_API; }
 }
-final class StraySafe_Square_Payment_Provider extends StraySafe_Abstract_Payment_Provider {
+final class Plugin_Square_Payment_Provider extends Plugin_Abstract_Payment_Provider {
   const LIVE_API = 'https://connect.squareup.com/';
   const SANDBOX_API = 'https://connect.squareupsandbox.com/';
   const API_VERSION = '2024-06-04';
@@ -183,66 +183,66 @@ final class StraySafe_Square_Payment_Provider extends StraySafe_Abstract_Payment
   public function validate_configuration(array $settings) {
     $status = parent::validate_configuration($settings);
     if (!$status['connected']) return $status;
-    return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('Square sandbox credentials are configured.', 'straysafe-ui-suite') : __('Square live credentials are configured.', 'straysafe-ui-suite')];
+    return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('Square sandbox credentials are configured.', 'plugin-ui-suite') : __('Square live credentials are configured.', 'plugin-ui-suite')];
   }
   public function create_checkout(array $request, array $settings) {
     $status = $this->validate_configuration($settings);
     if (empty($status['connected'])) return new WP_Error('square_not_configured', $status['message']);
     $amount = isset($request['amount']) ? (float)$request['amount'] : 0;
-    if ($amount <= 0) return new WP_Error('square_invalid_amount', __('Please choose a valid donation amount.', 'straysafe-ui-suite'));
+    if ($amount <= 0) return new WP_Error('square_invalid_amount', __('Please choose a valid donation amount.', 'plugin-ui-suite'));
     $currency = strtoupper(preg_replace('/[^a-zA-Z]/', '', $request['currency'] ?? 'GBP')) ?: 'GBP';
     $is_recurring = ($request['type'] ?? 'one_off') === 'recurring';
     $body = [
       'idempotency_key' => wp_generate_uuid4(),
-      'quick_pay' => ['name'=>__('Donation', 'straysafe-ui-suite'),'price_money'=>['amount'=>$this->minor_amount($amount, $currency),'currency'=>$currency],'location_id'=>sanitize_text_field($settings['location_id'] ?? '')],
+      'quick_pay' => ['name'=>__('Donation', 'plugin-ui-suite'),'price_money'=>['amount'=>$this->minor_amount($amount, $currency),'currency'=>$currency],'location_id'=>sanitize_text_field($settings['location_id'] ?? '')],
       'checkout_options' => ['redirect_url'=>esc_url_raw($request['success_url'] ?? home_url('/')),'accepted_payment_methods'=>['apple_pay'=>true,'google_pay'=>true]],
       'pre_populated_data' => new stdClass(),
     ];
     if ($is_recurring) {
       $plan = sanitize_text_field($settings['subscription_plan_variation_id'] ?? '');
-      if ($plan === '') return new WP_Error('square_missing_subscription_plan', __('Square recurring donations require a Subscription Plan Variation ID.', 'straysafe-ui-suite'));
+      if ($plan === '') return new WP_Error('square_missing_subscription_plan', __('Square recurring donations require a Subscription Plan Variation ID.', 'plugin-ui-suite'));
       $body['checkout_options']['subscription_plan_id'] = $plan;
     }
     $link = $this->request('v2/online-checkout/payment-links', $settings, $body, 'POST');
     if (is_wp_error($link)) return $link;
     $url = $link['payment_link']['url'] ?? '';
-    if (!$url) return new WP_Error('square_checkout_missing_url', __('Square did not return a checkout URL.', 'straysafe-ui-suite'));
+    if (!$url) return new WP_Error('square_checkout_missing_url', __('Square did not return a checkout URL.', 'plugin-ui-suite'));
     return ['url'=>esc_url_raw($url),'id'=>sanitize_text_field($link['payment_link']['id'] ?? ''),'provider'=>'square'];
   }
   private function minor_amount($amount, $currency) { $zero_decimal = ['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']; return in_array(strtoupper($currency), $zero_decimal, true) ? (int)round((float)$amount) : (int)round((float)$amount * 100); }
   private function request($endpoint, array $settings, array $body=[], $method='POST') {
     $token = trim((string)($settings['access_token'] ?? ''));
-    if ($token === '') return new WP_Error('square_missing_token', __('Square access token is required.', 'straysafe-ui-suite'));
+    if ($token === '') return new WP_Error('square_missing_token', __('Square access token is required.', 'plugin-ui-suite'));
     $response = wp_remote_request($this->base_url($settings).ltrim($endpoint, '/'), ['method'=>$method,'timeout'=>20,'headers'=>['Authorization'=>'Bearer '.$token,'Square-Version'=>self::API_VERSION,'Content-Type'=>'application/json','Accept'=>'application/json'],'body'=>empty($body)?null:wp_json_encode($body)]);
-    if (is_wp_error($response)) return new WP_Error('square_request_failed', sprintf(__('Square request failed: %s', 'straysafe-ui-suite'), $response->get_error_message()));
+    if (is_wp_error($response)) return new WP_Error('square_request_failed', sprintf(__('Square request failed: %s', 'plugin-ui-suite'), $response->get_error_message()));
     $code = (int) wp_remote_retrieve_response_code($response);
     $json = json_decode((string) wp_remote_retrieve_body($response), true);
-    if ($code < 200 || $code >= 300) return new WP_Error('square_api_error', sanitize_text_field($json['errors'][0]['detail'] ?? $json['errors'][0]['code'] ?? __('Square returned an error while creating checkout.', 'straysafe-ui-suite')), ['status'=>$code]);
-    return is_array($json) ? $json : new WP_Error('square_invalid_response', __('Square returned an invalid response.', 'straysafe-ui-suite'));
+    if ($code < 200 || $code >= 300) return new WP_Error('square_api_error', sanitize_text_field($json['errors'][0]['detail'] ?? $json['errors'][0]['code'] ?? __('Square returned an error while creating checkout.', 'plugin-ui-suite')), ['status'=>$code]);
+    return is_array($json) ? $json : new WP_Error('square_invalid_response', __('Square returned an invalid response.', 'plugin-ui-suite'));
   }
   private function base_url(array $settings) { return !empty($settings['sandbox_mode']) ? self::SANDBOX_API : self::LIVE_API; }
 }
-final class StraySafe_GoCardless_Payment_Provider extends StraySafe_Abstract_Payment_Provider {
+final class Plugin_GoCardless_Payment_Provider extends Plugin_Abstract_Payment_Provider {
   const LIVE_API = 'https://api.gocardless.com/';
   const SANDBOX_API = 'https://api-sandbox.gocardless.com/';
   const API_VERSION = '2015-07-06';
   public function __construct(){ $this->id='gocardless'; $this->name='GoCardless'; $this->capabilities=['subscriptions'=>true,'variable_subscriptions'=>true,'variable_one_off_amounts'=>false,'apple_pay'=>false,'google_pay'=>false,'gift_aid'=>true,'fee_recovery'=>false,'saved_cards'=>false,'embedded_checkout'=>false]; $this->fields=['access_token'=>['label'=>'Access Token','type'=>'password','required'=>true],'webhook_secret'=>['label'=>'Webhook Secret','type'=>'password','required'=>false],'sandbox_mode'=>['label'=>'Sandbox Mode','type'=>'checkbox','required'=>false]]; }
-  public function validate_configuration(array $settings) { $status = parent::validate_configuration($settings); if (!$status['connected']) return $status; return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('GoCardless sandbox access token is configured.', 'straysafe-ui-suite') : __('GoCardless live access token is configured.', 'straysafe-ui-suite')]; }
+  public function validate_configuration(array $settings) { $status = parent::validate_configuration($settings); if (!$status['connected']) return $status; return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('GoCardless sandbox access token is configured.', 'plugin-ui-suite') : __('GoCardless live access token is configured.', 'plugin-ui-suite')]; }
   public function create_checkout(array $request, array $settings) {
     $status = $this->validate_configuration($settings);
     if (empty($status['connected'])) return new WP_Error('gocardless_not_configured', $status['message']);
     $amount = isset($request['amount']) ? (float)$request['amount'] : 0;
-    if ($amount <= 0) return new WP_Error('gocardless_invalid_amount', __('Please choose a valid Direct Debit amount.', 'straysafe-ui-suite'));
+    if ($amount <= 0) return new WP_Error('gocardless_invalid_amount', __('Please choose a valid Direct Debit amount.', 'plugin-ui-suite'));
     $currency = strtoupper(preg_replace('/[^a-zA-Z]/', '', $request['currency'] ?? 'GBP')) ?: 'GBP';
     $session_token = wp_generate_password(32, false, false);
-    $return_url = add_query_arg(['session_token'=>$session_token], rest_url('straysafe-payments/v1/gocardless-return'));
+    $return_url = add_query_arg(['session_token'=>$session_token], rest_url('plugin-payments/v1/gocardless-return'));
     $pending = ['amount'=>$amount,'currency'=>$currency,'type'=>($request['type'] ?? 'one_off') === 'recurring' ? 'recurring' : 'one_off','success_url'=>esc_url_raw($request['success_url'] ?? home_url('/')),'cancel_url'=>esc_url_raw($request['cancel_url'] ?? home_url('/')),'created_at'=>time(),'mode'=>!empty($settings['sandbox_mode'])?'sandbox':'live'];
-    $flow = $this->request('redirect_flows', $settings, ['redirect_flows'=>['description'=>__('Donation Direct Debit mandate', 'straysafe-ui-suite'),'session_token'=>$session_token,'success_redirect_url'=>$return_url,'metadata'=>['source'=>'straysafe_payments','donation_type'=>$pending['type'],'amount'=>(string)$amount,'currency'=>$currency]]], 'POST');
+    $flow = $this->request('redirect_flows', $settings, ['redirect_flows'=>['description'=>__('Donation Direct Debit mandate', 'plugin-ui-suite'),'session_token'=>$session_token,'success_redirect_url'=>$return_url,'metadata'=>['source'=>'plugin_payments','donation_type'=>$pending['type'],'amount'=>(string)$amount,'currency'=>$currency]]], 'POST');
     if (is_wp_error($flow)) return $flow;
     $redirect = $flow['redirect_flows'] ?? [];
-    if (empty($redirect['redirect_url']) || empty($redirect['id'])) return new WP_Error('gocardless_redirect_missing_url', __('GoCardless did not return a redirect URL.', 'straysafe-ui-suite'));
+    if (empty($redirect['redirect_url']) || empty($redirect['id'])) return new WP_Error('gocardless_redirect_missing_url', __('GoCardless did not return a redirect URL.', 'plugin-ui-suite'));
     $pending['redirect_flow_id'] = sanitize_text_field($redirect['id']);
-    StraySafe_Payments_Module::store_gocardless_pending_flow($session_token, $pending);
+    Plugin_Payments_Module::store_gocardless_pending_flow($session_token, $pending);
     return ['url'=>esc_url_raw($redirect['redirect_url']),'id'=>sanitize_text_field($redirect['id']),'provider'=>'gocardless'];
   }
   public function complete_redirect_flow(array $settings, $redirect_flow_id, $session_token) {
@@ -251,41 +251,41 @@ final class StraySafe_GoCardless_Payment_Provider extends StraySafe_Abstract_Pay
     return $flow['redirect_flows'] ?? [];
   }
   public function create_payment(array $settings, $mandate_id, array $pending) {
-    return $this->request('payments', $settings, ['payments'=>['amount'=>$this->minor_amount($pending['amount'], $pending['currency']),'currency'=>$pending['currency'],'description'=>__('Donation', 'straysafe-ui-suite'),'links'=>['mandate'=>$mandate_id],'metadata'=>['source'=>'straysafe_payments','type'=>'one_off']]], 'POST');
+    return $this->request('payments', $settings, ['payments'=>['amount'=>$this->minor_amount($pending['amount'], $pending['currency']),'currency'=>$pending['currency'],'description'=>__('Donation', 'plugin-ui-suite'),'links'=>['mandate'=>$mandate_id],'metadata'=>['source'=>'plugin_payments','type'=>'one_off']]], 'POST');
   }
   public function create_subscription(array $settings, $mandate_id, array $pending) {
-    return $this->request('subscriptions', $settings, ['subscriptions'=>['amount'=>$this->minor_amount($pending['amount'], $pending['currency']),'currency'=>$pending['currency'],'name'=>__('Monthly donation', 'straysafe-ui-suite'),'interval_unit'=>'monthly','links'=>['mandate'=>$mandate_id],'metadata'=>['source'=>'straysafe_payments','type'=>'recurring']]], 'POST');
+    return $this->request('subscriptions', $settings, ['subscriptions'=>['amount'=>$this->minor_amount($pending['amount'], $pending['currency']),'currency'=>$pending['currency'],'name'=>__('Monthly donation', 'plugin-ui-suite'),'interval_unit'=>'monthly','links'=>['mandate'=>$mandate_id],'metadata'=>['source'=>'plugin_payments','type'=>'recurring']]], 'POST');
   }
   public function cancel_mandate(array $settings, $mandate_id) { return $this->request('mandates/'.rawurlencode($mandate_id).'/actions/cancel', $settings, ['data'=>new stdClass()], 'POST'); }
   private function minor_amount($amount, $currency) { $zero_decimal = ['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','UGX','VND','VUV','XAF','XOF','XPF']; return in_array(strtoupper($currency), $zero_decimal, true) ? (int)round((float)$amount) : (int)round((float)$amount * 100); }
   private function request($endpoint, array $settings, array $body=[], $method='POST') {
     $token = trim((string)($settings['access_token'] ?? ''));
-    if ($token === '') return new WP_Error('gocardless_missing_token', __('GoCardless access token is required.', 'straysafe-ui-suite'));
+    if ($token === '') return new WP_Error('gocardless_missing_token', __('GoCardless access token is required.', 'plugin-ui-suite'));
     $response = wp_remote_request($this->base_url($settings).ltrim($endpoint, '/'), ['method'=>$method,'timeout'=>20,'headers'=>['Authorization'=>'Bearer '.$token,'GoCardless-Version'=>self::API_VERSION,'Content-Type'=>'application/json','Accept'=>'application/json'],'body'=>empty($body)?null:wp_json_encode($body)]);
-    if (is_wp_error($response)) return new WP_Error('gocardless_request_failed', sprintf(__('GoCardless request failed: %s', 'straysafe-ui-suite'), $response->get_error_message()));
+    if (is_wp_error($response)) return new WP_Error('gocardless_request_failed', sprintf(__('GoCardless request failed: %s', 'plugin-ui-suite'), $response->get_error_message()));
     $code = (int) wp_remote_retrieve_response_code($response);
     $json = json_decode((string) wp_remote_retrieve_body($response), true);
-    if ($code < 200 || $code >= 300) return new WP_Error('gocardless_api_error', sanitize_text_field($json['error']['message'] ?? __('GoCardless returned an error.', 'straysafe-ui-suite')), ['status'=>$code]);
-    return is_array($json) ? $json : new WP_Error('gocardless_invalid_response', __('GoCardless returned an invalid response.', 'straysafe-ui-suite'));
+    if ($code < 200 || $code >= 300) return new WP_Error('gocardless_api_error', sanitize_text_field($json['error']['message'] ?? __('GoCardless returned an error.', 'plugin-ui-suite')), ['status'=>$code]);
+    return is_array($json) ? $json : new WP_Error('gocardless_invalid_response', __('GoCardless returned an invalid response.', 'plugin-ui-suite'));
   }
   private function base_url(array $settings) { return !empty($settings['sandbox_mode']) ? self::SANDBOX_API : self::LIVE_API; }
 }
-final class StraySafe_SumUp_Payment_Provider extends StraySafe_Abstract_Payment_Provider {
+final class Plugin_SumUp_Payment_Provider extends Plugin_Abstract_Payment_Provider {
   const API_BASE = 'https://api.sumup.com/';
   public function __construct(){ $this->id='sumup'; $this->name='SumUp'; $this->capabilities=['subscriptions'=>false,'variable_subscriptions'=>false,'variable_one_off_amounts'=>true,'apple_pay'=>true,'google_pay'=>true,'fee_recovery'=>false,'saved_cards'=>false,'embedded_checkout'=>false]; $this->fields=['merchant_code'=>['label'=>'Merchant Code','type'=>'text','required'=>true],'api_key'=>['label'=>'API Key','type'=>'password','required'=>true],'sandbox_mode'=>['label'=>'Sandbox Mode','type'=>'checkbox','required'=>false]]; }
-  public function validate_configuration(array $settings) { $status = parent::validate_configuration($settings); if (!$status['connected']) return $status; return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('SumUp sandbox API key is configured.', 'straysafe-ui-suite') : __('SumUp live API key is configured.', 'straysafe-ui-suite')]; }
+  public function validate_configuration(array $settings) { $status = parent::validate_configuration($settings); if (!$status['connected']) return $status; return ['connected'=>true,'message'=>!empty($settings['sandbox_mode']) ? __('SumUp sandbox API key is configured.', 'plugin-ui-suite') : __('SumUp live API key is configured.', 'plugin-ui-suite')]; }
   public function create_checkout(array $request, array $settings) {
-    if (($request['type'] ?? 'one_off') === 'recurring') return new WP_Error('sumup_recurring_not_supported', __('SumUp checkout does not support recurring donations in this integration.', 'straysafe-ui-suite'));
+    if (($request['type'] ?? 'one_off') === 'recurring') return new WP_Error('sumup_recurring_not_supported', __('SumUp checkout does not support recurring donations in this integration.', 'plugin-ui-suite'));
     $status = $this->validate_configuration($settings);
     if (empty($status['connected'])) return new WP_Error('sumup_not_configured', $status['message']);
     $amount = isset($request['amount']) ? (float)$request['amount'] : 0;
-    if ($amount <= 0) return new WP_Error('sumup_invalid_amount', __('Please choose a valid donation amount.', 'straysafe-ui-suite'));
+    if ($amount <= 0) return new WP_Error('sumup_invalid_amount', __('Please choose a valid donation amount.', 'plugin-ui-suite'));
     $currency = strtoupper(preg_replace('/[^a-zA-Z]/', '', $request['currency'] ?? 'GBP')) ?: 'GBP';
-    $reference = 'straysafe-' . wp_generate_uuid4();
-    $checkout = $this->request('v0.1/checkouts', $settings, ['checkout_reference'=>$reference,'amount'=>(float)number_format($amount, 2, '.', ''),'currency'=>$currency,'merchant_code'=>sanitize_text_field($settings['merchant_code'] ?? ''),'description'=>__('Donation', 'straysafe-ui-suite'),'redirect_url'=>esc_url_raw($request['success_url'] ?? home_url('/')),'hosted_checkout'=>['enabled'=>true]], 'POST');
+    $reference = 'plugin-' . wp_generate_uuid4();
+    $checkout = $this->request('v0.1/checkouts', $settings, ['checkout_reference'=>$reference,'amount'=>(float)number_format($amount, 2, '.', ''),'currency'=>$currency,'merchant_code'=>sanitize_text_field($settings['merchant_code'] ?? ''),'description'=>__('Donation', 'plugin-ui-suite'),'redirect_url'=>esc_url_raw($request['success_url'] ?? home_url('/')),'hosted_checkout'=>['enabled'=>true]], 'POST');
     if (is_wp_error($checkout)) return $checkout;
     $url = $checkout['hosted_checkout_url'] ?? '';
-    if (!$url) return new WP_Error('sumup_checkout_missing_url', __('SumUp did not return a hosted checkout URL.', 'straysafe-ui-suite'));
+    if (!$url) return new WP_Error('sumup_checkout_missing_url', __('SumUp did not return a hosted checkout URL.', 'plugin-ui-suite'));
     $methods = !empty($checkout['id']) ? $this->payment_methods($settings, $checkout['id']) : [];
     return ['url'=>esc_url_raw($url),'id'=>sanitize_text_field($checkout['id'] ?? ''),'provider'=>'sumup','payment_methods'=>$methods];
   }
@@ -296,32 +296,32 @@ final class StraySafe_SumUp_Payment_Provider extends StraySafe_Abstract_Payment_
   }
   private function request($endpoint, array $settings, array $body=[], $method='POST') {
     $key = trim((string)($settings['api_key'] ?? ''));
-    if ($key === '') return new WP_Error('sumup_missing_key', __('SumUp API key is required.', 'straysafe-ui-suite'));
+    if ($key === '') return new WP_Error('sumup_missing_key', __('SumUp API key is required.', 'plugin-ui-suite'));
     $args = ['method'=>$method,'timeout'=>20,'headers'=>['Authorization'=>'Bearer '.$key,'Content-Type'=>'application/json','Accept'=>'application/json']];
     if ($method !== 'GET') $args['body'] = wp_json_encode($body);
     $response = wp_remote_request(self::API_BASE.ltrim($endpoint, '/'), $args);
-    if (is_wp_error($response)) return new WP_Error('sumup_request_failed', sprintf(__('SumUp request failed: %s', 'straysafe-ui-suite'), $response->get_error_message()));
+    if (is_wp_error($response)) return new WP_Error('sumup_request_failed', sprintf(__('SumUp request failed: %s', 'plugin-ui-suite'), $response->get_error_message()));
     $code = (int) wp_remote_retrieve_response_code($response);
     $json = json_decode((string) wp_remote_retrieve_body($response), true);
-    if ($code < 200 || $code >= 300) return new WP_Error('sumup_api_error', sanitize_text_field($json['message'] ?? $json['error_message'] ?? __('SumUp returned an error while creating checkout.', 'straysafe-ui-suite')), ['status'=>$code]);
-    return is_array($json) ? $json : new WP_Error('sumup_invalid_response', __('SumUp returned an invalid response.', 'straysafe-ui-suite'));
+    if ($code < 200 || $code >= 300) return new WP_Error('sumup_api_error', sanitize_text_field($json['message'] ?? $json['error_message'] ?? __('SumUp returned an error while creating checkout.', 'plugin-ui-suite')), ['status'=>$code]);
+    return is_array($json) ? $json : new WP_Error('sumup_invalid_response', __('SumUp returned an invalid response.', 'plugin-ui-suite'));
   }
 }
 
 
-final class StraySafe_Payment_Gateway_Manager {
+final class Plugin_Payment_Gateway_Manager {
   private $providers = [];
   public static function default_capabilities() { return ['subscriptions'=>false,'variable_subscriptions'=>false,'variable_one_off_amounts'=>false,'apple_pay'=>false,'google_pay'=>false,'gift_aid'=>false,'fee_recovery'=>false,'saved_cards'=>false,'embedded_checkout'=>false]; }
   public function __construct() {
-    foreach ([new StraySafe_Stripe_Payment_Provider(), new StraySafe_PayPal_Payment_Provider(), new StraySafe_Square_Payment_Provider(), new StraySafe_GoCardless_Payment_Provider(), new StraySafe_SumUp_Payment_Provider()] as $provider) $this->register($provider);
+    foreach ([new Plugin_Stripe_Payment_Provider(), new Plugin_PayPal_Payment_Provider(), new Plugin_Square_Payment_Provider(), new Plugin_GoCardless_Payment_Provider(), new Plugin_SumUp_Payment_Provider()] as $provider) $this->register($provider);
     /**
      * Fires when the payment gateway manager is ready for provider registration.
      *
-     * @param StraySafe_Payment_Gateway_Manager $manager Gateway manager.
+     * @param Plugin_Payment_Gateway_Manager $manager Gateway manager.
      */
-    do_action('straysafe_payments_register_providers', $this);
+    do_action('plugin_payments_register_providers', $this);
   }
-  public function register(StraySafe_Payment_Provider_Interface $provider) { $this->providers[$provider->get_id()] = $provider; }
+  public function register(Plugin_Payment_Provider_Interface $provider) { $this->providers[$provider->get_id()] = $provider; }
   public function unregister($provider_id) { unset($this->providers[sanitize_key($provider_id)]); }
   public function all() {
     /**
@@ -329,13 +329,13 @@ final class StraySafe_Payment_Gateway_Manager {
      *
      * @param array $providers Provider objects keyed by provider ID.
      */
-    $providers = apply_filters('straysafe_payments_providers', $this->providers);
+    $providers = apply_filters('plugin_payments_providers', $this->providers);
     return is_array($providers) ? $providers : [];
   }
   public function get($id) { $all = $this->all(); return $all[$id] ?? reset($all); }
   public function create_checkout(array $request, array $settings) {
     $provider = $this->get($settings['active_provider'] ?? 'stripe');
-    if (!$provider) return new WP_Error('no_provider', __('No payment provider is available.', 'straysafe-ui-suite'));
+    if (!$provider) return new WP_Error('no_provider', __('No payment provider is available.', 'plugin-ui-suite'));
     /**
      * Allows extensions to fully handle checkout before the provider adapter runs.
      *
@@ -345,18 +345,18 @@ final class StraySafe_Payment_Gateway_Manager {
      * @param null|array|WP_Error $result   Checkout result override.
      * @param array               $request  Normalized checkout request.
      * @param array               $settings Full module settings.
-     * @param StraySafe_Payment_Provider_Interface $provider Active provider.
+     * @param Plugin_Payment_Provider_Interface $provider Active provider.
      */
-    $handled = apply_filters('straysafe_payments_custom_checkout_handler', null, $request, $settings, $provider);
+    $handled = apply_filters('plugin_payments_custom_checkout_handler', null, $request, $settings, $provider);
     if (null !== $handled) return $handled;
     /**
      * Filters the checkout request passed to the provider adapter.
      *
      * @param array $request Checkout request.
      * @param array $settings Full module settings.
-     * @param StraySafe_Payment_Provider_Interface $provider Active provider.
+     * @param Plugin_Payment_Provider_Interface $provider Active provider.
      */
-    $request = apply_filters('straysafe_payments_checkout_request', $request, $settings, $provider);
+    $request = apply_filters('plugin_payments_checkout_request', $request, $settings, $provider);
     $result = $provider->create_checkout($request, $settings['provider_settings'][$provider->get_id()] ?? []);
     /**
      * Filters the provider checkout result.
@@ -364,33 +364,33 @@ final class StraySafe_Payment_Gateway_Manager {
      * @param array|WP_Error $result Provider result.
      * @param array          $request Checkout request.
      * @param array          $settings Full module settings.
-     * @param StraySafe_Payment_Provider_Interface $provider Active provider.
+     * @param Plugin_Payment_Provider_Interface $provider Active provider.
      */
-    return apply_filters('straysafe_payments_checkout_result', $result, $request, $settings, $provider);
+    return apply_filters('plugin_payments_checkout_result', $result, $request, $settings, $provider);
   }
 }
 
 if (!function_exists('registerPaymentProvider')) {
-  function registerPaymentProvider(StraySafe_Payment_Provider_Interface $provider) { StraySafe_Payments_Module::gateway_manager()->register($provider); }
+  function registerPaymentProvider(Plugin_Payment_Provider_Interface $provider) { Plugin_Payments_Module::gateway_manager()->register($provider); }
 }
 if (!function_exists('unregisterPaymentProvider')) {
-  function unregisterPaymentProvider($provider_id) { StraySafe_Payments_Module::gateway_manager()->unregister($provider_id); }
+  function unregisterPaymentProvider($provider_id) { Plugin_Payments_Module::gateway_manager()->unregister($provider_id); }
 }
 if (!function_exists('registerPaymentCampaign')) {
-  function registerPaymentCampaign($slug, array $campaign) { StraySafe_Payments_Module::register_campaign($slug, $campaign); }
+  function registerPaymentCampaign($slug, array $campaign) { Plugin_Payments_Module::register_campaign($slug, $campaign); }
 }
 if (!function_exists('registerPaymentType')) {
-  function registerPaymentType($type, array $definition) { StraySafe_Payments_Module::register_payment_type($type, $definition); }
+  function registerPaymentType($type, array $definition) { Plugin_Payments_Module::register_payment_type($type, $definition); }
 }
 
-final class StraySafe_Payments_Module {
-  const OPTION_KEY = 'straysafe_payments_settings_v1';
-  const AUDIT_KEY = 'straysafe_payments_audit_v1';
-  const WEBHOOK_EVENTS_KEY = 'straysafe_payments_webhook_events_v1';
-  const PAYMENT_EVENTS_KEY = 'straysafe_payments_payment_events_v1';
-  const SUBSCRIPTION_EVENTS_KEY = 'straysafe_payments_subscription_events_v1';
-  const GOCARDLESS_PENDING_KEY = 'straysafe_payments_gocardless_pending_v1';
-  const GIFT_AID_KEY = 'straysafe_payments_gift_aid_v1';
+final class Plugin_Payments_Module {
+  const OPTION_KEY = 'plugin_payments_settings_v1';
+  const AUDIT_KEY = 'plugin_payments_audit_v1';
+  const WEBHOOK_EVENTS_KEY = 'plugin_payments_webhook_events_v1';
+  const PAYMENT_EVENTS_KEY = 'plugin_payments_payment_events_v1';
+  const SUBSCRIPTION_EVENTS_KEY = 'plugin_payments_subscription_events_v1';
+  const GOCARDLEPS_PENDING_KEY = 'plugin_payments_gocardless_pending_v1';
+  const GIFT_AID_KEY = 'plugin_payments_gift_aid_v1';
   private static $registered_campaigns = [];
   private static $registered_payment_types = [];
   public static function register_campaign($slug, array $campaign) {
@@ -403,18 +403,18 @@ final class StraySafe_Payments_Module {
   }
   public static function payment_types() {
     $types = array_merge([
-      'one_off'=>['label'=>__('One-off','straysafe-ui-suite'),'settings_key'=>'one_off','recurring'=>false],
-      'recurring'=>['label'=>__('Monthly','straysafe-ui-suite'),'settings_key'=>'recurring','recurring'=>true],
+      'one_off'=>['label'=>__('One-off','plugin-ui-suite'),'settings_key'=>'one_off','recurring'=>false],
+      'recurring'=>['label'=>__('Monthly','plugin-ui-suite'),'settings_key'=>'recurring','recurring'=>true],
     ], self::$registered_payment_types);
     /**
      * Filters payment type definitions available to checkout and extensions.
      *
      * @param array $types Payment type definitions keyed by type ID.
      */
-    return apply_filters('straysafe_payments_payment_types', $types);
+    return apply_filters('plugin_payments_payment_types', $types);
   }
-  public static function init() { add_action('admin_init',[__CLASS__,'register_settings']); add_action('rest_api_init',[__CLASS__,'register_rest_routes']); add_action('admin_menu',[__CLASS__,'admin_menu']); add_action('admin_enqueue_scripts',[__CLASS__,'enqueue_admin_assets']); add_action('wp_ajax_straysafe_payments_checkout',[__CLASS__,'handle_checkout']); add_action('wp_ajax_nopriv_straysafe_payments_checkout',[__CLASS__,'handle_checkout']); add_action('admin_post_straysafe_payments_export_gift_aid',[__CLASS__,'export_gift_aid']); add_shortcode('donation_widget',[__CLASS__,'render_shortcode']); add_action('init',[__CLASS__,'register_block']); add_action('wp_enqueue_scripts',[__CLASS__,'enqueue_frontend_assets']); }
-  public static function gateway_manager() { static $m; if (!$m) $m = new StraySafe_Payment_Gateway_Manager(); return $m; }
+  public static function init() { add_action('admin_init',[__CLASS__,'register_settings']); add_action('rest_api_init',[__CLASS__,'register_rest_routes']); add_action('admin_menu',[__CLASS__,'admin_menu']); add_action('admin_enqueue_scripts',[__CLASS__,'enqueue_admin_assets']); add_action('wp_ajax_plugin_payments_checkout',[__CLASS__,'handle_checkout']); add_action('wp_ajax_nopriv_plugin_payments_checkout',[__CLASS__,'handle_checkout']); add_action('admin_post_plugin_payments_export_gift_aid',[__CLASS__,'export_gift_aid']); add_shortcode('donation_widget',[__CLASS__,'render_shortcode']); add_action('init',[__CLASS__,'register_block']); add_action('wp_enqueue_scripts',[__CLASS__,'enqueue_frontend_assets']); }
+  public static function gateway_manager() { static $m; if (!$m) $m = new Plugin_Payment_Gateway_Manager(); return $m; }
   public static function defaults() { return ['active_provider'=>'stripe','provider_settings'=>[],'general'=>['enabled'=>1,'default_type'=>'one_off','currency'=>'GBP','success_url'=>home_url('/thank-you/'),'cancel_url'=>home_url('/'),'button_text'=>'Continue','thank_you_message'=>'Thank you for your support.','enable_campaigns'=>1,'title'=>'Support our work','subtitle'=>'Choose an amount that works for you','intro_text'=>'','learn_more_url'=>''],'one_off'=>['enabled'=>1,'allow_custom'=>1,'min'=>1,'max'=>10000,'default'=>5,'presets'=>[['amount'=>'3','description'=>'Makes a small contribution'],['amount'=>'5','description'=>'Supports essential work'],['amount'=>'10','description'=>'Helps fund ongoing services'],['amount'=>'17.50','description'=>'Creates meaningful impact']]],'recurring'=>['enabled'=>1,'allow_custom'=>1,'min'=>1,'max'=>1000,'default'=>5,'presets'=>[['amount'=>'3','description'=>'Provides steady monthly support'],['amount'=>'5','description'=>'Funds reliable monthly help'],['amount'=>'10','description'=>'Sustains ongoing work'],['amount'=>'17.50','description'=>'Creates lasting impact']]],'campaigns'=>[],'appearance'=>['primary'=>'#401268','background'=>'#ffffff','text'=>'#1f2937','radius'=>16,'shadow'=>1,'mode'=>'light','show_logo'=>0]]; }
   public static function settings() {
     $settings = self::merge_settings(get_option(self::OPTION_KEY, []), self::defaults());
@@ -424,7 +424,7 @@ final class StraySafe_Payments_Module {
      *
      * @param array $settings Complete payment settings.
      */
-    return apply_filters('straysafe_payments_settings', $settings);
+    return apply_filters('plugin_payments_settings', $settings);
   }
   private static function merge_settings($settings, $defaults) {
     if (!is_array($settings)) return $defaults;
@@ -442,7 +442,7 @@ final class StraySafe_Payments_Module {
      *
      * @param array $campaigns Campaign definitions keyed by campaign slug.
      */
-    $campaigns = apply_filters('straysafe_payments_campaigns', $campaigns);
+    $campaigns = apply_filters('plugin_payments_campaigns', $campaigns);
     $clean = [];
     foreach ((array)$campaigns as $slug=>$campaign) $clean[sanitize_key($slug)] = self::sanitize_registered_campaign($slug, (array)$campaign);
     return array_filter($clean);
@@ -453,11 +453,11 @@ final class StraySafe_Payments_Module {
     return $sanitized[$campaign['slug']] ?? [];
   }
   public static function register_settings() {
-    register_setting('straysafe_payments_settings', self::OPTION_KEY, ['type'=>'array','sanitize_callback'=>[__CLASS__,'sanitize_settings'],'default'=>self::defaults()]);
+    register_setting('plugin_payments_settings', self::OPTION_KEY, ['type'=>'array','sanitize_callback'=>[__CLASS__,'sanitize_settings'],'default'=>self::defaults()]);
     /**
      * Fires after Payments registers its Settings API option.
      */
-    do_action('straysafe_payments_register_settings');
+    do_action('plugin_payments_register_settings');
   }
   private static function admin_capability() {
     /**
@@ -465,29 +465,29 @@ final class StraySafe_Payments_Module {
      *
      * @param string $capability WordPress capability.
      */
-    return apply_filters('straysafe_payments_admin_capability', 'manage_options');
+    return apply_filters('plugin_payments_admin_capability', 'manage_options');
   }
   public static function admin_menu() {
-    add_menu_page('Payments','Payments',self::admin_capability(),'straysafe-payments',[__CLASS__,'render_admin_page'],'dashicons-money-alt',56);
+    add_menu_page('Payments','Payments',self::admin_capability(),'plugin-payments',[__CLASS__,'render_admin_page'],'dashicons-money-alt',56);
   }
   public static function enqueue_frontend_assets() {
-    wp_enqueue_style('straysafe-payments', STRAYSAFE_SUITE_URL.'assets/css/payments.css', [], STRAYSAFE_SUITE_VERSION);
-    wp_enqueue_script('straysafe-payments', STRAYSAFE_SUITE_URL.'assets/js/payments.js', [], STRAYSAFE_SUITE_VERSION, true);
-    $config = ['ajaxUrl'=>admin_url('admin-ajax.php'),'nonce'=>wp_create_nonce('straysafe_payments_checkout')];
+    wp_enqueue_style('plugin-payments', PLUGIN_SUITE_URL.'assets/css/payments.css', [], PLUGIN_SUITE_VERSION);
+    wp_enqueue_script('plugin-payments', PLUGIN_SUITE_URL.'assets/js/payments.js', [], PLUGIN_SUITE_VERSION, true);
+    $config = ['ajaxUrl'=>admin_url('admin-ajax.php'),'nonce'=>wp_create_nonce('plugin_payments_checkout')];
     /**
      * Filters frontend JavaScript configuration for the donation widget.
      *
      * @param array $config Localized script data.
      */
-    wp_localize_script('straysafe-payments','StraySafePayments',apply_filters('straysafe_payments_frontend_config', $config));
+    wp_localize_script('plugin-payments','PluginPayments',apply_filters('plugin_payments_frontend_config', $config));
     /**
      * Fires after Payments frontend assets are enqueued.
      */
-    do_action('straysafe_payments_enqueue_assets');
+    do_action('plugin_payments_enqueue_assets');
   }
-  public static function enqueue_admin_assets($hook) { if ($hook !== 'toplevel_page_straysafe-payments') return; self::enqueue_frontend_assets(); }
+  public static function enqueue_admin_assets($hook) { if ($hook !== 'toplevel_page_plugin-payments') return; self::enqueue_frontend_assets(); }
   public static function register_block() { if (function_exists('register_block_type')) register_block_type('asm-suite/donation-widget',['api_version'=>2,'title'=>'Payments Donation Widget','category'=>'widgets','attributes'=>['campaign'=>['type'=>'string'],'default'=>['type'=>'string'],'theme'=>['type'=>'string']],'render_callback'=>function($a=[]){ return self::render_shortcode($a); }]); }
-  public static function register_rest_routes() { register_rest_route('straysafe-payments/v1','/stripe-webhook',['methods'=>'POST','callback'=>[__CLASS__,'handle_stripe_webhook'],'permission_callback'=>'__return_true']); register_rest_route('straysafe-payments/v1','/paypal-webhook',['methods'=>'POST','callback'=>[__CLASS__,'handle_paypal_webhook'],'permission_callback'=>'__return_true']); register_rest_route('straysafe-payments/v1','/gocardless-webhook',['methods'=>'POST','callback'=>[__CLASS__,'handle_gocardless_webhook'],'permission_callback'=>'__return_true']); register_rest_route('straysafe-payments/v1','/gocardless-return',['methods'=>'GET','callback'=>[__CLASS__,'handle_gocardless_return'],'permission_callback'=>'__return_true']); }
+  public static function register_rest_routes() { register_rest_route('plugin-payments/v1','/stripe-webhook',['methods'=>'POST','callback'=>[__CLASS__,'handle_stripe_webhook'],'permission_callback'=>'__return_true']); register_rest_route('plugin-payments/v1','/paypal-webhook',['methods'=>'POST','callback'=>[__CLASS__,'handle_paypal_webhook'],'permission_callback'=>'__return_true']); register_rest_route('plugin-payments/v1','/gocardless-webhook',['methods'=>'POST','callback'=>[__CLASS__,'handle_gocardless_webhook'],'permission_callback'=>'__return_true']); register_rest_route('plugin-payments/v1','/gocardless-return',['methods'=>'GET','callback'=>[__CLASS__,'handle_gocardless_return'],'permission_callback'=>'__return_true']); }
   public static function sanitize_settings($input) {
     $input = is_array($input) ? wp_unslash($input) : [];
     $clean = self::settings();
@@ -527,7 +527,7 @@ final class StraySafe_Payments_Module {
     $clean['appearance']['mode']=($a['mode']??'light')==='dark'?'dark':'light';
     $clean['appearance']['show_logo']=!empty($a['show_logo'])?1:0;
     self::audit('settings_saved',['provider'=>$clean['active_provider']]);
-    return apply_filters('straysafe_payments_sanitized_settings',$clean,$input);
+    return apply_filters('plugin_payments_sanitized_settings',$clean,$input);
   }
   public static function audit($event,$data=[]) {
     $entry = array_merge(['time'=>current_time('mysql'),'event'=>sanitize_key($event),'user'=>get_current_user_id()],['data'=>$data]);
@@ -539,32 +539,32 @@ final class StraySafe_Payments_Module {
      *
      * @param array $entry Audit entry.
      */
-    do_action('straysafe_payments_audit_logged', $entry);
+    do_action('plugin_payments_audit_logged', $entry);
   }
   public static function store_gocardless_pending_flow($session_token, array $pending) {
-    $flows = get_option(self::GOCARDLESS_PENDING_KEY, []);
+    $flows = get_option(self::GOCARDLEPS_PENDING_KEY, []);
     $flows[sanitize_text_field($session_token)] = self::sanitize_event_data($pending);
     foreach ($flows as $token=>$flow) if (!empty($flow['created_at']) && (int)$flow['created_at'] < time() - DAY_IN_SECONDS) unset($flows[$token]);
-    update_option(self::GOCARDLESS_PENDING_KEY, array_slice($flows, -200, null, true), false);
+    update_option(self::GOCARDLEPS_PENDING_KEY, array_slice($flows, -200, null, true), false);
   }
   public static function handle_gocardless_return($request) {
     $session_token = sanitize_text_field($request->get_param('session_token') ?? '');
     $redirect_flow_id = sanitize_text_field($request->get_param('redirect_flow_id') ?? '');
-    $flows = get_option(self::GOCARDLESS_PENDING_KEY, []);
+    $flows = get_option(self::GOCARDLEPS_PENDING_KEY, []);
     $pending = $flows[$session_token] ?? null;
-    if (!$pending || $redirect_flow_id === '') return new WP_REST_Response(['message'=>__('GoCardless mandate session was not found.', 'straysafe-ui-suite')], 400);
+    if (!$pending || $redirect_flow_id === '') return new WP_REST_Response(['message'=>__('GoCardless mandate session was not found.', 'plugin-ui-suite')], 400);
     $settings = self::settings();
     $provider = self::gateway_manager()->get('gocardless');
-    if (!$provider instanceof StraySafe_GoCardless_Payment_Provider) return new WP_REST_Response(['message'=>__('GoCardless provider is not available.', 'straysafe-ui-suite')], 400);
+    if (!$provider instanceof Plugin_GoCardless_Payment_Provider) return new WP_REST_Response(['message'=>__('GoCardless provider is not available.', 'plugin-ui-suite')], 400);
     $gc_settings = $settings['provider_settings']['gocardless'] ?? [];
     $flow = $provider->complete_redirect_flow($gc_settings, $redirect_flow_id, $session_token);
     if (is_wp_error($flow)) { wp_safe_redirect(add_query_arg('gocardless_error', rawurlencode($flow->get_error_message()), $pending['cancel_url'])); exit; }
     $mandate_id = sanitize_text_field($flow['links']['mandate'] ?? '');
-    if ($mandate_id === '') { wp_safe_redirect(add_query_arg('gocardless_error', rawurlencode(__('GoCardless did not return a mandate.', 'straysafe-ui-suite')), $pending['cancel_url'])); exit; }
+    if ($mandate_id === '') { wp_safe_redirect(add_query_arg('gocardless_error', rawurlencode(__('GoCardless did not return a mandate.', 'plugin-ui-suite')), $pending['cancel_url'])); exit; }
     self::record_subscription_event($mandate_id, 'mandate_created', 'gocardless-return-'.$redirect_flow_id, ['provider'=>'gocardless','redirect_flow'=>$redirect_flow_id,'customer'=>$flow['links']['customer'] ?? ''], 'gocardless');
     $result = ($pending['type'] ?? 'one_off') === 'recurring' ? $provider->create_subscription($gc_settings, $mandate_id, $pending) : $provider->create_payment($gc_settings, $mandate_id, $pending);
     if (is_wp_error($result)) { wp_safe_redirect(add_query_arg('gocardless_error', rawurlencode($result->get_error_message()), $pending['cancel_url'])); exit; }
-    unset($flows[$session_token]); update_option(self::GOCARDLESS_PENDING_KEY, $flows, false);
+    unset($flows[$session_token]); update_option(self::GOCARDLEPS_PENDING_KEY, $flows, false);
     if (($pending['type'] ?? 'one_off') === 'recurring') self::record_subscription_event(sanitize_text_field($result['subscriptions']['id'] ?? $mandate_id), 'created', 'gocardless-return-'.$redirect_flow_id, ['provider'=>'gocardless','mandate'=>$mandate_id], 'gocardless');
     else self::record_payment_event(sanitize_text_field($result['payments']['id'] ?? $mandate_id), 'created', 'gocardless-return-'.$redirect_flow_id, ['provider'=>'gocardless','mandate'=>$mandate_id], 'gocardless');
     wp_safe_redirect($pending['success_url']); exit;
@@ -573,12 +573,12 @@ final class StraySafe_Payments_Module {
     $settings = self::settings();
     $gc = $settings['provider_settings']['gocardless'] ?? [];
     $secret = trim((string)($gc['webhook_secret'] ?? ''));
-    if ($secret === '') return new WP_REST_Response(['message'=>__('GoCardless webhook secret is not configured.', 'straysafe-ui-suite')], 400);
+    if ($secret === '') return new WP_REST_Response(['message'=>__('GoCardless webhook secret is not configured.', 'plugin-ui-suite')], 400);
     $payload = method_exists($request, 'get_body') ? $request->get_body() : file_get_contents('php://input');
     $signature = isset($_SERVER['HTTP_WEBHOOK_SIGNATURE']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_WEBHOOK_SIGNATURE'])) : '';
-    if (!self::verify_gocardless_signature($payload, $signature, $secret)) return new WP_REST_Response(['message'=>__('Invalid GoCardless webhook signature.', 'straysafe-ui-suite')], 498);
+    if (!self::verify_gocardless_signature($payload, $signature, $secret)) return new WP_REST_Response(['message'=>__('Invalid GoCardless webhook signature.', 'plugin-ui-suite')], 498);
     $body = json_decode((string)$payload, true);
-    if (!is_array($body) || empty($body['events']) || !is_array($body['events'])) return new WP_REST_Response(['message'=>__('Invalid GoCardless webhook payload.', 'straysafe-ui-suite')], 400);
+    if (!is_array($body) || empty($body['events']) || !is_array($body['events'])) return new WP_REST_Response(['message'=>__('Invalid GoCardless webhook payload.', 'plugin-ui-suite')], 400);
     foreach ($body['events'] as $event) {
       $event_id = sanitize_text_field($event['id'] ?? md5(wp_json_encode($event)));
       if (self::webhook_event_processed($event_id)) { self::audit('gocardless_webhook_duplicate', ['event_id'=>$event_id]); continue; }
@@ -600,11 +600,11 @@ final class StraySafe_Payments_Module {
     $settings = self::settings();
     $paypal = $settings['provider_settings']['paypal'] ?? [];
     $webhook_id = trim((string)($paypal['webhook_id'] ?? ''));
-    if ($webhook_id === '') return new WP_REST_Response(['message'=>__('PayPal webhook ID is not configured.', 'straysafe-ui-suite')], 400);
+    if ($webhook_id === '') return new WP_REST_Response(['message'=>__('PayPal webhook ID is not configured.', 'plugin-ui-suite')], 400);
     $payload = method_exists($request, 'get_body') ? $request->get_body() : file_get_contents('php://input');
     $event = json_decode((string)$payload, true);
-    if (!is_array($event) || empty($event['event_type'])) return new WP_REST_Response(['message'=>__('Invalid PayPal webhook payload.', 'straysafe-ui-suite')], 400);
-    if (!self::verify_paypal_webhook($paypal, $webhook_id, $event)) return new WP_REST_Response(['message'=>__('Invalid PayPal webhook signature.', 'straysafe-ui-suite')], 400);
+    if (!is_array($event) || empty($event['event_type'])) return new WP_REST_Response(['message'=>__('Invalid PayPal webhook payload.', 'plugin-ui-suite')], 400);
+    if (!self::verify_paypal_webhook($paypal, $webhook_id, $event)) return new WP_REST_Response(['message'=>__('Invalid PayPal webhook signature.', 'plugin-ui-suite')], 400);
     $event_id = sanitize_text_field($event['id'] ?? ($event['event_type'].'-'.($event['resource']['id'] ?? md5((string)$payload))));
     if (self::webhook_event_processed($event_id)) { self::audit('paypal_webhook_duplicate', ['event_id'=>$event_id,'type'=>sanitize_text_field($event['event_type'])]); return new WP_REST_Response(['received'=>true,'duplicate'=>true], 200); }
     $resource = is_array($event['resource'] ?? null) ? $event['resource'] : [];
@@ -650,23 +650,23 @@ final class StraySafe_Payments_Module {
   }
   private static function paypal_access_token(array $settings) {
     $client = trim((string)($settings['client_id'] ?? '')); $secret = trim((string)($settings['secret'] ?? ''));
-    if ($client === '' || $secret === '') return new WP_Error('paypal_missing_credentials', __('PayPal client ID and secret are required.', 'straysafe-ui-suite'));
+    if ($client === '' || $secret === '') return new WP_Error('paypal_missing_credentials', __('PayPal client ID and secret are required.', 'plugin-ui-suite'));
     $response = wp_remote_post(self::paypal_base_url($settings).'v1/oauth2/token', ['timeout'=>20,'headers'=>['Authorization'=>'Basic '.base64_encode($client.':'.$secret),'Accept'=>'application/json','Accept-Language'=>'en_US'],'body'=>['grant_type'=>'client_credentials']]);
     if (is_wp_error($response)) return $response;
     $json = json_decode((string)wp_remote_retrieve_body($response), true);
-    return !empty($json['access_token']) ? sanitize_text_field($json['access_token']) : new WP_Error('paypal_token_failed', __('PayPal authentication failed.', 'straysafe-ui-suite'));
+    return !empty($json['access_token']) ? sanitize_text_field($json['access_token']) : new WP_Error('paypal_token_failed', __('PayPal authentication failed.', 'plugin-ui-suite'));
   }
-  private static function paypal_base_url(array $settings) { return !empty($settings['sandbox_mode']) ? StraySafe_PayPal_Payment_Provider::SANDBOX_API : StraySafe_PayPal_Payment_Provider::LIVE_API; }
+  private static function paypal_base_url(array $settings) { return !empty($settings['sandbox_mode']) ? Plugin_PayPal_Payment_Provider::SANDBOX_API : Plugin_PayPal_Payment_Provider::LIVE_API; }
   public static function handle_stripe_webhook($request) {
     $settings = self::settings();
     $stripe = $settings['provider_settings']['stripe'] ?? [];
     $secret = trim((string)($stripe['webhook_secret'] ?? ''));
-    if ($secret === '') return new WP_REST_Response(['message'=>__('Stripe webhook secret is not configured.', 'straysafe-ui-suite')], 400);
+    if ($secret === '') return new WP_REST_Response(['message'=>__('Stripe webhook secret is not configured.', 'plugin-ui-suite')], 400);
     $payload = method_exists($request, 'get_body') ? $request->get_body() : file_get_contents('php://input');
     $signature = isset($_SERVER['HTTP_STRIPE_SIGNATURE']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_STRIPE_SIGNATURE'])) : '';
-    if (!self::verify_stripe_signature($payload, $signature, $secret)) return new WP_REST_Response(['message'=>__('Invalid Stripe webhook signature.', 'straysafe-ui-suite')], 400);
+    if (!self::verify_stripe_signature($payload, $signature, $secret)) return new WP_REST_Response(['message'=>__('Invalid Stripe webhook signature.', 'plugin-ui-suite')], 400);
     $event = json_decode((string)$payload, true);
-    if (!is_array($event) || empty($event['type'])) return new WP_REST_Response(['message'=>__('Invalid Stripe webhook payload.', 'straysafe-ui-suite')], 400);
+    if (!is_array($event) || empty($event['type'])) return new WP_REST_Response(['message'=>__('Invalid Stripe webhook payload.', 'plugin-ui-suite')], 400);
     $event_id = sanitize_text_field($event['id'] ?? ($event['type'].'-'.($event['data']['object']['id'] ?? md5((string)$payload))));
     if (self::webhook_event_processed($event_id)) {
       self::audit('stripe_webhook_duplicate', ['event_id'=>$event_id,'type'=>sanitize_text_field($event['type'])]);
@@ -732,7 +732,7 @@ final class StraySafe_Payments_Module {
      * @param array  $data Sanitized event data.
      * @param string $provider Provider ID.
      */
-    do_action('straysafe_payments_payment_event_recorded', $payment_id, sanitize_key($status), sanitize_text_field($event_id), self::sanitize_event_data($data), sanitize_key($provider));
+    do_action('plugin_payments_payment_event_recorded', $payment_id, sanitize_key($status), sanitize_text_field($event_id), self::sanitize_event_data($data), sanitize_key($provider));
   }
   public static function record_subscription_event($subscription_id, $status, $event_id, array $data=[], $provider='stripe') {
     $subscription_id = $subscription_id !== '' ? sanitize_text_field($subscription_id) : $event_id;
@@ -749,7 +749,7 @@ final class StraySafe_Payments_Module {
      * @param array  $data Sanitized event data.
      * @param string $provider Provider ID.
      */
-    do_action('straysafe_payments_subscription_event_recorded', $subscription_id, sanitize_key($status), sanitize_text_field($event_id), self::sanitize_event_data($data), sanitize_key($provider));
+    do_action('plugin_payments_subscription_event_recorded', $subscription_id, sanitize_key($status), sanitize_text_field($event_id), self::sanitize_event_data($data), sanitize_key($provider));
   }
   private static function sanitize_event_data(array $data) {
     $clean = [];
@@ -825,7 +825,7 @@ final class StraySafe_Payments_Module {
   }
   private static function apply_campaign($settings, $campaign_slug) {
     $slug = sanitize_key($campaign_slug);
-    if ($slug === '' || empty($settings['general']['enable_campaigns']) || empty($settings['campaigns'][$slug]) || !is_array($settings['campaigns'][$slug])) return apply_filters('straysafe_payments_applied_campaign_settings', $settings, $slug, null);
+    if ($slug === '' || empty($settings['general']['enable_campaigns']) || empty($settings['campaigns'][$slug]) || !is_array($settings['campaigns'][$slug])) return apply_filters('plugin_payments_applied_campaign_settings', $settings, $slug, null);
     $campaign = $settings['campaigns'][$slug];
     foreach (['title','subtitle'] as $key) if (!empty($campaign[$key])) $settings['general'][$key] = $campaign[$key];
     if (!empty($campaign['description'])) $settings['general']['intro_text'] = $campaign['description'];
@@ -842,7 +842,7 @@ final class StraySafe_Payments_Module {
      * @param string $slug Campaign slug.
      * @param array $campaign Campaign definition.
      */
-    return apply_filters('straysafe_payments_applied_campaign_settings', $settings, $slug, $campaign);
+    return apply_filters('plugin_payments_applied_campaign_settings', $settings, $slug, $campaign);
   }
   private static function fee_profile($provider_id, $currency='GBP') {
     $currency = strtoupper($currency);
@@ -854,7 +854,7 @@ final class StraySafe_Payments_Module {
     ];
     $profile = $profiles[$provider_id] ?? ['rate'=>0,'fixed'=>0];
     if (in_array($currency, ['JPY','KRW','VND'], true)) $profile['fixed'] = 0;
-    return apply_filters('straysafe_payments_fee_profile', $profile, $provider_id, $currency);
+    return apply_filters('plugin_payments_fee_profile', $profile, $provider_id, $currency);
   }
   private static function amount_with_fee_recovery($amount, $provider_id, $currency='GBP') {
     $profile = self::fee_profile($provider_id, $currency);
@@ -864,7 +864,7 @@ final class StraySafe_Payments_Module {
     return round(((float)$amount + $fixed) / (1 - $rate), 2);
   }
   public static function handle_checkout() {
-    check_ajax_referer('straysafe_payments_checkout','nonce');
+    check_ajax_referer('plugin_payments_checkout','nonce');
     $campaign = sanitize_key($_POST['campaign'] ?? '');
     $s = self::apply_campaign(self::settings(), $campaign);
     $type = sanitize_key($_POST['type'] ?? 'one_off');
@@ -878,9 +878,9 @@ final class StraySafe_Payments_Module {
      * @param array $request Raw checkout request context.
      * @param array $settings Active payment settings.
      */
-    do_action('straysafe_payments_before_checkout_validation', ['type'=>$type,'amount'=>$amount,'campaign'=>$campaign], $s);
+    do_action('plugin_payments_before_checkout_validation', ['type'=>$type,'amount'=>$amount,'campaign'=>$campaign], $s);
     $validation_error = null;
-    if (empty($s['general']['enabled']) || empty($s[$section]['enabled'] ?? 0) || $amount < (float)($s[$section]['min'] ?? 0) || $amount > (float)($s[$section]['max'] ?? PHP_FLOAT_MAX)) $validation_error = __('Please enter a valid amount.', 'straysafe-ui-suite');
+    if (empty($s['general']['enabled']) || empty($s[$section]['enabled'] ?? 0) || $amount < (float)($s[$section]['min'] ?? 0) || $amount > (float)($s[$section]['max'] ?? PHP_FLOAT_MAX)) $validation_error = __('Please enter a valid amount.', 'plugin-ui-suite');
     /**
      * Filters checkout validation errors.
      *
@@ -888,7 +888,7 @@ final class StraySafe_Payments_Module {
      * @param array       $request Checkout request context.
      * @param array       $settings Active payment settings.
      */
-    $validation_error = apply_filters('straysafe_payments_checkout_validation_error', $validation_error, ['type'=>$type,'amount'=>$amount,'campaign'=>$campaign,'payment_type'=>$definition], $s);
+    $validation_error = apply_filters('plugin_payments_checkout_validation_error', $validation_error, ['type'=>$type,'amount'=>$amount,'campaign'=>$campaign,'payment_type'=>$definition], $s);
     if ($validation_error) wp_send_json_error(['message'=>$validation_error], 400);
     $provider = self::gateway_manager()->get($s['active_provider']);
     $caps = $provider ? $provider->get_capabilities() : [];
@@ -900,7 +900,7 @@ final class StraySafe_Payments_Module {
      * @param array $request Normalized checkout request.
      * @param array $settings Active payment settings.
      */
-    do_action('straysafe_payments_before_checkout', $request, $s);
+    do_action('plugin_payments_before_checkout', $request, $s);
     $result = self::gateway_manager()->create_checkout($request, $s);
     if (is_wp_error($result)) {
       /**
@@ -910,7 +910,7 @@ final class StraySafe_Payments_Module {
        * @param array    $request Normalized checkout request.
        * @param array    $settings Active payment settings.
        */
-      do_action('straysafe_payments_checkout_failed', $result, $request, $s);
+      do_action('plugin_payments_checkout_failed', $result, $request, $s);
       wp_send_json_error(['message'=>$result->get_error_message()], 400);
     }
     if (!empty($caps['gift_aid']) && !empty($_POST['gift_aid'])) self::record_gift_aid($result['id'] ?? wp_generate_uuid4(), ['provider'=>$s['active_provider'],'campaign'=>$campaign,'type'=>$type,'amount'=>$checkout_amount,'currency'=>$s['general']['currency']]);
@@ -921,7 +921,7 @@ final class StraySafe_Payments_Module {
      * @param array $request Normalized checkout request.
      * @param array $settings Active payment settings.
      */
-    do_action('straysafe_payments_checkout_created', $result, $request, $s);
+    do_action('plugin_payments_checkout_created', $result, $request, $s);
     wp_send_json_success($result);
   }
   private static function record_gift_aid($checkout_id, array $data) {
@@ -942,11 +942,11 @@ final class StraySafe_Payments_Module {
   }
   public static function export_gift_aid() {
     if (!current_user_can(self::admin_capability())) wp_die('Permission denied.');
-    check_admin_referer('straysafe_payments_export_gift_aid');
+    check_admin_referer('plugin_payments_export_gift_aid');
     $rows = get_option(self::GIFT_AID_KEY, []);
     nocache_headers();
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename=straysafe-gift-aid.csv');
+    header('Content-Disposition: attachment; filename=plugin-gift-aid.csv');
     $out = fopen('php://output', 'w');
     if (false === $out) wp_die('Unable to open CSV output.');
     fputcsv($out, ['checkout_id','status','declaration_date','provider','campaign','type','amount','currency']);
@@ -958,40 +958,40 @@ final class StraySafe_Payments_Module {
     return preg_match('/^[=+\-@]/', $value) ? "\t".$value : $value;
   }
   public static function render_shortcode($atts=[]) {
-    $s=apply_filters('straysafe_payments_widget_settings', self::apply_campaign(self::settings(), $atts['campaign'] ?? ''), $atts);
+    $s=apply_filters('plugin_payments_widget_settings', self::apply_campaign(self::settings(), $atts['campaign'] ?? ''), $atts);
     if (empty($s['general']['enabled'])) return '';
     $p=self::gateway_manager()->get($s['active_provider']);
     $caps=$p?$p->get_capabilities():[];
     $supports_recurring=!empty($caps['subscriptions']) && !empty($s['recurring']['enabled']);
     $default=($atts['default']??$s['general']['default_type'])==='monthly'?'recurring':($atts['default']??$s['general']['default_type']);
     $default=$default==='recurring' && $supports_recurring ? 'recurring' : 'one_off';
-    $widget_id=function_exists('wp_unique_id') ? wp_unique_id('ss-payments-') : 'ss-payments-'.uniqid();
+    $widget_id=function_exists('wp_unique_id') ? wp_unique_id('plugin-payments-') : 'plugin-payments-'.uniqid();
     $describedby=$widget_id.'-impact '.$widget_id.'-error';
     ob_start(); ?>
-<section id="<?php echo esc_attr($widget_id); ?>" class="ss-payments-widget ss-payments-<?php echo esc_attr($s['appearance']['mode']); ?>" style="--ssp-primary:<?php echo esc_attr($s['appearance']['primary']); ?>;--ssp-on-primary:<?php echo esc_attr(self::readable_text_color($s['appearance']['primary'])); ?>;--ssp-bg:<?php echo esc_attr($s['appearance']['background']); ?>;--ssp-text:<?php echo esc_attr($s['appearance']['text']); ?>;--ssp-radius:<?php echo (int)$s['appearance']['radius']; ?>px" data-currency="<?php echo esc_attr($s['general']['currency']); ?>" data-default-type="<?php echo esc_attr($default); ?>" data-provider="<?php echo esc_attr($p?$p->get_id():''); ?>" data-campaign="<?php echo esc_attr($s['active_campaign']['slug'] ?? ''); ?>" data-fee-rate="<?php echo esc_attr(self::fee_profile($s['active_provider'],$s['general']['currency'])['rate'] ?? 0); ?>" data-fee-fixed="<?php echo esc_attr(self::fee_profile($s['active_provider'],$s['general']['currency'])['fixed'] ?? 0); ?>" aria-labelledby="<?php echo esc_attr($widget_id); ?>-title">
+<section id="<?php echo esc_attr($widget_id); ?>" class="plugin-payments-widget plugin-payments-<?php echo esc_attr($s['appearance']['mode']); ?>" style="--ssp-primary:<?php echo esc_attr($s['appearance']['primary']); ?>;--ssp-on-primary:<?php echo esc_attr(self::readable_text_color($s['appearance']['primary'])); ?>;--ssp-bg:<?php echo esc_attr($s['appearance']['background']); ?>;--ssp-text:<?php echo esc_attr($s['appearance']['text']); ?>;--ssp-radius:<?php echo (int)$s['appearance']['radius']; ?>px" data-currency="<?php echo esc_attr($s['general']['currency']); ?>" data-default-type="<?php echo esc_attr($default); ?>" data-provider="<?php echo esc_attr($p?$p->get_id():''); ?>" data-campaign="<?php echo esc_attr($s['active_campaign']['slug'] ?? ''); ?>" data-fee-rate="<?php echo esc_attr(self::fee_profile($s['active_provider'],$s['general']['currency'])['rate'] ?? 0); ?>" data-fee-fixed="<?php echo esc_attr(self::fee_profile($s['active_provider'],$s['general']['currency'])['fixed'] ?? 0); ?>" aria-labelledby="<?php echo esc_attr($widget_id); ?>-title">
   <h2 id="<?php echo esc_attr($widget_id); ?>-title"><?php echo esc_html($s['general']['title']); ?></h2>
-  <p class="ss-payments-subtitle"><?php echo esc_html($s['general']['subtitle']); ?></p>
-  <?php if($s['general']['intro_text']): ?><p class="ss-payments-intro"><?php echo esc_html($s['general']['intro_text']); ?></p><?php endif; ?>
-  <?php if($s['general']['learn_more_url']): ?><p><a class="ss-payments-learn" href="<?php echo esc_url($s['general']['learn_more_url']); ?>"><?php esc_html_e('Learn more','straysafe-ui-suite'); ?></a></p><?php endif; ?>
-  <?php if(!empty($s['active_campaign']['featured_image'])): ?><img class="ss-payments-campaign-image" src="<?php echo esc_url($s['active_campaign']['featured_image']); ?>" alt="" loading="lazy" /><?php endif; ?>
-  <?php if(!empty($s['active_campaign']['goal'])): $progress=min(100, max(0, ((float)($s['active_campaign']['progress'] ?? 0) / (float)$s['active_campaign']['goal']) * 100)); ?><div class="ss-payments-campaign-progress" aria-label="<?php esc_attr_e('Campaign progress','straysafe-ui-suite'); ?>"><span style="width:<?php echo esc_attr($progress); ?>%"></span></div><p class="ss-payments-hint"><?php echo esc_html(self::money($s['active_campaign']['progress'] ?? 0,$s['general']['currency']).' raised of '.self::money($s['active_campaign']['goal'],$s['general']['currency'])); ?></p><?php endif; ?>
-  <div class="ss-payments-types" role="tablist" aria-label="<?php esc_attr_e('Donation type','straysafe-ui-suite'); ?>">
-    <button id="<?php echo esc_attr($widget_id); ?>-tab-one-off" type="button" role="tab" data-payment-type="one_off" aria-controls="<?php echo esc_attr($widget_id); ?>-panel-one-off"><?php esc_html_e('One-off','straysafe-ui-suite'); ?></button>
-    <?php if($supports_recurring): ?><button id="<?php echo esc_attr($widget_id); ?>-tab-recurring" type="button" role="tab" data-payment-type="recurring" aria-controls="<?php echo esc_attr($widget_id); ?>-panel-recurring"><?php esc_html_e('Monthly','straysafe-ui-suite'); ?> <span aria-hidden="true">&hearts;</span></button><?php endif; ?>
+  <p class="plugin-payments-subtitle"><?php echo esc_html($s['general']['subtitle']); ?></p>
+  <?php if($s['general']['intro_text']): ?><p class="plugin-payments-intro"><?php echo esc_html($s['general']['intro_text']); ?></p><?php endif; ?>
+  <?php if($s['general']['learn_more_url']): ?><p><a class="plugin-payments-learn" href="<?php echo esc_url($s['general']['learn_more_url']); ?>"><?php esc_html_e('Learn more','plugin-ui-suite'); ?></a></p><?php endif; ?>
+  <?php if(!empty($s['active_campaign']['featured_image'])): ?><img class="plugin-payments-campaign-image" src="<?php echo esc_url($s['active_campaign']['featured_image']); ?>" alt="" loading="lazy" /><?php endif; ?>
+  <?php if(!empty($s['active_campaign']['goal'])): $progress=min(100, max(0, ((float)($s['active_campaign']['progress'] ?? 0) / (float)$s['active_campaign']['goal']) * 100)); ?><div class="plugin-payments-campaign-progress" aria-label="<?php esc_attr_e('Campaign progress','plugin-ui-suite'); ?>"><span style="width:<?php echo esc_attr($progress); ?>%"></span></div><p class="plugin-payments-hint"><?php echo esc_html(self::money($s['active_campaign']['progress'] ?? 0,$s['general']['currency']).' raised of '.self::money($s['active_campaign']['goal'],$s['general']['currency'])); ?></p><?php endif; ?>
+  <div class="plugin-payments-types" role="tablist" aria-label="<?php esc_attr_e('Donation type','plugin-ui-suite'); ?>">
+    <button id="<?php echo esc_attr($widget_id); ?>-tab-one-off" type="button" role="tab" data-payment-type="one_off" aria-controls="<?php echo esc_attr($widget_id); ?>-panel-one-off"><?php esc_html_e('One-off','plugin-ui-suite'); ?></button>
+    <?php if($supports_recurring): ?><button id="<?php echo esc_attr($widget_id); ?>-tab-recurring" type="button" role="tab" data-payment-type="recurring" aria-controls="<?php echo esc_attr($widget_id); ?>-panel-recurring"><?php esc_html_e('Monthly','plugin-ui-suite'); ?> <span aria-hidden="true">&hearts;</span></button><?php endif; ?>
   </div>
   <?php foreach(['one_off'=>'one-off','recurring'=>'recurring'] as $section=>$slug): if(empty($s[$section]['enabled']) || ($section==='recurring' && !$supports_recurring)) continue; ?>
-    <div id="<?php echo esc_attr($widget_id.'-panel-'.$slug); ?>" class="ss-payments-amounts" role="tabpanel" data-payment-section="<?php echo esc_attr($section); ?>" data-min-amount="<?php echo esc_attr($s[$section]['min']); ?>" data-max-amount="<?php echo esc_attr($s[$section]['max']); ?>" data-min-label="<?php echo esc_attr(self::money($s[$section]['min'],$s['general']['currency'])); ?>" data-max-label="<?php echo esc_attr(self::money($s[$section]['max'],$s['general']['currency'])); ?>" aria-labelledby="<?php echo esc_attr($widget_id.'-tab-'.$slug); ?>" <?php echo $section===$default?'':'hidden'; ?>>
+    <div id="<?php echo esc_attr($widget_id.'-panel-'.$slug); ?>" class="plugin-payments-amounts" role="tabpanel" data-payment-section="<?php echo esc_attr($section); ?>" data-min-amount="<?php echo esc_attr($s[$section]['min']); ?>" data-max-amount="<?php echo esc_attr($s[$section]['max']); ?>" data-min-label="<?php echo esc_attr(self::money($s[$section]['min'],$s['general']['currency'])); ?>" data-max-label="<?php echo esc_attr(self::money($s[$section]['max'],$s['general']['currency'])); ?>" aria-labelledby="<?php echo esc_attr($widget_id.'-tab-'.$slug); ?>" <?php echo $section===$default?'':'hidden'; ?>>
       <?php foreach($s[$section]['presets'] as $preset): ?><button type="button" data-payment-amount="<?php echo esc_attr($preset['amount']); ?>" data-payment-description="<?php echo esc_attr($preset['description']); ?>" aria-pressed="false"><?php echo esc_html(self::money($preset['amount'],$s['general']['currency'])); ?></button><?php endforeach; ?>
       <?php if(!empty($s[$section]['allow_custom']) && ($section==='one_off' || !empty($caps['variable_subscriptions']))): ?>
-        <label for="<?php echo esc_attr($widget_id.'-'.$section.'-custom'); ?>"><?php esc_html_e('Choose your own amount','straysafe-ui-suite'); ?><span class="ss-payments-hint"><?php printf(esc_html__('Between %1$s and %2$s','straysafe-ui-suite'), esc_html(self::money($s[$section]['min'],$s['general']['currency'])), esc_html(self::money($s[$section]['max'],$s['general']['currency']))); ?></span><input id="<?php echo esc_attr($widget_id.'-'.$section.'-custom'); ?>" type="number" min="<?php echo esc_attr($s[$section]['min']); ?>" max="<?php echo esc_attr($s[$section]['max']); ?>" step="0.01" inputmode="decimal" data-payment-custom data-payment-description="<?php esc_attr_e('Custom donation amount selected.','straysafe-ui-suite'); ?>" aria-describedby="<?php echo esc_attr($describedby); ?>" /></label>
+        <label for="<?php echo esc_attr($widget_id.'-'.$section.'-custom'); ?>"><?php esc_html_e('Choose your own amount','plugin-ui-suite'); ?><span class="plugin-payments-hint"><?php printf(esc_html__('Between %1$s and %2$s','plugin-ui-suite'), esc_html(self::money($s[$section]['min'],$s['general']['currency'])), esc_html(self::money($s[$section]['max'],$s['general']['currency']))); ?></span><input id="<?php echo esc_attr($widget_id.'-'.$section.'-custom'); ?>" type="number" min="<?php echo esc_attr($s[$section]['min']); ?>" max="<?php echo esc_attr($s[$section]['max']); ?>" step="0.01" inputmode="decimal" data-payment-custom data-payment-description="<?php esc_attr_e('Custom donation amount selected.','plugin-ui-suite'); ?>" aria-describedby="<?php echo esc_attr($describedby); ?>" /></label>
       <?php endif; ?>
     </div>
   <?php endforeach; ?>
-  <?php if(!empty($caps['fee_recovery'])): ?><label class="ss-payments-fee-recovery"><input type="checkbox" data-payment-fee-recovery /> <span><?php esc_html_e('I\'d like to cover the payment processing fees.', 'straysafe-ui-suite'); ?></span></label><p class="ss-payments-total" data-payment-total aria-live="polite"></p><?php endif; ?>
-  <?php if(!empty($caps['gift_aid'])): ?><label class="ss-payments-gift-aid"><input type="checkbox" data-payment-gift-aid /> <span><?php esc_html_e('Yes, I want to Gift Aid my donation and any donations I make in the future or have made in the past four years to this charity. I am a UK taxpayer and understand that if I pay less Income Tax and/or Capital Gains Tax than the amount of Gift Aid claimed on all my donations in that tax year it is my responsibility to pay any difference.', 'straysafe-ui-suite'); ?></span></label><?php endif; ?>
-  <p id="<?php echo esc_attr($widget_id); ?>-impact" class="ss-payments-impact" data-payment-impact aria-live="polite"></p>
-  <p id="<?php echo esc_attr($widget_id); ?>-error" class="ss-payments-error" data-payment-error role="status" aria-live="polite"></p>
-  <button type="button" class="ss-payments-continue" data-payment-continue disabled><?php echo esc_html($s['general']['button_text']); ?></button>
+  <?php if(!empty($caps['fee_recovery'])): ?><label class="plugin-payments-fee-recovery"><input type="checkbox" data-payment-fee-recovery /> <span><?php esc_html_e('I\'d like to cover the payment processing fees.', 'plugin-ui-suite'); ?></span></label><p class="plugin-payments-total" data-payment-total aria-live="polite"></p><?php endif; ?>
+  <?php if(!empty($caps['gift_aid'])): ?><label class="plugin-payments-gift-aid"><input type="checkbox" data-payment-gift-aid /> <span><?php esc_html_e('Yes, I want to Gift Aid my donation and any donations I make in the future or have made in the past four years to this charity. I am a UK taxpayer and understand that if I pay less Income Tax and/or Capital Gains Tax than the amount of Gift Aid claimed on all my donations in that tax year it is my responsibility to pay any difference.', 'plugin-ui-suite'); ?></span></label><?php endif; ?>
+  <p id="<?php echo esc_attr($widget_id); ?>-impact" class="plugin-payments-impact" data-payment-impact aria-live="polite"></p>
+  <p id="<?php echo esc_attr($widget_id); ?>-error" class="plugin-payments-error" data-payment-error role="status" aria-live="polite"></p>
+  <button type="button" class="plugin-payments-continue" data-payment-continue disabled><?php echo esc_html($s['general']['button_text']); ?></button>
 </section><?php return ob_get_clean(); }
   private static function money($amount,$currency){ $symbol=['GBP'=>'£','USD'=>'$','EUR'=>'€'][$currency]??$currency.' '; return $symbol.rtrim(rtrim(number_format((float)$amount,2), '0'), '.'); }
   private static function readable_text_color($hex){ $hex=ltrim((string)$hex,'#'); if(strlen($hex)===3) $hex=$hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2]; if(strlen($hex)!==6) return '#ffffff'; $r=hexdec(substr($hex,0,2)); $g=hexdec(substr($hex,2,2)); $b=hexdec(substr($hex,4,2)); $l=(0.2126*$r+0.7152*$g+0.0722*$b)/255; return $l>0.55?'#111827':'#ffffff'; }
@@ -1023,7 +1023,7 @@ final class StraySafe_Payments_Module {
     return true;
   }
   private static function dashboard_sum($rows, $callback) { $sum=0; foreach($rows as $row) if($callback($row)) $sum+=(float)$row['amount']; return $sum; }
-  private static function dashboard_top($rows, $key) { $totals=[]; foreach($rows as $row){ $label=$row[$key] ?: __('Unassigned','straysafe-ui-suite'); $totals[$label]=($totals[$label]??0)+(float)$row['amount']; } arsort($totals); return array_slice($totals,0,5,true); }
+  private static function dashboard_top($rows, $key) { $totals=[]; foreach($rows as $row){ $label=$row[$key] ?: __('Unassigned','plugin-ui-suite'); $totals[$label]=($totals[$label]??0)+(float)$row['amount']; } arsort($totals); return array_slice($totals,0,5,true); }
   private static function render_dashboard($settings, $providers) {
     $filters = ['campaign'=>sanitize_key($_GET['dashboard_campaign']??''),'provider'=>sanitize_key($_GET['dashboard_provider']??''),'type'=>sanitize_key($_GET['dashboard_type']??''),'currency'=>strtoupper(sanitize_text_field($_GET['dashboard_currency']??'')),'date_from'=>sanitize_text_field($_GET['dashboard_date_from']??''),'date_to'=>sanitize_text_field($_GET['dashboard_date_to']??'')];
     $rows = self::dashboard_rows($filters); $now=current_time('timestamp');
@@ -1036,43 +1036,43 @@ final class StraySafe_Payments_Module {
     $successful = count(array_filter($rows, function($r) use ($success){ return in_array($r['status'],$success,true) || strpos($r['status'],'paid') !== false; })); $refunded=count(array_filter($rows, function($r) use ($refund){ return in_array($r['status'],$refund,true) || strpos($r['status'],'refund') !== false; }));
     $success_rate = count($rows)?round(($successful/count($rows))*100,1):0; $refund_rate=count($rows)?round(($refunded/count($rows))*100,1):0;
     echo '<style>.ssp-dashboard{display:grid;gap:16px;margin:16px 0}.ssp-dashboard-filters,.ssp-dashboard-cards,.ssp-dashboard-charts{display:grid;gap:12px}.ssp-dashboard-filters{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:end}.ssp-dashboard-cards{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}.ssp-card,.ssp-chart{background:#fff;border:1px solid #dcdcde;border-radius:10px;padding:14px}.ssp-card strong{display:block;font-size:1.35rem}.ssp-bar{height:12px;background:#eef2f7;border-radius:999px;overflow:hidden}.ssp-bar span{display:block;height:100%;background:#401268}.ssp-chart-row{display:grid;grid-template-columns:minmax(90px,160px) 1fr auto;gap:8px;align-items:center;margin:8px 0}@media(max-width:600px){.ssp-chart-row{grid-template-columns:1fr}.ssp-dashboard-filters{grid-template-columns:1fr}}</style>';
-    echo '<div class="ssp-dashboard"><h2>'.esc_html__('Payments Dashboard','straysafe-ui-suite').'</h2><form class="ssp-dashboard-filters" method="get"><input type="hidden" name="page" value="straysafe-payments"/>';
+    echo '<div class="ssp-dashboard"><h2>'.esc_html__('Payments Dashboard','plugin-ui-suite').'</h2><form class="ssp-dashboard-filters" method="get"><input type="hidden" name="page" value="plugin-payments"/>';
     echo '<label>Campaign <select name="dashboard_campaign"><option value="">All</option>'; foreach($settings['campaigns']??[] as $slug=>$c) echo '<option value="'.esc_attr($slug).'" '.selected($filters['campaign'],$slug,false).'>'.esc_html($slug).'</option>'; echo '</select></label>';
     echo '<label>Provider <select name="dashboard_provider"><option value="">All</option>'; foreach($providers as $id=>$p) echo '<option value="'.esc_attr($id).'" '.selected($filters['provider'],$id,false).'>'.esc_html($p->get_name()).'</option>'; echo '</select></label>';
     echo '<label>Date from <input type="date" name="dashboard_date_from" value="'.esc_attr($filters['date_from']).'"/></label><label>Date to <input type="date" name="dashboard_date_to" value="'.esc_attr($filters['date_to']).'"/></label><label>Donation type <select name="dashboard_type"><option value="">All</option><option value="one_off" '.selected($filters['type'],'one_off',false).'>One-off</option><option value="recurring" '.selected($filters['type'],'recurring',false).'>Recurring</option></select></label><label>Currency <input name="dashboard_currency" value="'.esc_attr($filters['currency']).'" placeholder="GBP"/></label><button class="button button-primary">Filter</button></form>';
     foreach ([['Today',$today],['This month',$month],['This year',$year],['Recurring monthly income',$recurring],['Average donation',$avg],['Payment success rate',$success_rate.'%'],['Refund rate',$refund_rate.'%']] as $card) echo '<div class="ssp-card"><span>'.esc_html($card[0]).'</span><strong>'.esc_html(is_numeric($card[1])?self::money($card[1],$filters['currency']?:'GBP'):$card[1]).'</strong></div>';
     echo '<div class="ssp-dashboard-charts"><div class="ssp-chart"><h3>Campaign progress</h3>'.self::dashboard_campaign_progress_chart($settings['campaigns']??[],$filters['currency']?:'GBP').'</div><div class="ssp-chart"><h3>Top campaigns</h3>'.self::dashboard_chart(self::dashboard_top($rows,'campaign'),$filters['currency']?:'GBP').'</div><div class="ssp-chart"><h3>Top payment methods</h3>'.self::dashboard_chart(self::dashboard_top($rows,'provider'),$filters['currency']?:'GBP').'</div></div></div>';
   }
-  private static function dashboard_campaign_progress_chart($campaigns, $currency){ $items=[]; foreach((array)$campaigns as $slug=>$campaign){ if(!empty($campaign['goal'])) $items[$slug]=['progress'=>(float)($campaign['progress']??0),'goal'=>(float)$campaign['goal']]; } if(empty($items)) return '<p>'.esc_html__('No campaign goals configured.','straysafe-ui-suite').'</p>'; $html=''; foreach($items as $slug=>$data){ $pct=$data['goal']>0?min(100,($data['progress']/$data['goal'])*100):0; $html.='<div class="ssp-chart-row"><span>'.esc_html($slug).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($data['progress'],$currency).' / '.self::money($data['goal'],$currency)).'</strong></div>'; } return $html; }
-  private static function dashboard_chart($items,$currency){ if(empty($items)) return '<p>'.esc_html__('No data yet.','straysafe-ui-suite').'</p>'; $max=max($items); $html=''; foreach($items as $label=>$value){ $pct=$max>0?($value/$max)*100:0; $html.='<div class="ssp-chart-row"><span>'.esc_html($label).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($value,$currency)).'</strong></div>'; } return $html; }
+  private static function dashboard_campaign_progress_chart($campaigns, $currency){ $items=[]; foreach((array)$campaigns as $slug=>$campaign){ if(!empty($campaign['goal'])) $items[$slug]=['progress'=>(float)($campaign['progress']??0),'goal'=>(float)$campaign['goal']]; } if(empty($items)) return '<p>'.esc_html__('No campaign goals configured.','plugin-ui-suite').'</p>'; $html=''; foreach($items as $slug=>$data){ $pct=$data['goal']>0?min(100,($data['progress']/$data['goal'])*100):0; $html.='<div class="ssp-chart-row"><span>'.esc_html($slug).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($data['progress'],$currency).' / '.self::money($data['goal'],$currency)).'</strong></div>'; } return $html; }
+  private static function dashboard_chart($items,$currency){ if(empty($items)) return '<p>'.esc_html__('No data yet.','plugin-ui-suite').'</p>'; $max=max($items); $html=''; foreach($items as $label=>$value){ $pct=$max>0?($value/$max)*100:0; $html.='<div class="ssp-chart-row"><span>'.esc_html($label).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($value,$currency)).'</strong></div>'; } return $html; }
   public static function render_admin_page() {
     if(!current_user_can(self::admin_capability())) return;
     $s=self::settings();
     $providers=self::gateway_manager()->all();
     $name=self::OPTION_KEY;
-    echo '<div class="wrap"><h1>'.esc_html__('Payments','straysafe-ui-suite').'</h1>';
+    echo '<div class="wrap"><h1>'.esc_html__('Payments','plugin-ui-suite').'</h1>';
     self::render_dashboard($s, $providers);
-    if (isset($_GET['settings-updated'])) echo '<div class="notice notice-success is-dismissible"><p>'.esc_html__('Payments settings saved.','straysafe-ui-suite').'</p></div>';
+    if (isset($_GET['settings-updated'])) echo '<div class="notice notice-success is-dismissible"><p>'.esc_html__('Payments settings saved.','plugin-ui-suite').'</p></div>';
     echo '<form method="post" action="'.esc_url(admin_url('options.php')).'">';
-    settings_fields('straysafe_payments_settings');
-    echo '<h2>'.esc_html__('Payment Provider','straysafe-ui-suite').'</h2><p>'.esc_html__('Choose the checkout provider and enter its credentials. The selected provider controls the capabilities shown by the donation widget.','straysafe-ui-suite').'</p>';
+    settings_fields('plugin_payments_settings');
+    echo '<h2>'.esc_html__('Payment Provider','plugin-ui-suite').'</h2><p>'.esc_html__('Choose the checkout provider and enter its credentials. The selected provider controls the capabilities shown by the donation widget.','plugin-ui-suite').'</p>';
     foreach($providers as $id=>$p){
       echo '<label style="display:block;margin:8px 0"><input type="radio" name="'.esc_attr($name).'[active_provider]" value="'.esc_attr($id).'" '.checked($s['active_provider'],$id,false).'/> '.esc_html($p->get_name()).'</label><div class="ssp-provider-fields" data-provider="'.esc_attr($id).'"><table class="form-table" role="presentation">';
       $status=$p->validate_configuration($s['provider_settings'][$id]??[]);
-      echo '<tr><th>'.esc_html__('Connection status','straysafe-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Connected':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
+      echo '<tr><th>'.esc_html__('Connection status','plugin-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Connected':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
       foreach($p->get_configuration_fields() as $key=>$f){
         $val=$s['provider_settings'][$id][$key]??'';
         echo '<tr><th><label for="ssp-'.esc_attr($id.'-'.$key).'">'.esc_html($f['label']).'</label></th><td>';
         if($f['type']==='checkbox') echo '<input id="ssp-'.esc_attr($id.'-'.$key).'" type="checkbox" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="1" '.checked($val,1,false).'/>';
-        else { $display_val = $f['type']==='password' ? '' : $val; echo '<input id="ssp-'.esc_attr($id.'-'.$key).'" class="regular-text" type="'.esc_attr($f['type']).'" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="'.esc_attr($display_val).'" autocomplete="off"/>'; if($f['type']==='password' && $val !== '') echo '<p class="description">'.esc_html__('Saved. Leave blank to keep the existing value.','straysafe-ui-suite').'</p>'; }
+        else { $display_val = $f['type']==='password' ? '' : $val; echo '<input id="ssp-'.esc_attr($id.'-'.$key).'" class="regular-text" type="'.esc_attr($f['type']).'" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="'.esc_attr($display_val).'" autocomplete="off"/>'; if($f['type']==='password' && $val !== '') echo '<p class="description">'.esc_html__('Saved. Leave blank to keep the existing value.','plugin-ui-suite').'</p>'; }
         echo '</td></tr>';
       }
       echo '</table></div>';
     }
-    echo '<h2>'.esc_html__('General','straysafe-ui-suite').'</h2><table class="form-table" role="presentation">';
+    echo '<h2>'.esc_html__('General','plugin-ui-suite').'</h2><table class="form-table" role="presentation">';
     foreach(['enabled'=>'Enable widget','enable_campaigns'=>'Enable campaigns'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="checkbox" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="1" '.checked($s['general'][$k],1,false).'/></td></tr>';
     foreach(['title','subtitle','intro_text','currency','success_url','cancel_url','button_text','thank_you_message','learn_more_url'] as $k) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$k))).'</th><td><input class="regular-text" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="'.esc_attr($s['general'][$k]).'"/></td></tr>';
-    echo '<tr><th>'.esc_html__('Default type','straysafe-ui-suite').'</th><td><select name="'.esc_attr($name).'[general][default_type]"><option value="one_off" '.selected($s['general']['default_type'],'one_off',false).'>One-off</option><option value="recurring" '.selected($s['general']['default_type'],'recurring',false).'>Recurring</option></select></td></tr></table><h2>'.esc_html__('Amounts','straysafe-ui-suite').'</h2>';
+    echo '<tr><th>'.esc_html__('Default type','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[general][default_type]"><option value="one_off" '.selected($s['general']['default_type'],'one_off',false).'>One-off</option><option value="recurring" '.selected($s['general']['default_type'],'recurring',false).'>Recurring</option></select></td></tr></table><h2>'.esc_html__('Amounts','plugin-ui-suite').'</h2>';
     foreach(['one_off'=>'One-off Donations','recurring'=>'Recurring Donations'] as $section=>$label){
       echo '<h3>'.esc_html($label).'</h3><p><label><input type="checkbox" name="'.esc_attr($name).'['.esc_attr($section).'][enabled]" value="1" '.checked($s[$section]['enabled'],1,false).'/> Enabled</label> <label><input type="checkbox" name="'.esc_attr($name).'['.esc_attr($section).'][allow_custom]" value="1" '.checked($s[$section]['allow_custom'],1,false).'/> Allow custom amount</label></p>';
       foreach(['min','max','default'] as $k) echo '<label style="margin-right:12px">'.esc_html(ucfirst($k)).' <input class="small-text" name="'.esc_attr($name).'['.esc_attr($section).']['.esc_attr($k).']" value="'.esc_attr($s[$section][$k]).'"/></label>';
@@ -1081,31 +1081,31 @@ final class StraySafe_Payments_Module {
       foreach($rows as $i=>$r) echo '<tr><td><input name="'.esc_attr($name).'['.esc_attr($section).'][presets]['.(int)$i.'][amount]" value="'.esc_attr($r['amount']??'').'"/></td><td><input class="regular-text" name="'.esc_attr($name).'['.esc_attr($section).'][presets]['.(int)$i.'][description]" value="'.esc_attr($r['description']??'').'"/></td><td><input name="'.esc_attr($name).'['.esc_attr($section).'][presets]['.(int)$i.'][icon]" value="'.esc_attr($r['icon']??'').'"/></td><td><input type="color" name="'.esc_attr($name).'['.esc_attr($section).'][presets]['.(int)$i.'][colour]" value="'.esc_attr($r['colour']??'#401268').'"/></td><td><input name="'.esc_attr($name).'['.esc_attr($section).'][presets]['.(int)$i.'][campaign]" value="'.esc_attr($r['campaign']??'').'"/></td></tr>';
       echo '</tbody></table>';
     }
-    echo '<h2>'.esc_html__('Campaigns','straysafe-ui-suite').'</h2><p class="description">'.esc_html__('Create reusable campaign overrides. Use the slug in the shortcode, for example [donation_widget campaign="winter"]. Suggested amount lines use: amount | impact description.','straysafe-ui-suite').'</p><div id="ssp-campaigns">';
+    echo '<h2>'.esc_html__('Campaigns','plugin-ui-suite').'</h2><p class="description">'.esc_html__('Create reusable campaign overrides. Use the slug in the shortcode, for example [donation_widget campaign="winter"]. Suggested amount lines use: amount | impact description.','plugin-ui-suite').'</p><div id="ssp-campaigns">';
     $campaign_rows = array_values($s['campaigns'] ?? []); $campaign_rows[] = [];
     foreach($campaign_rows as $i=>$campaign){
-      echo '<details class="ssp-campaign" '.(!empty($campaign['slug'])?'open':'').'><summary>'.esc_html(!empty($campaign['slug']) ? $campaign['slug'] : __('New campaign','straysafe-ui-suite')).'</summary><table class="form-table" role="presentation">';
+      echo '<details class="ssp-campaign" '.(!empty($campaign['slug'])?'open':'').'><summary>'.esc_html(!empty($campaign['slug']) ? $campaign['slug'] : __('New campaign','plugin-ui-suite')).'</summary><table class="form-table" role="presentation">';
       foreach(['slug'=>'Slug','title'=>'Title','subtitle'=>'Subtitle','featured_image'=>'Featured image URL','success_url'=>'Success page URL','thank_you_message'=>'Thank you message'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input class="regular-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.']['.esc_attr($k).']" value="'.esc_attr($campaign[$k]??'').'"/></td></tr>';
-      echo '<tr><th>'.esc_html__('Description','straysafe-ui-suite').'</th><td><textarea class="large-text" rows="3" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][description]">'.esc_textarea($campaign['description']??'').'</textarea></td></tr>';
-      echo '<tr><th>'.esc_html__('Goal / progress','straysafe-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][goal]" value="'.esc_attr($campaign['goal']??'').'"/> <input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][progress]" value="'.esc_attr($campaign['progress']??'').'"/></td></tr>';
+      echo '<tr><th>'.esc_html__('Description','plugin-ui-suite').'</th><td><textarea class="large-text" rows="3" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][description]">'.esc_textarea($campaign['description']??'').'</textarea></td></tr>';
+      echo '<tr><th>'.esc_html__('Goal / progress','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][goal]" value="'.esc_attr($campaign['goal']??'').'"/> <input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][progress]" value="'.esc_attr($campaign['progress']??'').'"/></td></tr>';
       foreach(['primary'=>'Primary colour','background'=>'Background colour','text'=>'Text colour'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="color" name="'.esc_attr($name).'[campaigns]['.(int)$i.']['.esc_attr($k).']" value="'.esc_attr($campaign[$k]??'#ffffff').'"/></td></tr>';
-      echo '<tr><th>'.esc_html__('One-off suggested amounts','straysafe-ui-suite').'</th><td><textarea class="large-text" rows="4" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][one_off_presets]">'.esc_textarea(self::campaign_presets_text($campaign['one_off_presets']??[])).'</textarea></td></tr>';
-      echo '<tr><th>'.esc_html__('Recurring suggested amounts','straysafe-ui-suite').'</th><td><textarea class="large-text" rows="4" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][recurring_presets]">'.esc_textarea(self::campaign_presets_text($campaign['recurring_presets']??[])).'</textarea></td></tr>';
+      echo '<tr><th>'.esc_html__('One-off suggested amounts','plugin-ui-suite').'</th><td><textarea class="large-text" rows="4" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][one_off_presets]">'.esc_textarea(self::campaign_presets_text($campaign['one_off_presets']??[])).'</textarea></td></tr>';
+      echo '<tr><th>'.esc_html__('Recurring suggested amounts','plugin-ui-suite').'</th><td><textarea class="large-text" rows="4" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][recurring_presets]">'.esc_textarea(self::campaign_presets_text($campaign['recurring_presets']??[])).'</textarea></td></tr>';
       echo '</table></details>';
     }
-    echo '</div><p><button type="button" class="button" id="ssp-add-campaign">'.esc_html__('Add another campaign','straysafe-ui-suite').'</button></p><script>document.getElementById("ssp-add-campaign").addEventListener("click",function(){var c=document.querySelector("#ssp-campaigns .ssp-campaign:last-child"),n=c.cloneNode(true),i=document.querySelectorAll("#ssp-campaigns .ssp-campaign").length;n.querySelector("summary").textContent="New campaign";n.querySelectorAll("input,textarea").forEach(function(el){el.name=el.name.replace(/\\[campaigns\\]\\[\\d+\\]/,"[campaigns]["+i+"]");if(el.type!=="color")el.value="";});n.open=true;c.parentNode.appendChild(n);});</script>';
-    echo '<h2>'.esc_html__('Appearance','straysafe-ui-suite').'</h2><table class="form-table" role="presentation">';
+    echo '</div><p><button type="button" class="button" id="ssp-add-campaign">'.esc_html__('Add another campaign','plugin-ui-suite').'</button></p><script>document.getElementById("ssp-add-campaign").addEventListener("click",function(){var c=document.querySelector("#ssp-campaigns .ssp-campaign:last-child"),n=c.cloneNode(true),i=document.querySelectorAll("#ssp-campaigns .ssp-campaign").length;n.querySelector("summary").textContent="New campaign";n.querySelectorAll("input,textarea").forEach(function(el){el.name=el.name.replace(/\\[campaigns\\]\\[\\d+\\]/,"[campaigns]["+i+"]");if(el.type!=="color")el.value="";});n.open=true;c.parentNode.appendChild(n);});</script>';
+    echo '<h2>'.esc_html__('Appearance','plugin-ui-suite').'</h2><table class="form-table" role="presentation">';
     foreach(['primary'=>'Primary colour','background'=>'Background colour','text'=>'Text colour'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="color" name="'.esc_attr($name).'[appearance]['.esc_attr($k).']" value="'.esc_attr($s['appearance'][$k]).'"/></td></tr>';
     echo '<tr><th>Corner radius</th><td><input type="number" min="0" max="48" name="'.esc_attr($name).'[appearance][radius]" value="'.esc_attr($s['appearance']['radius']).'"/></td></tr><tr><th>Mode</th><td><select name="'.esc_attr($name).'[appearance][mode]"><option value="light" '.selected($s['appearance']['mode'],'light',false).'>Light</option><option value="dark" '.selected($s['appearance']['mode'],'dark',false).'>Dark</option></select></td></tr></table>';
     $gift_rows = get_option(self::GIFT_AID_KEY, []);
-    echo '<h2>'.esc_html__('Payment history and Gift Aid','straysafe-ui-suite').'</h2><p><a class="button" href="'.esc_url(wp_nonce_url(admin_url('admin-post.php?action=straysafe_payments_export_gift_aid'),'straysafe_payments_export_gift_aid')).'">'.esc_html__('Export Gift Aid CSV','straysafe-ui-suite').'</a></p>';
+    echo '<h2>'.esc_html__('Payment history and Gift Aid','plugin-ui-suite').'</h2><p><a class="button" href="'.esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_payments_export_gift_aid'),'plugin_payments_export_gift_aid')).'">'.esc_html__('Export Gift Aid CSV','plugin-ui-suite').'</a></p>';
     echo '<table class="widefat striped"><thead><tr><th>Checkout</th><th>Status</th><th>Date</th><th>Provider</th><th>Campaign</th><th>Amount</th><th>Gift Aid</th></tr></thead><tbody>';
-    if (empty($gift_rows)) echo '<tr><td colspan="7">'.esc_html__('No Gift Aid declarations recorded yet.','straysafe-ui-suite').'</td></tr>';
-    foreach(array_reverse($gift_rows) as $row) echo '<tr><td>'.esc_html($row['checkout_id']??'').'</td><td>'.esc_html($row['status']??'').'</td><td>'.esc_html($row['declaration_date']??'').'</td><td>'.esc_html($row['provider']??'').'</td><td>'.esc_html($row['campaign']??'').'</td><td>'.esc_html(($row['currency']??'').' '.($row['amount']??'')).'</td><td>'.esc_html(($row['status']??'')==='declared' ? __('Yes','straysafe-ui-suite') : __('No','straysafe-ui-suite')).'</td></tr>';
+    if (empty($gift_rows)) echo '<tr><td colspan="7">'.esc_html__('No Gift Aid declarations recorded yet.','plugin-ui-suite').'</td></tr>';
+    foreach(array_reverse($gift_rows) as $row) echo '<tr><td>'.esc_html($row['checkout_id']??'').'</td><td>'.esc_html($row['status']??'').'</td><td>'.esc_html($row['declaration_date']??'').'</td><td>'.esc_html($row['provider']??'').'</td><td>'.esc_html($row['campaign']??'').'</td><td>'.esc_html(($row['currency']??'').' '.($row['amount']??'')).'</td><td>'.esc_html(($row['status']??'')==='declared' ? __('Yes','plugin-ui-suite') : __('No','plugin-ui-suite')).'</td></tr>';
     echo '</tbody></table>';
     submit_button('Save Payments Settings');
-    echo '</form><hr/><h2>'.esc_html__('Preview','straysafe-ui-suite').'</h2><p class="description">'.esc_html__('This preview renders the saved donation widget exactly as WordPress will render it from the shortcode.','straysafe-ui-suite').'</p><div class="ssp-payments-preview">'.self::render_shortcode().'</div></div>';
+    echo '</form><hr/><h2>'.esc_html__('Preview','plugin-ui-suite').'</h2><p class="description">'.esc_html__('This preview renders the saved donation widget exactly as WordPress will render it from the shortcode.','plugin-ui-suite').'</p><div class="ssp-payments-preview">'.self::render_shortcode().'</div></div>';
     echo '<script>document.querySelectorAll("input[name=\"'.esc_js($name).'[active_provider]\"]").forEach(function(r){function u(){var c=document.querySelector("input[name=\"'.esc_js($name).'[active_provider]\"]:checked");document.querySelectorAll(".ssp-provider-fields").forEach(function(e){e.style.display=c&&e.dataset.provider===c.value?"block":"none"})}r.addEventListener("change",u);u();});</script>';
   }
 }
-StraySafe_Payments_Module::init();
+Plugin_Payments_Module::init();
