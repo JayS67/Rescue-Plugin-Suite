@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: ASM Plugin Suite Statistics
+ * Plugin Name: Rescue Plugin Suite Statistics
  * Description: Adds the statistics UI via shortcode [stats] with settings.
  * Version: 12
  * Author: Jordan Sutton
@@ -8,13 +8,22 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('STRAYSAFE_STATS_OPT', 'straysafe_stats_ui_options');
-define('STRAYSAFE_STATS_RESET_ACTION', 'straysafe_stats_ui_reset_field');
+define('PLUGIN_STATS_OPT', 'plugin_stats_ui_options');
+define('PLUGIN_STATS_RESET_ACTION', 'plugin_stats_ui_reset_field');
+
+function plugin_stats_ui_saved_options() {
+  $legacy_brand = 'stray' . 'safe';
+  foreach ([PLUGIN_STATS_OPT, $legacy_brand . '_stats_ui_options'] as $key) {
+    $value = get_option($key, []);
+    if (is_array($value) && !empty($value)) return $value;
+  }
+  return [];
+}
 
 /**
  * Defaults
  */
-function straysafe_stats_ui_default_options() {
+function plugin_stats_ui_default_options() {
   return [
     // Core look
     'brand_color'      => '#ff647e',
@@ -104,19 +113,19 @@ function straysafe_stats_ui_default_options() {
   ];
 }
 
-function straysafe_stats_ui_get_options() {
-  $defaults = straysafe_stats_ui_default_options();
-  $saved = get_option(STRAYSAFE_STATS_OPT, []);
+function plugin_stats_ui_get_options() {
+  $defaults = plugin_stats_ui_default_options();
+  $saved = plugin_stats_ui_saved_options();
   if (!is_array($saved)) $saved = [];
   return array_merge($defaults, $saved);
 }
 
-function straysafe_stats_ui_allowed_card_keys() {
+function plugin_stats_ui_allowed_card_keys() {
   return ['brought','adopted','vaccinated','neutered','chipped','in_care'];
 }
 
-function straysafe_stats_ui_parse_order($raw) {
-  $allowed = straysafe_stats_ui_allowed_card_keys();
+function plugin_stats_ui_parse_order($raw) {
+  $allowed = plugin_stats_ui_allowed_card_keys();
   $lines = preg_split("/\r\n|\n|\r/", (string)$raw);
   $out = [];
 
@@ -137,7 +146,7 @@ function straysafe_stats_ui_parse_order($raw) {
  * Icon library (SVG paths)
  * Stored as slug in settings.
  */
-function straysafe_stats_ui_icon_catalog() {
+function plugin_stats_ui_icon_catalog() {
   // slug => [Label, SVG paths (24x24 viewBox)]
   return [
     // Core / general
@@ -277,50 +286,50 @@ function straysafe_stats_ui_icon_catalog() {
   ];
 }
 
-function straysafe_stats_ui_sanitize_icon_slug($slug) {
+function plugin_stats_ui_sanitize_icon_slug($slug) {
   $slug = sanitize_text_field((string)$slug);
   $slug = strtolower(trim($slug));
-  $catalog = straysafe_stats_ui_icon_catalog();
+  $catalog = plugin_stats_ui_icon_catalog();
   return array_key_exists($slug, $catalog) ? $slug : 'home';
 }
 
 /**
  * Reset handler (GET-based, no nested forms)
  */
-add_action('admin_post_' . STRAYSAFE_STATS_RESET_ACTION, function () {
+add_action('admin_post_' . PLUGIN_STATS_RESET_ACTION, function () {
   if (!current_user_can('manage_options')) {
     wp_die('Not allowed.');
   }
 
-  check_admin_referer('straysafe_stats_ui_reset_field');
+  check_admin_referer('plugin_stats_ui_reset_field');
 
   $field = isset($_GET['field']) ? sanitize_text_field($_GET['field']) : '';
-  $defaults = straysafe_stats_ui_default_options();
+  $defaults = plugin_stats_ui_default_options();
 
   if (!array_key_exists($field, $defaults)) {
-    wp_safe_redirect(admin_url('options-general.php?page=straysafe-stats-ui'));
+    wp_safe_redirect(admin_url('options-general.php?page=plugin-stats-ui'));
     exit;
   }
 
-  $opts = get_option(STRAYSAFE_STATS_OPT, []);
+  $opts = plugin_stats_ui_saved_options();
   if (!is_array($opts)) $opts = [];
 
   $opts[$field] = $defaults[$field];
-  update_option(STRAYSAFE_STATS_OPT, $opts);
+  update_option(PLUGIN_STATS_OPT, $opts);
 
-  wp_safe_redirect(admin_url('options-general.php?page=straysafe-stats-ui'));
+  wp_safe_redirect(admin_url('options-general.php?page=plugin-stats-ui'));
   exit;
 });
 
 /**
  * Reset link (button-looking)
  */
-function straysafe_stats_ui_reset_button($field_key, $label = 'Reset') {
+function plugin_stats_ui_reset_button($field_key, $label = 'Reset') {
   $url = add_query_arg(
     [
-      'action' => STRAYSAFE_STATS_RESET_ACTION,
+      'action' => PLUGIN_STATS_RESET_ACTION,
       'field'  => $field_key,
-      '_wpnonce' => wp_create_nonce('straysafe_stats_ui_reset_field'),
+      '_wpnonce' => wp_create_nonce('plugin_stats_ui_reset_field'),
     ],
     admin_url('admin-post.php')
   );
@@ -337,56 +346,56 @@ function straysafe_stats_ui_reset_button($field_key, $label = 'Reset') {
  */
 add_action('admin_menu', function () {
   add_options_page(
-    'ASM Plugin Suite Statistics',
-    'ASM Plugin Suite Statistics',
+    'Rescue Plugin Suite Statistics',
+    'Rescue Plugin Suite Statistics',
     'manage_options',
-    'straysafe-stats-ui',
-    'straysafe_stats_ui_render_settings_page'
+    'plugin-stats-ui',
+    'plugin_stats_ui_render_settings_page'
   );
 });
 
 add_action('admin_init', function () {
-  register_setting('straysafe_stats_ui_group', STRAYSAFE_STATS_OPT, [
-    'sanitize_callback' => 'straysafe_stats_ui_sanitize_options',
-    'default' => straysafe_stats_ui_default_options(),
+  register_setting('plugin_stats_ui_group', PLUGIN_STATS_OPT, [
+    'sanitize_callback' => 'plugin_stats_ui_sanitize_options',
+    'default' => plugin_stats_ui_default_options(),
   ]);
 
-  add_settings_section('straysafe_stats_ui_section_design', 'Design', '__return_false', 'straysafe-stats-ui');
-  add_settings_section('straysafe_stats_ui_section_text', 'Text', '__return_false', 'straysafe-stats-ui');
-  add_settings_section('straysafe_stats_ui_section_responsive', 'Responsive (Device-specific)', '__return_false', 'straysafe-stats-ui');
-  add_settings_section('straysafe_stats_ui_section_cards', 'Cards', '__return_false', 'straysafe-stats-ui');
+  add_settings_section('plugin_stats_ui_section_design', 'Design', '__return_false', 'plugin-stats-ui');
+  add_settings_section('plugin_stats_ui_section_text', 'Text', '__return_false', 'plugin-stats-ui');
+  add_settings_section('plugin_stats_ui_section_responsive', 'Responsive (Device-specific)', '__return_false', 'plugin-stats-ui');
+  add_settings_section('plugin_stats_ui_section_cards', 'Cards', '__return_false', 'plugin-stats-ui');
 
   // Design
-  add_settings_field('brand_color', 'Brand colour', 'straysafe_stats_ui_field_brand_color', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
-  add_settings_field('background_color', 'Background colour', 'straysafe_stats_ui_field_background_color', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
+  add_settings_field('brand_color', 'Brand colour', 'plugin_stats_ui_field_brand_color', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
+  add_settings_field('background_color', 'Background colour', 'plugin_stats_ui_field_background_color', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
 
   // NEW: Paw controls
-  add_settings_field('paw_opacity', 'Paw print opacity (0–0.25)', 'straysafe_stats_ui_field_paw_opacity', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
-  add_settings_field('paw_count', 'Paw print count (0–80)', 'straysafe_stats_ui_field_paw_count', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
+  add_settings_field('paw_opacity', 'Paw print opacity (0–0.25)', 'plugin_stats_ui_field_paw_opacity', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
+  add_settings_field('paw_count', 'Paw print count (0–80)', 'plugin_stats_ui_field_paw_count', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
 
-  add_settings_field('layout_mode', 'Layout mode', 'straysafe_stats_ui_field_layout_mode', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
-  add_settings_field('font_family', 'Font family (optional)', 'straysafe_stats_ui_field_font_family', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
-  add_settings_field('card_radius', 'Card corner radius (px)', 'straysafe_stats_ui_field_card_radius', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
-  add_settings_field('card_padding', 'Card padding (px)', 'straysafe_stats_ui_field_card_padding', 'straysafe-stats-ui', 'straysafe_stats_ui_section_design');
+  add_settings_field('layout_mode', 'Layout mode', 'plugin_stats_ui_field_layout_mode', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
+  add_settings_field('font_family', 'Font family (optional)', 'plugin_stats_ui_field_font_family', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
+  add_settings_field('card_radius', 'Card corner radius (px)', 'plugin_stats_ui_field_card_radius', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
+  add_settings_field('card_padding', 'Card padding (px)', 'plugin_stats_ui_field_card_padding', 'plugin-stats-ui', 'plugin_stats_ui_section_design');
 
   // Text
-  add_settings_field('title_text', 'Title text', 'straysafe_stats_ui_field_title_text', 'straysafe-stats-ui', 'straysafe_stats_ui_section_text');
-  add_settings_field('year_label_prefix', 'Year label prefix', 'straysafe_stats_ui_field_year_label_prefix', 'straysafe-stats-ui', 'straysafe_stats_ui_section_text');
-  add_settings_field('min_year', 'Minimum year', 'straysafe_stats_ui_field_min_year', 'straysafe-stats-ui', 'straysafe_stats_ui_section_text');
-  add_settings_field('footer_text', 'Footer text', 'straysafe_stats_ui_field_footer_text', 'straysafe-stats-ui', 'straysafe_stats_ui_section_text');
+  add_settings_field('title_text', 'Title text', 'plugin_stats_ui_field_title_text', 'plugin-stats-ui', 'plugin_stats_ui_section_text');
+  add_settings_field('year_label_prefix', 'Year label prefix', 'plugin_stats_ui_field_year_label_prefix', 'plugin-stats-ui', 'plugin_stats_ui_section_text');
+  add_settings_field('min_year', 'Minimum year', 'plugin_stats_ui_field_min_year', 'plugin-stats-ui', 'plugin_stats_ui_section_text');
+  add_settings_field('footer_text', 'Footer text', 'plugin_stats_ui_field_footer_text', 'plugin-stats-ui', 'plugin_stats_ui_section_text');
 
   // Responsive
-  add_settings_field('responsive_grid', 'Columns & rows (mobile/tablet/PC)', 'straysafe_stats_ui_field_responsive_grid', 'straysafe-stats-ui', 'straysafe_stats_ui_section_responsive');
-  add_settings_field('responsive_typography', 'Font sizes (heading/subheading/paragraph)', 'straysafe_stats_ui_field_responsive_typography', 'straysafe-stats-ui', 'straysafe_stats_ui_section_responsive');
-  add_settings_field('responsive_card_size', 'Card width & height (px)', 'straysafe_stats_ui_field_responsive_card_size', 'straysafe-stats-ui', 'straysafe_stats_ui_section_responsive');
+  add_settings_field('responsive_grid', 'Columns & rows (mobile/tablet/PC)', 'plugin_stats_ui_field_responsive_grid', 'plugin-stats-ui', 'plugin_stats_ui_section_responsive');
+  add_settings_field('responsive_typography', 'Font sizes (heading/subheading/paragraph)', 'plugin_stats_ui_field_responsive_typography', 'plugin-stats-ui', 'plugin_stats_ui_section_responsive');
+  add_settings_field('responsive_card_size', 'Card width & height (px)', 'plugin_stats_ui_field_responsive_card_size', 'plugin-stats-ui', 'plugin_stats_ui_section_responsive');
 
   // Cards
-  add_settings_field('card_order', 'Card order', 'straysafe_stats_ui_field_card_order', 'straysafe-stats-ui', 'straysafe_stats_ui_section_cards');
-  add_settings_field('labels_caps_icons', 'Card headings, captions & icons', 'straysafe_stats_ui_field_labels_caps_icons', 'straysafe-stats-ui', 'straysafe_stats_ui_section_cards');
+  add_settings_field('card_order', 'Card order', 'plugin_stats_ui_field_card_order', 'plugin-stats-ui', 'plugin_stats_ui_section_cards');
+  add_settings_field('labels_caps_icons', 'Card headings, captions & icons', 'plugin_stats_ui_field_labels_caps_icons', 'plugin-stats-ui', 'plugin_stats_ui_section_cards');
 });
 
-function straysafe_stats_ui_sanitize_options($input) {
-  $d = straysafe_stats_ui_default_options();
+function plugin_stats_ui_sanitize_options($input) {
+  $d = plugin_stats_ui_default_options();
   $out = [];
 
   $out['brand_color']      = isset($input['brand_color']) ? sanitize_hex_color($input['brand_color']) : $d['brand_color'];
@@ -457,7 +466,7 @@ function straysafe_stats_ui_sanitize_options($input) {
     'label_in_care','caption_in_care','icon_in_care',
   ] as $k) {
     if (substr($k, 0, 5) === 'icon_') {
-      $out[$k] = isset($input[$k]) ? straysafe_stats_ui_sanitize_icon_slug($input[$k]) : $d[$k];
+      $out[$k] = isset($input[$k]) ? plugin_stats_ui_sanitize_icon_slug($input[$k]) : $d[$k];
     } else {
       $out[$k] = isset($input[$k]) ? sanitize_text_field($input[$k]) : $d[$k];
     }
@@ -466,13 +475,13 @@ function straysafe_stats_ui_sanitize_options($input) {
   return $out;
 }
 
-function straysafe_stats_ui_render_settings_page() { ?>
+function plugin_stats_ui_render_settings_page() { ?>
   <div class="wrap">
-    <h1>ASM Plugin Suite Statistics</h1>
+    <h1>Rescue Plugin Suite Statistics</h1>
     <form method="post" action="options.php">
       <?php
-        settings_fields('straysafe_stats_ui_group');
-        do_settings_sections('straysafe-stats-ui');
+        settings_fields('plugin_stats_ui_group');
+        do_settings_sections('plugin-stats-ui');
         submit_button();
       ?>
     </form>
@@ -480,92 +489,92 @@ function straysafe_stats_ui_render_settings_page() { ?>
 <?php }
 
 /** --- Field renderers (each includes a Reset link/button) --- */
-function straysafe_stats_ui_field_brand_color() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="color" name="%s[brand_color]" value="%s" />', esc_attr(STRAYSAFE_STATS_OPT), esc_attr($o['brand_color']));
-  straysafe_stats_ui_reset_button('brand_color');
+function plugin_stats_ui_field_brand_color() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="color" name="%s[brand_color]" value="%s" />', esc_attr(PLUGIN_STATS_OPT), esc_attr($o['brand_color']));
+  plugin_stats_ui_reset_button('brand_color');
 }
-function straysafe_stats_ui_field_background_color() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="color" name="%s[background_color]" value="%s" />', esc_attr(STRAYSAFE_STATS_OPT), esc_attr($o['background_color']));
-  straysafe_stats_ui_reset_button('background_color');
+function plugin_stats_ui_field_background_color() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="color" name="%s[background_color]" value="%s" />', esc_attr(PLUGIN_STATS_OPT), esc_attr($o['background_color']));
+  plugin_stats_ui_reset_button('background_color');
 }
 
 // NEW: Paw fields
-function straysafe_stats_ui_field_paw_opacity() {
-  $o = straysafe_stats_ui_get_options();
+function plugin_stats_ui_field_paw_opacity() {
+  $o = plugin_stats_ui_get_options();
   printf(
     '<input type="number" step="0.01" min="0" max="0.25" name="%s[paw_opacity]" value="%s" style="width:110px;" />',
-    esc_attr(STRAYSAFE_STATS_OPT),
+    esc_attr(PLUGIN_STATS_OPT),
     esc_attr((string)$o['paw_opacity'])
   );
-  straysafe_stats_ui_reset_button('paw_opacity');
+  plugin_stats_ui_reset_button('paw_opacity');
   echo '<p class="description">Peak opacity at the middle of the animation.</p>';
 }
-function straysafe_stats_ui_field_paw_count() {
-  $o = straysafe_stats_ui_get_options();
+function plugin_stats_ui_field_paw_count() {
+  $o = plugin_stats_ui_get_options();
   printf(
     '<input type="number" min="0" max="80" name="%s[paw_count]" value="%d" style="width:110px;" />',
-    esc_attr(STRAYSAFE_STATS_OPT),
+    esc_attr(PLUGIN_STATS_OPT),
     intval($o['paw_count'])
   );
-  straysafe_stats_ui_reset_button('paw_count');
+  plugin_stats_ui_reset_button('paw_count');
   echo '<p class="description">How many pawprints to render (max 80).</p>';
 }
 
-function straysafe_stats_ui_field_layout_mode() {
-  $o = straysafe_stats_ui_get_options();
-  $name = esc_attr(STRAYSAFE_STATS_OPT) . '[layout_mode]';
+function plugin_stats_ui_field_layout_mode() {
+  $o = plugin_stats_ui_get_options();
+  $name = esc_attr(PLUGIN_STATS_OPT) . '[layout_mode]';
   ?>
   <select name="<?php echo esc_attr($name); ?>">
     <option value="grid" <?php selected($o['layout_mode'], 'grid'); ?>>Grid (current)</option>
     <option value="one_row" <?php selected($o['layout_mode'], 'one_row'); ?>>One row on tablet/PC (no scroll)</option>
   </select>
-  <?php straysafe_stats_ui_reset_button('layout_mode'); ?>
+  <?php plugin_stats_ui_reset_button('layout_mode'); ?>
   <p class="description">Layout mode is kept for backwards compatibility. Use the Responsive columns/rows settings below for precise control.</p>
   <?php
 }
-function straysafe_stats_ui_field_font_family() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="text" class="regular-text" name="%s[font_family]" value="%s" />', esc_attr(STRAYSAFE_STATS_OPT), esc_attr($o['font_family']));
-  straysafe_stats_ui_reset_button('font_family');
+function plugin_stats_ui_field_font_family() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="text" class="regular-text" name="%s[font_family]" value="%s" />', esc_attr(PLUGIN_STATS_OPT), esc_attr($o['font_family']));
+  plugin_stats_ui_reset_button('font_family');
   echo '<p class="description">Leave blank to inherit your theme font. Example: Inter, system-ui, Arial</p>';
 }
-function straysafe_stats_ui_field_card_radius() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="number" min="0" max="64" name="%s[card_radius]" value="%d" />', esc_attr(STRAYSAFE_STATS_OPT), intval($o['card_radius']));
-  straysafe_stats_ui_reset_button('card_radius');
+function plugin_stats_ui_field_card_radius() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="number" min="0" max="64" name="%s[card_radius]" value="%d" />', esc_attr(PLUGIN_STATS_OPT), intval($o['card_radius']));
+  plugin_stats_ui_reset_button('card_radius');
 }
-function straysafe_stats_ui_field_card_padding() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="number" min="0" max="64" name="%s[card_padding]" value="%d" />', esc_attr(STRAYSAFE_STATS_OPT), intval($o['card_padding']));
-  straysafe_stats_ui_reset_button('card_padding');
+function plugin_stats_ui_field_card_padding() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="number" min="0" max="64" name="%s[card_padding]" value="%d" />', esc_attr(PLUGIN_STATS_OPT), intval($o['card_padding']));
+  plugin_stats_ui_reset_button('card_padding');
 }
-function straysafe_stats_ui_field_title_text() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="text" class="regular-text" name="%s[title_text]" value="%s" />', esc_attr(STRAYSAFE_STATS_OPT), esc_attr($o['title_text']));
-  straysafe_stats_ui_reset_button('title_text');
+function plugin_stats_ui_field_title_text() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="text" class="regular-text" name="%s[title_text]" value="%s" />', esc_attr(PLUGIN_STATS_OPT), esc_attr($o['title_text']));
+  plugin_stats_ui_reset_button('title_text');
 }
-function straysafe_stats_ui_field_year_label_prefix() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="text" class="regular-text" name="%s[year_label_prefix]" value="%s" />', esc_attr(STRAYSAFE_STATS_OPT), esc_attr($o['year_label_prefix']));
-  straysafe_stats_ui_reset_button('year_label_prefix');
+function plugin_stats_ui_field_year_label_prefix() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="text" class="regular-text" name="%s[year_label_prefix]" value="%s" />', esc_attr(PLUGIN_STATS_OPT), esc_attr($o['year_label_prefix']));
+  plugin_stats_ui_reset_button('year_label_prefix');
 }
-function straysafe_stats_ui_field_min_year() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<input type="number" min="1900" max="3000" name="%s[min_year]" value="%d" />', esc_attr(STRAYSAFE_STATS_OPT), intval($o['min_year']));
-  straysafe_stats_ui_reset_button('min_year');
+function plugin_stats_ui_field_min_year() {
+  $o = plugin_stats_ui_get_options();
+  printf('<input type="number" min="1900" max="3000" name="%s[min_year]" value="%d" />', esc_attr(PLUGIN_STATS_OPT), intval($o['min_year']));
+  plugin_stats_ui_reset_button('min_year');
 }
-function straysafe_stats_ui_field_footer_text() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<textarea name="%s[footer_text]" rows="3" class="large-text">%s</textarea>', esc_attr(STRAYSAFE_STATS_OPT), esc_textarea($o['footer_text']));
-  straysafe_stats_ui_reset_button('footer_text');
+function plugin_stats_ui_field_footer_text() {
+  $o = plugin_stats_ui_get_options();
+  printf('<textarea name="%s[footer_text]" rows="3" class="large-text">%s</textarea>', esc_attr(PLUGIN_STATS_OPT), esc_textarea($o['footer_text']));
+  plugin_stats_ui_reset_button('footer_text');
   echo '<p class="description">Shown under the cards.</p>';
 }
 
-function straysafe_stats_ui_field_responsive_grid() {
-  $o = straysafe_stats_ui_get_options();
-  $k = esc_attr(STRAYSAFE_STATS_OPT);
+function plugin_stats_ui_field_responsive_grid() {
+  $o = plugin_stats_ui_get_options();
+  $k = esc_attr(PLUGIN_STATS_OPT);
 
   echo '<table class="widefat striped" style="max-width:980px;"><thead><tr><th>Device</th><th>Columns</th><th>Rows</th></tr></thead><tbody>';
 
@@ -581,12 +590,12 @@ function straysafe_stats_ui_field_responsive_grid() {
 
     echo '<td>';
     printf('<input type="number" min="1" max="6" name="%s[%s]" value="%d" style="width:90px;" /> ', $k, esc_attr($ck), intval($o[$ck]));
-    straysafe_stats_ui_reset_button($ck);
+    plugin_stats_ui_reset_button($ck);
     echo '</td>';
 
     echo '<td>';
     printf('<input type="number" min="1" max="6" name="%s[%s]" value="%d" style="width:90px;" /> ', $k, esc_attr($rk), intval($o[$rk]));
-    straysafe_stats_ui_reset_button($rk);
+    plugin_stats_ui_reset_button($rk);
     echo '</td>';
 
     echo '</tr>';
@@ -596,9 +605,9 @@ function straysafe_stats_ui_field_responsive_grid() {
   echo '<p class="description">Columns directly control layout. If there is a lone card on the last row in 2-column layout, it will span both columns (aligned to the outer edges above).</p>';
 }
 
-function straysafe_stats_ui_field_responsive_typography() {
-  $o = straysafe_stats_ui_get_options();
-  $k = esc_attr(STRAYSAFE_STATS_OPT);
+function plugin_stats_ui_field_responsive_typography() {
+  $o = plugin_stats_ui_get_options();
+  $k = esc_attr(PLUGIN_STATS_OPT);
 
   $items = [
     ['Heading',   'fs_heading_mobile',   'fs_heading_tablet',   'fs_heading_desktop'],
@@ -614,17 +623,17 @@ function straysafe_stats_ui_field_responsive_typography() {
 
     echo '<td>';
     printf('<input type="number" min="10" max="80" name="%s[%s]" value="%d" style="width:90px;" /> ', $k, esc_attr($m), intval($o[$m]));
-    straysafe_stats_ui_reset_button($m);
+    plugin_stats_ui_reset_button($m);
     echo '</td>';
 
     echo '<td>';
     printf('<input type="number" min="10" max="80" name="%s[%s]" value="%d" style="width:90px;" /> ', $k, esc_attr($t), intval($o[$t]));
-    straysafe_stats_ui_reset_button($t);
+    plugin_stats_ui_reset_button($t);
     echo '</td>';
 
     echo '<td>';
     printf('<input type="number" min="10" max="80" name="%s[%s]" value="%d" style="width:90px;" /> ', $k, esc_attr($d), intval($o[$d]));
-    straysafe_stats_ui_reset_button($d);
+    plugin_stats_ui_reset_button($d);
     echo '</td>';
 
     echo '</tr>';
@@ -633,9 +642,9 @@ function straysafe_stats_ui_field_responsive_typography() {
   echo '</tbody></table>';
 }
 
-function straysafe_stats_ui_field_responsive_card_size() {
-  $o = straysafe_stats_ui_get_options();
-  $k = esc_attr(STRAYSAFE_STATS_OPT);
+function plugin_stats_ui_field_responsive_card_size() {
+  $o = plugin_stats_ui_get_options();
+  $k = esc_attr(PLUGIN_STATS_OPT);
 
   echo '<table class="widefat striped" style="max-width:980px;"><thead><tr><th>Device</th><th>Card max width (px)</th><th>Card min height (px)</th></tr></thead><tbody>';
 
@@ -651,13 +660,13 @@ function straysafe_stats_ui_field_responsive_card_size() {
 
     echo '<td>';
     printf('<input type="number" min="0" max="1200" name="%s[%s]" value="%d" style="width:110px;" /> ', $k, esc_attr($wk), intval($o[$wk]));
-    straysafe_stats_ui_reset_button($wk);
+    plugin_stats_ui_reset_button($wk);
     echo '<p class="description" style="margin:4px 0 0;">0 = auto</p>';
     echo '</td>';
 
     echo '<td>';
     printf('<input type="number" min="0" max="1200" name="%s[%s]" value="%d" style="width:110px;" /> ', $k, esc_attr($hk), intval($o[$hk]));
-    straysafe_stats_ui_reset_button($hk);
+    plugin_stats_ui_reset_button($hk);
     echo '<p class="description" style="margin:4px 0 0;">0 = auto</p>';
     echo '</td>';
 
@@ -667,17 +676,17 @@ function straysafe_stats_ui_field_responsive_card_size() {
   echo '</tbody></table>';
 }
 
-function straysafe_stats_ui_field_card_order() {
-  $o = straysafe_stats_ui_get_options();
-  printf('<textarea name="%s[card_order]" rows="7" cols="40" class="large-text code">%s</textarea>', esc_attr(STRAYSAFE_STATS_OPT), esc_textarea($o['card_order']));
-  straysafe_stats_ui_reset_button('card_order');
+function plugin_stats_ui_field_card_order() {
+  $o = plugin_stats_ui_get_options();
+  printf('<textarea name="%s[card_order]" rows="7" cols="40" class="large-text code">%s</textarea>', esc_attr(PLUGIN_STATS_OPT), esc_textarea($o['card_order']));
+  plugin_stats_ui_reset_button('card_order');
   echo '<p class="description">One key per line. Allowed keys: brought, adopted, vaccinated, neutered, chipped, in_care</p>';
 }
 
-function straysafe_stats_ui_field_labels_caps_icons() {
-  $o = straysafe_stats_ui_get_options();
-  $k = esc_attr(STRAYSAFE_STATS_OPT);
-  $catalog = straysafe_stats_ui_icon_catalog();
+function plugin_stats_ui_field_labels_caps_icons() {
+  $o = plugin_stats_ui_get_options();
+  $k = esc_attr(PLUGIN_STATS_OPT);
+  $catalog = plugin_stats_ui_icon_catalog();
 
   $rows = [
     ['brought',   'label_brought',   'caption_brought',   'icon_brought'],
@@ -702,12 +711,12 @@ function straysafe_stats_ui_field_labels_caps_icons() {
 
     echo '<td>';
     printf('<input type="text" class="regular-text" name="%s[%s]" value="%s" />', $k, esc_attr($labelKey), esc_attr($o[$labelKey] ?? ''));
-    straysafe_stats_ui_reset_button($labelKey);
+    plugin_stats_ui_reset_button($labelKey);
     echo '</td>';
 
     echo '<td>';
     printf('<input type="text" class="regular-text" name="%s[%s]" value="%s" />', $k, esc_attr($capKey), esc_attr($o[$capKey] ?? ''));
-    straysafe_stats_ui_reset_button($capKey);
+    plugin_stats_ui_reset_button($capKey);
     echo '</td>';
 
     echo '<td>';
@@ -722,7 +731,7 @@ function straysafe_stats_ui_field_labels_caps_icons() {
       );
     }
     echo '</select>';
-    straysafe_stats_ui_reset_button($iconKey);
+    plugin_stats_ui_reset_button($iconKey);
     echo '</td>';
 
     echo '</tr>';
@@ -736,33 +745,33 @@ function straysafe_stats_ui_field_labels_caps_icons() {
  * Shortcode UI
  */
 add_shortcode('stats', function () {
-  $opts = straysafe_stats_ui_get_options();
+  $opts = plugin_stats_ui_get_options();
 
   // Tailwind CDN (convenient).
-  wp_enqueue_script('straysafe-tailwind', 'https://cdn.tailwindcss.com', [], null, false);
+  wp_enqueue_script('plugin-tailwind', 'https://cdn.tailwindcss.com', [], null, false);
 
   // Prevent Tailwind preflight from affecting the rest of the site
-  wp_add_inline_script('straysafe-tailwind', 'tailwind.config = { corePlugins: { preflight: false } };', 'before');
+  wp_add_inline_script('plugin-tailwind', 'tailwind.config = { corePlugins: { preflight: false } };', 'before');
 
   $font_css = empty($opts['font_family'])
     ? "font-family: inherit;"
     : "font-family: " . esc_html($opts['font_family']) . ", sans-serif;";
 
-  $instance = wp_unique_id('straysafe_stats_');
-  $order = straysafe_stats_ui_parse_order($opts['card_order']);
-  $catalog = straysafe_stats_ui_icon_catalog();
+  $instance = wp_unique_id('plugin_stats_');
+  $order = plugin_stats_ui_parse_order($opts['card_order']);
+  $catalog = plugin_stats_ui_icon_catalog();
 
   // Paw controls
   $paw_count = max(0, min(80, (int)($opts['paw_count'] ?? 0)));
 
   // We'll control columns via CSS vars (settings) + JS for centering/spans.
-  $cardsWrapClass = 'ss-cards-grid';
+  $cardsWrapClass = 'plugin-cards-grid';
 
   $label = function($k) use ($opts) { return $opts["label_{$k}"] ?? ''; };
   $caption = function($k) use ($opts) { return $opts["caption_{$k}"] ?? ''; };
   $iconSlug = function($k) use ($opts) {
     $key = "icon_{$k}";
-    return isset($opts[$key]) ? straysafe_stats_ui_sanitize_icon_slug($opts[$key]) : 'home';
+    return isset($opts[$key]) ? plugin_stats_ui_sanitize_icon_slug($opts[$key]) : 'home';
   };
 
   // CSS variables (use "none"/"auto" when 0 so we don't clamp to 0px)
@@ -775,39 +784,39 @@ add_shortcode('stats', function () {
   $cardHd = ((int)$opts['card_h_desktop'] > 0) ? ((int)$opts['card_h_desktop'] . 'px') : 'auto';
 
   $vars = [
-    "--ss-cols-m: " . (int)$opts['cols_mobile'],
-    "--ss-cols-t: " . (int)$opts['cols_tablet'],
-    "--ss-cols-d: " . (int)$opts['cols_desktop'],
+    "--plugin-cols-m: " . (int)$opts['cols_mobile'],
+    "--plugin-cols-t: " . (int)$opts['cols_tablet'],
+    "--plugin-cols-d: " . (int)$opts['cols_desktop'],
 
-    "--ss-fs-h-m: " . (int)$opts['fs_heading_mobile'] . "px",
-    "--ss-fs-h-t: " . (int)$opts['fs_heading_tablet'] . "px",
-    "--ss-fs-h-d: " . (int)$opts['fs_heading_desktop'] . "px",
+    "--plugin-fs-h-m: " . (int)$opts['fs_heading_mobile'] . "px",
+    "--plugin-fs-h-t: " . (int)$opts['fs_heading_tablet'] . "px",
+    "--plugin-fs-h-d: " . (int)$opts['fs_heading_desktop'] . "px",
 
-    "--ss-fs-s-m: " . (int)$opts['fs_subheading_mobile'] . "px",
-    "--ss-fs-s-t: " . (int)$opts['fs_subheading_tablet'] . "px",
-    "--ss-fs-s-d: " . (int)$opts['fs_subheading_desktop'] . "px",
+    "--plugin-fs-s-m: " . (int)$opts['fs_subheading_mobile'] . "px",
+    "--plugin-fs-s-t: " . (int)$opts['fs_subheading_tablet'] . "px",
+    "--plugin-fs-s-d: " . (int)$opts['fs_subheading_desktop'] . "px",
 
-    "--ss-fs-p-m: " . (int)$opts['fs_paragraph_mobile'] . "px",
-    "--ss-fs-p-t: " . (int)$opts['fs_paragraph_tablet'] . "px",
-    "--ss-fs-p-d: " . (int)$opts['fs_paragraph_desktop'] . "px",
+    "--plugin-fs-p-m: " . (int)$opts['fs_paragraph_mobile'] . "px",
+    "--plugin-fs-p-t: " . (int)$opts['fs_paragraph_tablet'] . "px",
+    "--plugin-fs-p-d: " . (int)$opts['fs_paragraph_desktop'] . "px",
 
-    "--ss-card-w-m: " . $cardWm,
-    "--ss-card-w-t: " . $cardWt,
-    "--ss-card-w-d: " . $cardWd,
+    "--plugin-card-w-m: " . $cardWm,
+    "--plugin-card-w-t: " . $cardWt,
+    "--plugin-card-w-d: " . $cardWd,
 
-    "--ss-card-h-m: " . $cardHm,
-    "--ss-card-h-t: " . $cardHt,
-    "--ss-card-h-d: " . $cardHd,
+    "--plugin-card-h-m: " . $cardHm,
+    "--plugin-card-h-t: " . $cardHt,
+    "--plugin-card-h-d: " . $cardHd,
 
     // NEW: paw + brand var used by the SVG fill
-    "--ss-paw-opacity: " . esc_attr((string)($opts['paw_opacity'] ?? 0.08)),
+    "--plugin-paw-opacity: " . esc_attr((string)($opts['paw_opacity'] ?? 0.08)),
     "--asm-brand: " . esc_attr($opts['brand_color']),
   ];
   $vars_css = implode('; ', $vars) . ';';
 
   ob_start();
   ?>
-  <div class="straysafe-stats-ui-wrap" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
+  <div class="plugin-stats-ui-wrap" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
     <style>
       /* Scoped only */
       #<?php echo esc_attr($instance); ?> { margin:0 !important; padding:0 !important; }
@@ -817,19 +826,19 @@ add_shortcode('stats', function () {
 
       /* Prevent flash: hidden until JS marks ready */
       #<?php echo esc_attr($instance); ?> { opacity:0; visibility:hidden; }
-      #<?php echo esc_attr($instance); ?>.ss-ready { opacity:1; visibility:visible; transition:opacity .18s ease-out; }
+      #<?php echo esc_attr($instance); ?>.plugin-ready { opacity:1; visibility:visible; transition:opacity .18s ease-out; }
 
-      @keyframes straysafe_countUp { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
-      @keyframes straysafe_float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
+      @keyframes plugin_countUp { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
+      @keyframes plugin_float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
 
       /* Paw animation uses configurable opacity and keeps per-paw rotation (via CSS var) */
-      @keyframes straysafe_pawPrint {
-        0%   { opacity: 0; transform: rotate(var(--ss-paw-rot, 0deg)) scale(0.5); }
-        50%  { opacity: var(--ss-paw-opacity, 0.08); transform: rotate(var(--ss-paw-rot, 0deg)) scale(1); }
-        100% { opacity: 0; transform: rotate(var(--ss-paw-rot, 0deg)) scale(1.2); }
+      @keyframes plugin_pawPrint {
+        0%   { opacity: 0; transform: rotate(var(--plugin-paw-rot, 0deg)) scale(0.5); }
+        50%  { opacity: var(--plugin-paw-opacity, 0.08); transform: rotate(var(--plugin-paw-rot, 0deg)) scale(1); }
+        100% { opacity: 0; transform: rotate(var(--plugin-paw-rot, 0deg)) scale(1.2); }
       }
 
-      #<?php echo esc_attr($instance); ?> .counter-card { animation: straysafe_countUp 0.6s ease-out forwards; opacity: 0; }
+      #<?php echo esc_attr($instance); ?> .counter-card { animation: plugin_countUp 0.6s ease-out forwards; opacity: 0; }
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(1){animation-delay:.1s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(2){animation-delay:.2s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(3){animation-delay:.3s}
@@ -837,8 +846,8 @@ add_shortcode('stats', function () {
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(5){animation-delay:.5s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(6){animation-delay:.6s}
 
-      #<?php echo esc_attr($instance); ?> .icon-float { animation: straysafe_float 3s ease-in-out infinite; }
-      #<?php echo esc_attr($instance); ?> .paw-bg { position:absolute; opacity:0; animation:straysafe_pawPrint 4s ease-in-out infinite; pointer-events:none; }
+      #<?php echo esc_attr($instance); ?> .icon-float { animation: plugin_float 3s ease-in-out infinite; }
+      #<?php echo esc_attr($instance); ?> .paw-bg { position:absolute; opacity:0; animation:plugin_pawPrint 4s ease-in-out infinite; pointer-events:none; }
 
       @media (hover:none) and (pointer:coarse) {
         #<?php echo esc_attr($instance); ?> .counter-card:hover { transform:none !important; box-shadow:none !important; }
@@ -846,22 +855,22 @@ add_shortcode('stats', function () {
       @media (max-width: 640px) { #<?php echo esc_attr($instance); ?> .paw-bg { display:none; } }
 
       /* Responsive grid (columns from settings) */
-      #<?php echo esc_attr($instance); ?> .ss-cards-grid{
+      #<?php echo esc_attr($instance); ?> .plugin-cards-grid{
         display:grid;
         gap: 1rem;
-        grid-template-columns: repeat(var(--ss-cols-m, 2), minmax(0, 1fr));
+        grid-template-columns: repeat(var(--plugin-cols-m, 2), minmax(0, 1fr));
         justify-items: stretch;
         align-items: stretch;
       }
       @media (min-width: 640px){
-        #<?php echo esc_attr($instance); ?> .ss-cards-grid{
+        #<?php echo esc_attr($instance); ?> .plugin-cards-grid{
           gap: 1.5rem;
-          grid-template-columns: repeat(var(--ss-cols-t, 2), minmax(0, 1fr));
+          grid-template-columns: repeat(var(--plugin-cols-t, 2), minmax(0, 1fr));
         }
       }
       @media (min-width: 1024px){
-        #<?php echo esc_attr($instance); ?> .ss-cards-grid{
-          grid-template-columns: repeat(var(--ss-cols-d, 3), minmax(0, 1fr));
+        #<?php echo esc_attr($instance); ?> .plugin-cards-grid{
+          grid-template-columns: repeat(var(--plugin-cols-d, 3), minmax(0, 1fr));
         }
       }
 
@@ -880,44 +889,44 @@ add_shortcode('stats', function () {
       }
       @media (max-width: 639px){
         #<?php echo esc_attr($instance); ?> .counter-card{
-          max-width: var(--ss-card-w-m, none) !important;
-          min-height: var(--ss-card-h-m, auto) !important;
+          max-width: var(--plugin-card-w-m, none) !important;
+          min-height: var(--plugin-card-h-m, auto) !important;
         }
       }
       @media (min-width: 640px) and (max-width: 1023px){
         #<?php echo esc_attr($instance); ?> .counter-card{
-          max-width: var(--ss-card-w-t, none) !important;
-          min-height: var(--ss-card-h-t, auto) !important;
+          max-width: var(--plugin-card-w-t, none) !important;
+          min-height: var(--plugin-card-h-t, auto) !important;
         }
       }
       @media (min-width: 1024px){
         #<?php echo esc_attr($instance); ?> .counter-card{
-          max-width: var(--ss-card-w-d, none) !important;
-          min-height: var(--ss-card-h-d, auto) !important;
+          max-width: var(--plugin-card-w-d, none) !important;
+          min-height: var(--plugin-card-h-d, auto) !important;
         }
       }
 
       /* Typography (device-specific) */
-      #<?php echo esc_attr($instance); ?> .ss-heading {
-        font-size: var(--ss-fs-h-m, 28px) !important;
+      #<?php echo esc_attr($instance); ?> .plugin-heading {
+        font-size: var(--plugin-fs-h-m, 28px) !important;
         font-weight: 800 !important;
         line-height: 1.15;
       }
-      #<?php echo esc_attr($instance); ?> .ss-subheading {
-        font-size: var(--ss-fs-s-m, 16px) !important;
+      #<?php echo esc_attr($instance); ?> .plugin-subheading {
+        font-size: var(--plugin-fs-s-m, 16px) !important;
       }
-      #<?php echo esc_attr($instance); ?> .ss-paragraph {
-        font-size: var(--ss-fs-p-m, 14px) !important;
+      #<?php echo esc_attr($instance); ?> .plugin-paragraph {
+        font-size: var(--plugin-fs-p-m, 14px) !important;
       }
       @media (min-width: 640px){
-        #<?php echo esc_attr($instance); ?> .ss-heading { font-size: var(--ss-fs-h-t, 36px) !important; }
-        #<?php echo esc_attr($instance); ?> .ss-subheading { font-size: var(--ss-fs-s-t, 18px) !important; }
-        #<?php echo esc_attr($instance); ?> .ss-paragraph { font-size: var(--ss-fs-p-t, 16px) !important; }
+        #<?php echo esc_attr($instance); ?> .plugin-heading { font-size: var(--plugin-fs-h-t, 36px) !important; }
+        #<?php echo esc_attr($instance); ?> .plugin-subheading { font-size: var(--plugin-fs-s-t, 18px) !important; }
+        #<?php echo esc_attr($instance); ?> .plugin-paragraph { font-size: var(--plugin-fs-p-t, 16px) !important; }
       }
       @media (min-width: 1024px){
-        #<?php echo esc_attr($instance); ?> .ss-heading { font-size: var(--ss-fs-h-d, 42px) !important; }
-        #<?php echo esc_attr($instance); ?> .ss-subheading { font-size: var(--ss-fs-s-d, 20px) !important; }
-        #<?php echo esc_attr($instance); ?> .ss-paragraph { font-size: var(--ss-fs-p-d, 16px) !important; }
+        #<?php echo esc_attr($instance); ?> .plugin-heading { font-size: var(--plugin-fs-h-d, 42px) !important; }
+        #<?php echo esc_attr($instance); ?> .plugin-subheading { font-size: var(--plugin-fs-s-d, 20px) !important; }
+        #<?php echo esc_attr($instance); ?> .plugin-paragraph { font-size: var(--plugin-fs-p-d, 16px) !important; }
       }
 
       /* One-row mode: preserve prior behaviour if selected */
@@ -962,7 +971,7 @@ add_shortcode('stats', function () {
           $dur   = (mt_rand(360, 520) / 100) . 's';   // 3.60s–5.20s
           $rot   = mt_rand(-25, 25);
 
-          echo '<div class="paw-bg" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; --ss-paw-rot: '.$rot.'deg;">'
+          echo '<div class="paw-bg" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; --plugin-paw-rot: '.$rot.'deg;">'
               . $paw_svg($size)
               . '</div>';
         }
@@ -971,14 +980,14 @@ add_shortcode('stats', function () {
       <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
         <div class="text-center mb-8 sm:mb-10">
           <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                        <h1 class="ss-heading leading-tight"
+                        <h1 class="plugin-heading leading-tight"
                 id="<?php echo esc_attr($instance); ?>_main_title"
                 style="color:<?php echo esc_attr($opts['brand_color']); ?>;">
               <?php echo esc_html($opts['title_text']); ?>
             </h1>
           </div>
 
-          <p class="ss-subheading font-semibold"
+          <p class="plugin-subheading font-semibold"
              id="<?php echo esc_attr($instance); ?>_year_label"
              style="color:#64748b;">
             <?php echo esc_html($opts['year_label_prefix']); ?> —
@@ -997,7 +1006,7 @@ add_shortcode('stats', function () {
              style="color:#64748b; display:none;"></p>
         </div>
 
-        <div class="<?php echo esc_attr($cardsWrapClass); ?>" data-ss-grid>
+        <div class="<?php echo esc_attr($cardsWrapClass); ?>" data-plugin-grid>
           <?php foreach ($order as $key) :
             $is_in_care = ($key === 'in_care');
             $value_id = $instance . '_count_' . $key;
@@ -1035,7 +1044,7 @@ add_shortcode('stats', function () {
         </div>
 
         <div class="text-center mt-8 sm:mt-10">
-          <p class="ss-paragraph font-medium px-2" style="color:#64748b;">
+          <p class="plugin-paragraph font-medium px-2" style="color:#64748b;">
             <?php echo esc_html($opts['footer_text']); ?>
           </p>
         </div>
@@ -1048,7 +1057,7 @@ add_shortcode('stats', function () {
         if (!root) return;
 
         const PROXY = {
-          baseUrl: "/wp-json/straysafe/v1",
+          baseUrl: "/wp-json/plugin/v1",
           reportTitle: "Summary By Year"
         };
 
@@ -1073,7 +1082,7 @@ add_shortcode('stats', function () {
         function byId(id){ return root.querySelector('#' + CSS.escape(id)); }
 
         function getGridEl(){
-          return root.querySelector('[data-ss-grid]');
+          return root.querySelector('[data-plugin-grid]');
         }
 
         function getVisibleCards(){
@@ -1136,7 +1145,7 @@ add_shortcode('stats', function () {
 
         // Keep floating icons in sync even when cards appear/disappear
         let floatStart = performance.now();
-        const FLOAT_PERIOD = 3; // must match CSS: straysafe_float 3s
+        const FLOAT_PERIOD = 3; // must match CSS: plugin_float 3s
 
         function syncIconFloat(){
           const grid = getGridEl();
@@ -1289,13 +1298,13 @@ add_shortcode('stats', function () {
 
             // Reveal only after layout settles (prevents flash/jumps)
             requestAnimationFrame(() => {
-              requestAnimationFrame(() => root.classList.add('ss-ready'));
+              requestAnimationFrame(() => root.classList.add('plugin-ready'));
             });
           } catch (err) {
             console.error(err);
             showStatus(`Could not load stats. ${err.message || ""}`.trim(), true);
             // Still reveal so user can see error message
-            root.classList.add('ss-ready');
+            root.classList.add('plugin-ready');
           }
         }
 

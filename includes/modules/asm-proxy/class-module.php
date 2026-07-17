@@ -7,21 +7,21 @@
 
 if (!defined('ABSPATH')) exit;
 
-function ss_asm_get_secret($name, $default = '') {
+function plugin_asm_get_secret($name, $default = '') {
   $env = getenv($name);
   if ($env !== false && $env !== '') return $env;
   if (defined($name) && constant($name) !== '') return constant($name);
   return $default;
 }
 
-function ss_asm_base_url() { return ss_asm_get_secret('ASM_BASE_URL', 'https://service.sheltermanager.com/asmservice'); }
-function ss_asm_account()  { return ss_asm_get_secret('ASM_ACCOUNT', ''); }
-function ss_asm_user()     { return ss_asm_get_secret('ASM_USERNAME', ''); }
-function ss_asm_pass()     { return ss_asm_get_secret('ASM_PASSWORD', ''); }
+function plugin_asm_base_url() { return plugin_asm_get_secret('ASM_BASE_URL', 'https://service.sheltermanager.com/asmservice'); }
+function plugin_asm_account()  { return plugin_asm_get_secret('ASM_ACCOUNT', ''); }
+function plugin_asm_user()     { return plugin_asm_get_secret('ASM_USERNAME', ''); }
+function plugin_asm_pass()     { return plugin_asm_get_secret('ASM_PASSWORD', ''); }
 
-function ss_asm_http_get($params, $opts = []) {
-  $base = ss_asm_base_url();
-  $url_params = array_merge(['account' => ss_asm_account()], $params);
+function plugin_asm_http_get($params, $opts = []) {
+  $base = plugin_asm_base_url();
+  $url_params = array_merge(['account' => plugin_asm_account()], $params);
   $url = add_query_arg($url_params, $base);
 
   $defaults = [
@@ -51,7 +51,7 @@ function ss_asm_http_get($params, $opts = []) {
   return $res;
 }
 
-function ss_asm_error_response($err) {
+function plugin_asm_error_response($err) {
   if (!is_wp_error($err)) {
     return new WP_REST_Response(['error' => 'Unknown error'], 500);
   }
@@ -69,7 +69,7 @@ function ss_asm_error_response($err) {
   ], 500);
 }
 
-function ss_cache_image_to_uploads($content_type, $bytes, $animalid = '', $seq = '') {
+function plugin_cache_image_to_uploads($content_type, $bytes, $animalid = '', $seq = '') {
   if (!function_exists('wp_upload_dir') || !is_string($bytes) || $bytes === '' || stripos((string)$content_type, 'image/') !== 0) return;
   $uploads = wp_upload_dir();
   if (empty($uploads['basedir'])) return;
@@ -94,13 +94,13 @@ function ss_cache_image_to_uploads($content_type, $bytes, $animalid = '', $seq =
   }
 }
 
-function ss_stream_image_response($content_type, $bytes) {
+function plugin_stream_image_response($content_type, $bytes) {
   while (ob_get_level()) { @ob_end_clean(); }
   @ini_set('zlib.output_compression', '0');
 
   status_header(200);
   header('Content-Type: ' . $content_type);
-  if (function_exists('ss_suite_cache_bypass') && ss_suite_cache_bypass()) {
+  if (function_exists('plugin_suite_cache_bypass') && plugin_suite_cache_bypass()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
   } else {
@@ -112,13 +112,13 @@ function ss_stream_image_response($content_type, $bytes) {
   exit;
 }
 
-function ss_fetch_asm_image($animalid, $seq, &$debug_out = null) {
+function plugin_fetch_asm_image($animalid, $seq, &$debug_out = null) {
   $url = add_query_arg([
-    'account'  => ss_asm_account(),
+    'account'  => plugin_asm_account(),
     'method'   => 'animal_image',
     'animalid' => $animalid,
     'seq'      => $seq,
-  ], ss_asm_base_url());
+  ], plugin_asm_base_url());
 
   $attempts = 2;
 
@@ -161,7 +161,7 @@ function ss_fetch_asm_image($animalid, $seq, &$debug_out = null) {
   return null;
 }
 
-function ss_asm_pick_report_status_field(array $row) {
+function plugin_asm_pick_report_status_field(array $row) {
   foreach ([
     'STATUSNAME', 'StatusName', 'statusname',
     'STATUSES', 'Statuses', 'statuses',
@@ -175,7 +175,7 @@ function ss_asm_pick_report_status_field(array $row) {
   return 'Reserved';
 }
 
-function ss_asm_split_statuses($status_string) {
+function plugin_asm_split_statuses($status_string) {
   $status_string = trim((string)$status_string);
   if ($status_string === '') return [];
 
@@ -191,7 +191,7 @@ function ss_asm_split_statuses($status_string) {
 }
 
 
-function ss_asm_age_to_months($age_text) {
+function plugin_asm_age_to_months($age_text) {
   $age = strtolower(trim((string)$age_text));
   if ($age === '') return null;
 
@@ -217,7 +217,7 @@ function ss_asm_age_to_months($age_text) {
   return null;
 }
 
-function ss_asm_age_band_from_months($months) {
+function plugin_asm_age_band_from_months($months) {
   if ($months === null || $months === '') return '';
   $months = (int)$months;
   if ($months < 12) return 'Under 1 year';
@@ -227,13 +227,13 @@ function ss_asm_age_band_from_months($months) {
 }
 
 
-function ss_suite_settings() {
-  $settings = get_option('straysafe_ui_suite_settings_v83', []);
+function plugin_suite_settings() {
+  $settings = get_option('plugin_ui_suite_settings_v83', []);
   return is_array($settings) ? $settings : [];
 }
 
-function ss_suite_data_source() {
-  $settings = ss_suite_settings();
+function plugin_suite_data_source() {
+  $settings = plugin_suite_settings();
   $source = sanitize_key($settings['global']['data_source'] ?? 'asm');
   if (!empty($settings['global']['preview_mode']) && current_user_can('manage_options')) {
     $preview = sanitize_key($_GET['asm_suite_source'] ?? $_GET['source_preview'] ?? '');
@@ -242,8 +242,8 @@ function ss_suite_data_source() {
   return in_array($source, ['asm','custom_api','shelterluv','petpoint'], true) ? $source : 'asm';
 }
 
-function ss_suite_cache_ttl($key, $default) {
-  $settings = ss_suite_settings();
+function plugin_suite_cache_ttl($key, $default) {
+  $settings = plugin_suite_settings();
   $proxy = is_array($settings['proxy'] ?? null) ? $settings['proxy'] : [];
   $global = is_array($settings['global'] ?? null) ? $settings['global'] : [];
   $value = $proxy[$key] ?? $global[$key] ?? $default;
@@ -251,24 +251,24 @@ function ss_suite_cache_ttl($key, $default) {
   return max(0, min(3600, (int)$value));
 }
 
-function ss_suite_cache_bypass() {
-  $settings = ss_suite_settings();
-  return !empty($settings['global']['bypass_cache']);
+function plugin_suite_cache_bypass() {
+  $settings = plugin_suite_settings();
+  return !empty($settings['global']['bypass_plugin_cache']);
 }
 
-function ss_suite_cache_get($key) {
-  if (ss_suite_cache_bypass()) return false;
+function plugin_suite_cache_get($key) {
+  if (plugin_suite_cache_bypass()) return false;
   return get_transient($key);
 }
 
-function ss_suite_cache_set($key, $value, $ttl) {
-  if (ss_suite_cache_bypass()) return;
+function plugin_suite_cache_set($key, $value, $ttl) {
+  if (plugin_suite_cache_bypass()) return;
   $ttl = (int)$ttl;
   if ($ttl <= 0) return;
   set_transient($key, $value, $ttl);
 }
 
-function ss_suite_array_is_list(array $array) {
+function plugin_suite_array_is_list(array $array) {
   $expected = 0;
   foreach ($array as $key => $_value) {
     if ($key !== $expected) return false;
@@ -278,35 +278,35 @@ function ss_suite_array_is_list(array $array) {
 }
 
 
-function ss_suite_last_good_key($key) {
-  return 'straysafe_ui_suite_last_good_' . md5((string)$key);
+function plugin_suite_last_good_key($key) {
+  return 'plugin_ui_suite_last_good_' . md5((string)$key);
 }
 
-function ss_suite_last_good_set($key, $value) {
-  update_option(ss_suite_last_good_key($key), ['time' => current_time('mysql'), 'data' => $value], false);
+function plugin_suite_last_good_set($key, $value) {
+  update_option(plugin_suite_last_good_key($key), ['time' => current_time('mysql'), 'data' => $value], false);
 }
 
-function ss_suite_last_good_get($key) {
-  $stored = get_option(ss_suite_last_good_key($key), []);
+function plugin_suite_last_good_get($key) {
+  $stored = get_option(plugin_suite_last_good_key($key), []);
   return is_array($stored) && array_key_exists('data', $stored) ? $stored['data'] : null;
 }
 
-function ss_suite_last_good_meta($key) {
-  $stored = get_option(ss_suite_last_good_key($key), []);
+function plugin_suite_last_good_meta($key) {
+  $stored = get_option(plugin_suite_last_good_key($key), []);
   return is_array($stored) ? ['time' => ($stored['time'] ?? ''), 'count' => (is_array($stored['data'] ?? null) ? count($stored['data']) : 0)] : ['time' => '', 'count' => 0];
 }
 
-function ss_suite_response_or_last_good($key, $error) {
-  $fallback = ss_suite_last_good_get($key);
+function plugin_suite_response_or_last_good($key, $error) {
+  $fallback = plugin_suite_last_good_get($key);
   if ($fallback !== null) {
     set_transient('asm_suite_last_good_served_notice', 1, 60);
     return rest_ensure_response($fallback);
   }
-  return is_wp_error($error) ? ss_asm_error_response($error) : $error;
+  return is_wp_error($error) ? plugin_asm_error_response($error) : $error;
 }
 
-function ss_suite_field_map() {
-  $settings = ss_suite_settings();
+function plugin_suite_field_map() {
+  $settings = plugin_suite_settings();
   $g = is_array($settings['global'] ?? null) ? $settings['global'] : [];
   $raw = (string)($g['field_map'] ?? '');
   $map = [];
@@ -321,14 +321,14 @@ function ss_suite_field_map() {
   return $map;
 }
 
-function ss_suite_apply_field_map(array &$out, array $row) {
-  foreach (ss_suite_field_map() as $target => $sources) {
-    ss_custom_api_ensure_field($out, $row, $target, $sources);
+function plugin_suite_apply_field_map(array &$out, array $row) {
+  foreach (plugin_suite_field_map() as $target => $sources) {
+    plugin_custom_api_ensure_field($out, $row, $target, $sources);
   }
 }
 
-function ss_custom_api_config() {
-  $settings = ss_suite_settings();
+function plugin_custom_api_config() {
+  $settings = plugin_suite_settings();
   $g = is_array($settings['global'] ?? null) ? $settings['global'] : [];
   $base = esc_url_raw($g['custom_api_url'] ?? '');
   $endpoint = function($specific, $suffix) use ($g, $base) {
@@ -349,8 +349,8 @@ function ss_custom_api_config() {
   ];
 }
 
-function ss_custom_api_headers() {
-  $cfg = ss_custom_api_config();
+function plugin_custom_api_headers() {
+  $cfg = plugin_custom_api_config();
   $headers = [
     'User-Agent' => 'WordPress Rescue Plugin Suite Proxy',
     'Accept' => 'application/json,*/*;q=0.8',
@@ -361,12 +361,12 @@ function ss_custom_api_headers() {
   return $headers;
 }
 
-function ss_custom_api_request($url, $query = [], $binary = false) {
+function plugin_custom_api_request($url, $query = [], $binary = false) {
   if (!$url) {
     return new WP_Error('custom_api_missing', 'Custom API endpoint is not configured', ['status' => 500]);
   }
   if (!empty($query)) $url = add_query_arg($query, $url);
-  $headers = ss_custom_api_headers();
+  $headers = plugin_custom_api_headers();
   if ($binary) $headers['Accept'] = 'image/*,*/*;q=0.8';
   $res = wp_remote_get($url, [
     'timeout' => 25,
@@ -385,9 +385,9 @@ function ss_custom_api_request($url, $query = [], $binary = false) {
   return $res;
 }
 
-function ss_custom_api_extract_items($data, $preferred = '') {
+function plugin_custom_api_extract_items($data, $preferred = '') {
   if (!is_array($data)) return [];
-  if (ss_suite_array_is_list($data)) return $data;
+  if (plugin_suite_array_is_list($data)) return $data;
 
   $keys = array_filter([$preferred, 'items', 'data', 'animals', 'adoptables', 'adoptions', 'results']);
   foreach ($keys as $key) {
@@ -396,35 +396,35 @@ function ss_custom_api_extract_items($data, $preferred = '') {
   return [];
 }
 
-function ss_custom_api_first_value(array $row, array $keys, $default = '') {
+function plugin_custom_api_first_value(array $row, array $keys, $default = '') {
   foreach ($keys as $key) {
     if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') return $row[$key];
   }
   return $default;
 }
 
-function ss_custom_api_ensure_field(array &$out, array $row, $target, array $keys) {
+function plugin_custom_api_ensure_field(array &$out, array $row, $target, array $keys) {
   if (array_key_exists($target, $out) && $out[$target] !== '') return;
-  $value = ss_custom_api_first_value($row, $keys, '');
+  $value = plugin_custom_api_first_value($row, $keys, '');
   if ($value !== '') $out[$target] = $value;
 }
 
 
 
-function ss_provider_global() {
-  $settings = ss_suite_settings();
+function plugin_provider_global() {
+  $settings = plugin_suite_settings();
   return is_array($settings['global'] ?? null) ? $settings['global'] : [];
 }
 
-function ss_provider_endpoint($global, $key, $base_key, $suffix) {
+function plugin_provider_endpoint($global, $key, $base_key, $suffix) {
   $url = esc_url_raw($global[$key] ?? '');
   if ($url !== '') return $url;
   $base = esc_url_raw($global[$base_key] ?? '');
   return $base !== '' ? untrailingslashit($base) . $suffix : '';
 }
 
-function ss_provider_auth_headers($provider) {
-  $g = ss_provider_global();
+function plugin_provider_auth_headers($provider) {
+  $g = plugin_provider_global();
   $headers = [
     'User-Agent' => 'WordPress Rescue Plugin Suite Proxy',
     'Accept' => 'application/json,*/*;q=0.8',
@@ -443,15 +443,15 @@ function ss_provider_auth_headers($provider) {
   return $headers;
 }
 
-function ss_provider_config($provider) {
-  $g = ss_provider_global();
+function plugin_provider_config($provider) {
+  $g = plugin_provider_global();
   if ($provider === 'shelterluv') {
     return [
-      'adoptables_url' => ss_provider_endpoint($g, 'shelterluv_adoptables_url', 'shelterluv_base_url', '/api/v1/animals'),
-      'adoptions_url' => ss_provider_endpoint($g, 'shelterluv_adoptions_url', 'shelterluv_base_url', '/api/v1/adoptions'),
-      'report_url' => ss_provider_endpoint($g, 'shelterluv_report_url', 'shelterluv_base_url', '/api/v1/reports'),
-      'incare_url' => ss_provider_endpoint($g, 'shelterluv_incare_url', 'shelterluv_base_url', '/api/v1/animals'),
-      'image_url' => ss_provider_endpoint($g, 'shelterluv_image_url', 'shelterluv_base_url', '/api/v1/animal-image'),
+      'adoptables_url' => plugin_provider_endpoint($g, 'shelterluv_adoptables_url', 'shelterluv_base_url', '/api/v1/animals'),
+      'adoptions_url' => plugin_provider_endpoint($g, 'shelterluv_adoptions_url', 'shelterluv_base_url', '/api/v1/adoptions'),
+      'report_url' => plugin_provider_endpoint($g, 'shelterluv_report_url', 'shelterluv_base_url', '/api/v1/reports'),
+      'incare_url' => plugin_provider_endpoint($g, 'shelterluv_incare_url', 'shelterluv_base_url', '/api/v1/animals'),
+      'image_url' => plugin_provider_endpoint($g, 'shelterluv_image_url', 'shelterluv_base_url', '/api/v1/animal-image'),
       'org_id' => (string)($g['shelterluv_org_id'] ?? ''),
       'statuses' => (string)($g['shelterluv_statuses'] ?? 'adoptable,foster'),
       'locations' => (string)($g['shelterluv_location_ids'] ?? ''),
@@ -459,11 +459,11 @@ function ss_provider_config($provider) {
     ];
   }
   return [
-    'adoptables_url' => ss_provider_endpoint($g, 'petpoint_adoptables_url', 'petpoint_base_url', ''),
-    'adoptions_url' => ss_provider_endpoint($g, 'petpoint_adoptions_url', 'petpoint_base_url', '/adoptions'),
-    'report_url' => ss_provider_endpoint($g, 'petpoint_report_url', 'petpoint_base_url', '/report'),
-    'incare_url' => ss_provider_endpoint($g, 'petpoint_incare_url', 'petpoint_base_url', ''),
-    'image_url' => ss_provider_endpoint($g, 'petpoint_image_url', 'petpoint_base_url', '/animal-image'),
+    'adoptables_url' => plugin_provider_endpoint($g, 'petpoint_adoptables_url', 'petpoint_base_url', ''),
+    'adoptions_url' => plugin_provider_endpoint($g, 'petpoint_adoptions_url', 'petpoint_base_url', '/adoptions'),
+    'report_url' => plugin_provider_endpoint($g, 'petpoint_report_url', 'petpoint_base_url', '/report'),
+    'incare_url' => plugin_provider_endpoint($g, 'petpoint_incare_url', 'petpoint_base_url', ''),
+    'image_url' => plugin_provider_endpoint($g, 'petpoint_image_url', 'petpoint_base_url', '/animal-image'),
     'shelter_id' => (string)($g['petpoint_shelter_id'] ?? ''),
     'species_id' => (string)($g['petpoint_species_id'] ?? '2'),
     'statuses' => (string)($g['petpoint_statuses'] ?? 'available,foster'),
@@ -471,15 +471,15 @@ function ss_provider_config($provider) {
   ];
 }
 
-function ss_provider_csv($value) {
+function plugin_provider_csv($value) {
   $parts = preg_split('/[\r\n,]+/', (string)$value);
   return array_values(array_filter(array_map('trim', $parts), function($v){ return $v !== ''; }));
 }
 
-function ss_provider_request($provider, $url, $query = [], $binary = false) {
+function plugin_provider_request($provider, $url, $query = [], $binary = false) {
   if (!$url) return new WP_Error($provider . '_missing', ucfirst($provider) . ' endpoint is not configured', ['status' => 500]);
   if (!empty($query)) $url = add_query_arg($query, $url);
-  $headers = ss_provider_auth_headers($provider);
+  $headers = plugin_provider_auth_headers($provider);
   if ($binary) $headers['Accept'] = 'image/*,*/*;q=0.8';
   $res = wp_remote_get($url, ['timeout' => 25, 'redirection' => 5, 'headers' => $headers]);
   if (is_wp_error($res)) return $res;
@@ -488,29 +488,29 @@ function ss_provider_request($provider, $url, $query = [], $binary = false) {
   return $res;
 }
 
-function ss_provider_items($data, $preferred) {
-  return ss_custom_api_extract_items($data, $preferred);
+function plugin_provider_items($data, $preferred) {
+  return plugin_custom_api_extract_items($data, $preferred);
 }
 
-function ss_provider_query($provider, $kind, WP_REST_Request $req = null) {
-  $cfg = ss_provider_config($provider);
+function plugin_provider_query($provider, $kind, WP_REST_Request $req = null) {
+  $cfg = plugin_provider_config($provider);
   $query = [];
   if ($provider === 'shelterluv') {
     if ($cfg['org_id'] !== '') $query['org_id'] = $cfg['org_id'];
     if ($kind === 'adoptables') {
-      $statuses = ss_provider_csv($cfg['statuses']);
+      $statuses = plugin_provider_csv($cfg['statuses']);
       if ($statuses) $query['status'] = implode(',', $statuses);
       if ($cfg['animal_type'] !== '') $query['type'] = $cfg['animal_type'];
-      $locations = ss_provider_csv($cfg['locations']);
+      $locations = plugin_provider_csv($cfg['locations']);
       if ($locations) $query['location_id'] = implode(',', $locations);
     }
   } elseif ($provider === 'petpoint') {
     if ($cfg['shelter_id'] !== '') $query['shelterid'] = $cfg['shelter_id'];
     if ($cfg['species_id'] !== '') $query['speciesid'] = $cfg['species_id'];
     if ($kind === 'adoptables') {
-      $statuses = ss_provider_csv($cfg['statuses']);
+      $statuses = plugin_provider_csv($cfg['statuses']);
       if ($statuses) $query['status'] = implode(',', $statuses);
-      $locations = ss_provider_csv($cfg['locations']);
+      $locations = plugin_provider_csv($cfg['locations']);
       if ($locations) $query['location'] = implode(',', $locations);
     }
   }
@@ -521,112 +521,112 @@ function ss_provider_query($provider, $kind, WP_REST_Request $req = null) {
   return $query;
 }
 
-function ss_provider_adoptables($provider) {
-  $cfg = ss_provider_config($provider);
-  $query = ss_provider_query($provider, 'adoptables');
-  $cache_key = 'ss_' . $provider . '_adoptables_v1_' . md5($cfg['adoptables_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+function plugin_provider_adoptables($provider) {
+  $cfg = plugin_provider_config($provider);
+  $query = plugin_provider_query($provider, 'adoptables');
+  $cache_key = 'plugin_' . $provider . '_adoptables_v1_' . md5($cfg['adoptables_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
-  $res = ss_provider_request($provider, $cfg['adoptables_url'], $query);
-  if (is_wp_error($res)) return ss_suite_response_or_last_good($cache_key, $res);
+  $res = plugin_provider_request($provider, $cfg['adoptables_url'], $query);
+  if (is_wp_error($res)) return plugin_suite_response_or_last_good($cache_key, $res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
-  if (!is_array($data)) return ss_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500));
-  $items = ss_provider_items($data, 'adoptables');
-  $filtered = array_values(array_map('ss_custom_api_normalize_adoptable', array_filter($items, 'is_array')));
-  ss_suite_last_good_set($cache_key, $filtered);
-  ss_suite_cache_set($cache_key, $filtered, ss_suite_cache_ttl('cache_adoptables_seconds', 60));
+  if (!is_array($data)) return plugin_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500));
+  $items = plugin_provider_items($data, 'adoptables');
+  $filtered = array_values(array_map('plugin_custom_api_normalize_adoptable', array_filter($items, 'is_array')));
+  plugin_suite_last_good_set($cache_key, $filtered);
+  plugin_suite_cache_set($cache_key, $filtered, plugin_suite_cache_ttl('cache_adoptables_seconds', 60));
   return rest_ensure_response($filtered);
 }
 
-function ss_provider_adoptions($provider, WP_REST_Request $req) {
-  $cfg = ss_provider_config($provider);
-  $query = ss_provider_query($provider, 'adoptions', $req);
-  $cache_key = 'ss_' . $provider . '_adoptions_v1_' . md5($cfg['adoptions_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+function plugin_provider_adoptions($provider, WP_REST_Request $req) {
+  $cfg = plugin_provider_config($provider);
+  $query = plugin_provider_query($provider, 'adoptions', $req);
+  $cache_key = 'plugin_' . $provider . '_adoptions_v1_' . md5($cfg['adoptions_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
-  $res = ss_provider_request($provider, $cfg['adoptions_url'], $query);
-  if (is_wp_error($res)) return ss_suite_response_or_last_good($cache_key, $res);
+  $res = plugin_provider_request($provider, $cfg['adoptions_url'], $query);
+  if (is_wp_error($res)) return plugin_suite_response_or_last_good($cache_key, $res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
-  if (!is_array($data)) return ss_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500));
-  $items = ss_provider_items($data, 'adoptions');
-  $filtered = array_values(array_map('ss_custom_api_normalize_adoption', array_filter($items, 'is_array')));
-  ss_suite_last_good_set($cache_key, $filtered);
-  ss_suite_cache_set($cache_key, $filtered, ss_suite_cache_ttl('cache_adoptions_seconds', 300));
+  if (!is_array($data)) return plugin_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500));
+  $items = plugin_provider_items($data, 'adoptions');
+  $filtered = array_values(array_map('plugin_custom_api_normalize_adoption', array_filter($items, 'is_array')));
+  plugin_suite_last_good_set($cache_key, $filtered);
+  plugin_suite_cache_set($cache_key, $filtered, plugin_suite_cache_ttl('cache_adoptions_seconds', 300));
   return rest_ensure_response($filtered);
 }
 
-function ss_provider_report($provider, WP_REST_Request $req) {
-  $cfg = ss_provider_config($provider);
-  $query = ss_provider_query($provider, 'report', $req);
+function plugin_provider_report($provider, WP_REST_Request $req) {
+  $cfg = plugin_provider_config($provider);
+  $query = plugin_provider_query($provider, 'report', $req);
   $title = trim((string)($query['title'] ?? ''));
   if ($title === '') return new WP_REST_Response(['error' => 'title required'], 400);
-  $cache_key = 'ss_' . $provider . '_report_v1_' . md5($cfg['report_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+  $cache_key = 'plugin_' . $provider . '_report_v1_' . md5($cfg['report_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
   if (empty($cfg['report_url'])) {
-    $fallback = ss_suite_fallback_report($provider, $title, $req);
+    $fallback = plugin_suite_fallback_report($provider, $title, $req);
     if ($fallback !== null) {
-      ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+      plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
       return rest_ensure_response($fallback);
     }
   }
-  $res = ss_provider_request($provider, $cfg['report_url'], $query);
+  $res = plugin_provider_request($provider, $cfg['report_url'], $query);
   if (is_wp_error($res)) {
-    $fallback = ss_suite_fallback_report($provider, $title, $req);
+    $fallback = plugin_suite_fallback_report($provider, $title, $req);
     if ($fallback !== null) {
-      ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+      plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
       return rest_ensure_response($fallback);
     }
-    return ss_asm_error_response($res);
+    return plugin_asm_error_response($res);
   }
   $data = json_decode(wp_remote_retrieve_body($res), true);
   if (!is_array($data)) return new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500);
-  $items = ss_provider_items($data, 'items');
+  $items = plugin_provider_items($data, 'items');
   if (!empty($items)) $data = $items;
-  ss_suite_cache_set($cache_key, $data, ss_suite_cache_ttl('cache_reports_seconds', 60));
+  plugin_suite_cache_set($cache_key, $data, plugin_suite_cache_ttl('cache_reports_seconds', 60));
   return rest_ensure_response($data);
 }
 
-function ss_provider_incare($provider) {
-  $cfg = ss_provider_config($provider);
-  $query = ss_provider_query($provider, 'adoptables');
-  $cache_key = 'ss_' . $provider . '_incare_v1_' . md5($cfg['incare_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+function plugin_provider_incare($provider) {
+  $cfg = plugin_provider_config($provider);
+  $query = plugin_provider_query($provider, 'adoptables');
+  $cache_key = 'plugin_' . $provider . '_incare_v1_' . md5($cfg['incare_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
-  $res = ss_provider_request($provider, $cfg['incare_url'], $query);
-  if (is_wp_error($res)) return ss_asm_error_response($res);
+  $res = plugin_provider_request($provider, $cfg['incare_url'], $query);
+  if (is_wp_error($res)) return plugin_asm_error_response($res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
   if (is_numeric($data)) $count = (int)$data;
   elseif (is_array($data)) {
     if (isset($data['count']) || isset($data['in_care']) || isset($data['total'])) $count = (int)($data['count'] ?? $data['in_care'] ?? $data['total']);
-    else $count = count(ss_provider_items($data, 'animals')) ?: count(ss_provider_items($data, 'adoptables'));
+    else $count = count(plugin_provider_items($data, 'animals')) ?: count(plugin_provider_items($data, 'adoptables'));
   } else return new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500);
   $out = ['count' => $count];
-  ss_suite_cache_set($cache_key, $out, ss_suite_cache_ttl('cache_incare_seconds', 60));
+  plugin_suite_cache_set($cache_key, $out, plugin_suite_cache_ttl('cache_incare_seconds', 60));
   return rest_ensure_response($out);
 }
 
-function ss_provider_image($provider, WP_REST_Request $req) {
-  $cfg = ss_provider_config($provider);
-  $query = ss_provider_query($provider, 'image', $req);
+function plugin_provider_image($provider, WP_REST_Request $req) {
+  $cfg = plugin_provider_config($provider);
+  $query = plugin_provider_query($provider, 'image', $req);
   if (!empty($query['animalid']) && empty($query['id'])) $query['id'] = $query['animalid'];
-  $res = ss_provider_request($provider, $cfg['image_url'], $query, true);
-  if (is_wp_error($res)) return ss_asm_error_response($res);
+  $res = plugin_provider_request($provider, $cfg['image_url'], $query, true);
+  if (is_wp_error($res)) return plugin_asm_error_response($res);
   $body = wp_remote_retrieve_body($res);
   $ct = wp_remote_retrieve_header($res, 'content-type');
   if (!is_string($body) || $body === '' || stripos((string)$ct, 'image/') !== 0) return new WP_REST_Response(['error' => 'Image not available'], 404);
-  ss_cache_image_to_uploads($ct, $body, $query['animalid'] ?? ($query['id'] ?? ''), $query['seq'] ?? '1');
-  ss_stream_image_response($ct, $body);
+  plugin_cache_image_to_uploads($ct, $body, $query['animalid'] ?? ($query['id'] ?? ''), $query['seq'] ?? '1');
+  plugin_stream_image_response($ct, $body);
 }
 
 
-function ss_suite_response_data($response) {
+function plugin_suite_response_data($response) {
   if ($response instanceof WP_REST_Response) return $response->get_data();
   if ($response instanceof WP_HTTP_Response) return $response->get_data();
   return $response;
 }
 
-function ss_suite_year_from_row(array $row) {
+function plugin_suite_year_from_row(array $row) {
   foreach (['MOVEMENTDATE','MovementDate','ADOPTIONDATE','AdoptionDate','DATEADOPTED','DateAdopted','MOSTRECENTADOPTIONDATE','MostRecentAdoptionDate','adoption_date','date_adopted','adopted_at'] as $key) {
     if (empty($row[$key])) continue;
     $ts = strtotime((string)$row[$key]);
@@ -636,11 +636,11 @@ function ss_suite_year_from_row(array $row) {
   return 0;
 }
 
-function ss_suite_summary_from_adoptions_array(array $rows) {
+function plugin_suite_summary_from_adoptions_array(array $rows) {
   $counts = [];
   foreach ($rows as $row) {
     if (!is_array($row)) continue;
-    $year = ss_suite_year_from_row($row);
+    $year = plugin_suite_year_from_row($row);
     if ($year <= 0) continue;
     if (!isset($counts[$year])) $counts[$year] = 0;
     $counts[$year]++;
@@ -653,46 +653,46 @@ function ss_suite_summary_from_adoptions_array(array $rows) {
   return $out;
 }
 
-function ss_suite_fallback_report($source, $title, WP_REST_Request $req) {
+function plugin_suite_fallback_report($source, $title, WP_REST_Request $req) {
   $title = trim((string)$title);
   if ($title === 'Cats In Care Now') {
-    if ($source === 'custom_api') $response = ss_custom_api_adoptables();
-    elseif (in_array($source, ['shelterluv','petpoint'], true)) $response = ss_provider_adoptables($source);
+    if ($source === 'custom_api') $response = plugin_custom_api_adoptables();
+    elseif (in_array($source, ['shelterluv','petpoint'], true)) $response = plugin_provider_adoptables($source);
     else return null;
-    $animals = ss_suite_response_data($response);
+    $animals = plugin_suite_response_data($response);
     if (is_array($animals)) return [['cats_in_care' => count($animals), 'CATS_IN_CARE' => count($animals), 'source' => 'derived_from_adoptables']];
   }
   if ($title === 'Summary By Year') {
-    $fallback_req = new WP_REST_Request('GET', '/straysafe/v1/adoptions');
+    $fallback_req = new WP_REST_Request('GET', '/plugin/v1/adoptions');
     $fallback_req->set_param('years', $req->get_param('years') ?: 20);
-    if ($source === 'custom_api') $response = ss_custom_api_adoptions($fallback_req);
-    elseif (in_array($source, ['shelterluv','petpoint'], true)) $response = ss_provider_adoptions($source, $fallback_req);
+    if ($source === 'custom_api') $response = plugin_custom_api_adoptions($fallback_req);
+    elseif (in_array($source, ['shelterluv','petpoint'], true)) $response = plugin_provider_adoptions($source, $fallback_req);
     else return null;
-    $adoptions = ss_suite_response_data($response);
-    if (is_array($adoptions)) return ss_suite_summary_from_adoptions_array($adoptions);
+    $adoptions = plugin_suite_response_data($response);
+    if (is_array($adoptions)) return plugin_suite_summary_from_adoptions_array($adoptions);
   }
   if ($title === 'Active Reservations Proxy') return [];
   return null;
 }
 
-function ss_asm_fallback_report($title, WP_REST_Request $req) {
+function plugin_asm_fallback_report($title, WP_REST_Request $req) {
   if ($title === 'Cats In Care Now') {
-    $response = rest_do_request(new WP_REST_Request('GET', '/straysafe/v1/adoptables'));
-    $animals = ss_suite_response_data($response);
+    $response = rest_do_request(new WP_REST_Request('GET', '/plugin/v1/adoptables'));
+    $animals = plugin_suite_response_data($response);
     if (is_array($animals)) return [['cats_in_care' => count($animals), 'CATS_IN_CARE' => count($animals), 'source' => 'derived_from_adoptables']];
   }
   if ($title === 'Summary By Year') {
-    $fallback_req = new WP_REST_Request('GET', '/straysafe/v1/adoptions');
+    $fallback_req = new WP_REST_Request('GET', '/plugin/v1/adoptions');
     $fallback_req->set_param('years', $req->get_param('years') ?: 20);
     $response = rest_do_request($fallback_req);
-    $adoptions = ss_suite_response_data($response);
-    if (is_array($adoptions)) return ss_suite_summary_from_adoptions_array($adoptions);
+    $adoptions = plugin_suite_response_data($response);
+    if (is_array($adoptions)) return plugin_suite_summary_from_adoptions_array($adoptions);
   }
   if ($title === 'Active Reservations Proxy') return [];
   return null;
 }
 
-function ss_filter_allowed_keys($row, $allowed) {
+function plugin_filter_allowed_keys($row, $allowed) {
   $out = [];
   if (!is_array($row)) return $out;
   foreach ($allowed as $k) {
@@ -701,7 +701,7 @@ function ss_filter_allowed_keys($row, $allowed) {
   return $out;
 }
 
-function ss_custom_api_normalize_adoptable($row) {
+function plugin_custom_api_normalize_adoptable($row) {
   $allowed = [
     'ID','ANIMALID','ANIMALNAME','CODE','ANIMALAGE','SEXNAME','SEX',
     'BREEDNAME','BREEDNAME1','SPECIESID','SPECIESNAME','DAYSONSHELTER','DaysOnShelter',
@@ -709,152 +709,152 @@ function ss_custom_api_normalize_adoptable($row) {
     'ANIMALCOMMENTS','WEBSITEMEDIANOTES','DESCRIPTION','ANIMALDESCRIPTION','AnimalID','AnimalName','ShelterCode','AnimalAge','SexName','BreedName','BreedName1','SpeciesID','SpeciesName','IsGoodWithCatsName','IsGoodWithDogsName','IsGoodWithChildrenName','ISGOODWITHCATSNAME','ISGOODWITHDOGSNAME','ISGOODWITHCHILDRENNAME','GOODWITHCATSNAME','GOODWITHDOGSNAME','GOODWITHCHILDRENNAME','GOODWITHCATS','GOODWITHDOGS','GOODWITHCHILDREN','GOOD_WITH_CATS','GOOD_WITH_DOGS','GOOD_WITH_CHILDREN','GoodWithCats','GoodWithDogs','GoodWithChildren','HasSpecialNeeds','HASSPECIALNEEDS','SPECIALNEEDS','SPECIAL_NEEDS','SpecialNeeds','SPECIALNEEDSNAME',
     'AGE_MONTHS','AGE_BAND','reservation_statuses','reservation_status_counts','reservation_count','has_active_reservation','primary_reservation_status'
   ];
-  $out = ss_filter_allowed_keys($row, $allowed);
-  ss_custom_api_ensure_field($out, $row, 'ID', ['id','animal_id','animalid','AnimalID','ANIMALID']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALID', ['animal_id','animalid','id','AnimalID','ID']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALNAME', ['animal_name','animalname','name','Name','AnimalName']);
-  ss_custom_api_ensure_field($out, $row, 'CODE', ['code','shelter_code','sheltercode','ShelterCode']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALAGE', ['animal_age','age','age_text','AnimalAge']);
-  ss_custom_api_ensure_field($out, $row, 'SEXNAME', ['sex_name','sex','gender','SexName','SEX']);
-  ss_custom_api_ensure_field($out, $row, 'BREEDNAME', ['breed_name','breed','primary_breed','BreedName','BreedName1']);
-  ss_custom_api_ensure_field($out, $row, 'SPECIESID', ['species_id','speciesid','SpeciesID']);
-  ss_custom_api_ensure_field($out, $row, 'SPECIESNAME', ['species_name','species','SpeciesName']);
-  ss_custom_api_ensure_field($out, $row, 'DAYSONSHELTER', ['days_on_shelter','days_in_care','DaysOnShelter']);
-  ss_custom_api_ensure_field($out, $row, 'WEBSITEIMAGECOUNT', ['website_image_count','image_count','photo_count','WebsiteImageCount','WebsiteImages']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALCOMMENTS', ['animal_comments','description','bio','story','AnimalComments']);
-  ss_suite_apply_field_map($out, $row);
-  $age_months = $row['AGE_MONTHS'] ?? $row['age_months'] ?? ss_asm_age_to_months(ss_custom_api_first_value($row, ['ANIMALAGE','AnimalAge','animal_age','age','age_text'], ''));
+  $out = plugin_filter_allowed_keys($row, $allowed);
+  plugin_custom_api_ensure_field($out, $row, 'ID', ['id','animal_id','animalid','AnimalID','ANIMALID']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALID', ['animal_id','animalid','id','AnimalID','ID']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALNAME', ['animal_name','animalname','name','Name','AnimalName']);
+  plugin_custom_api_ensure_field($out, $row, 'CODE', ['code','shelter_code','sheltercode','ShelterCode']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALAGE', ['animal_age','age','age_text','AnimalAge']);
+  plugin_custom_api_ensure_field($out, $row, 'SEXNAME', ['sex_name','sex','gender','SexName','SEX']);
+  plugin_custom_api_ensure_field($out, $row, 'BREEDNAME', ['breed_name','breed','primary_breed','BreedName','BreedName1']);
+  plugin_custom_api_ensure_field($out, $row, 'SPECIESID', ['species_id','speciesid','SpeciesID']);
+  plugin_custom_api_ensure_field($out, $row, 'SPECIESNAME', ['species_name','species','SpeciesName']);
+  plugin_custom_api_ensure_field($out, $row, 'DAYSONSHELTER', ['days_on_shelter','days_in_care','DaysOnShelter']);
+  plugin_custom_api_ensure_field($out, $row, 'WEBSITEIMAGECOUNT', ['website_image_count','image_count','photo_count','WebsiteImageCount','WebsiteImages']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALCOMMENTS', ['animal_comments','description','bio','story','AnimalComments']);
+  plugin_suite_apply_field_map($out, $row);
+  $age_months = $row['AGE_MONTHS'] ?? $row['age_months'] ?? plugin_asm_age_to_months(plugin_custom_api_first_value($row, ['ANIMALAGE','AnimalAge','animal_age','age','age_text'], ''));
   if ($age_months !== null && $age_months !== '') {
     $out['AGE_MONTHS'] = (int)$age_months;
-    $out['AGE_BAND'] = $row['AGE_BAND'] ?? $row['age_band'] ?? ss_asm_age_band_from_months((int)$age_months);
+    $out['AGE_BAND'] = $row['AGE_BAND'] ?? $row['age_band'] ?? plugin_asm_age_band_from_months((int)$age_months);
   }
   return $out;
 }
 
-function ss_custom_api_normalize_adoption($row) {
+function plugin_custom_api_normalize_adoption($row) {
   $allowed = [
     'ID','ANIMALID','ANIMALNAME','CODE','ANIMALAGE','SEXNAME','SEX','BREEDNAME','BREEDNAME1','SPECIESID','SPECIESNAME',
     'WEBSITEIMAGECOUNT','WebsiteImageCount','WEBSITEIMAGES','ANIMALCOMMENTS','WEBSITEMEDIANOTES','DESCRIPTION','ANIMALDESCRIPTION','IsGoodWithCatsName','IsGoodWithDogsName','IsGoodWithChildrenName','ISGOODWITHCATSNAME','ISGOODWITHDOGSNAME','ISGOODWITHCHILDRENNAME','GOODWITHCATSNAME','GOODWITHDOGSNAME','GOODWITHCHILDRENNAME','GOODWITHCATS','GOODWITHDOGS','GOODWITHCHILDREN','GOOD_WITH_CATS','GOOD_WITH_DOGS','GOOD_WITH_CHILDREN','GoodWithCats','GoodWithDogs','GoodWithChildren','HasSpecialNeeds','HASSPECIALNEEDS','SPECIALNEEDS','SPECIAL_NEEDS','SpecialNeeds','SPECIALNEEDSNAME',
     'ACTIVEMOVEMENTDATE','MOSTRECENTADOPTIONDATE','ADOPTIONDATE','DATEADOPTED','MOVEMENTDATE','AnimalID','AnimalName','ShelterCode','AnimalAge','SexName','Sex','BreedName','BreedName1','SpeciesID','SpeciesName','WebsiteImageCount','WebsiteImages','ActiveMovementDate','MostRecentAdoptionDate','AdoptionDate','DateAdopted','MovementDate',
     'AGE_MONTHS','AGE_BAND'
   ];
-  $out = ss_filter_allowed_keys($row, $allowed);
-  ss_custom_api_ensure_field($out, $row, 'ID', ['id','animal_id','animalid','AnimalID','ANIMALID']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALID', ['animal_id','animalid','id','AnimalID','ID']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALNAME', ['animal_name','animalname','name','Name','AnimalName']);
-  ss_custom_api_ensure_field($out, $row, 'CODE', ['code','shelter_code','sheltercode','ShelterCode']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALAGE', ['animal_age','age','age_text','AnimalAge']);
-  ss_custom_api_ensure_field($out, $row, 'SEXNAME', ['sex_name','sex','gender','SexName','SEX']);
-  ss_custom_api_ensure_field($out, $row, 'BREEDNAME', ['breed_name','breed','primary_breed','BreedName','BreedName1']);
-  ss_custom_api_ensure_field($out, $row, 'SPECIESID', ['species_id','speciesid','SpeciesID']);
-  ss_custom_api_ensure_field($out, $row, 'SPECIESNAME', ['species_name','species','SpeciesName']);
-  ss_custom_api_ensure_field($out, $row, 'WEBSITEIMAGECOUNT', ['website_image_count','image_count','photo_count','WebsiteImageCount','WebsiteImages']);
-  ss_custom_api_ensure_field($out, $row, 'ANIMALCOMMENTS', ['animal_comments','description','bio','story','AnimalComments']);
-  ss_custom_api_ensure_field($out, $row, 'MOVEMENTDATE', ['movement_date','adoption_date','date_adopted','adopted_at','MovementDate','AdoptionDate','DateAdopted']);
-  ss_suite_apply_field_map($out, $row);
-  $age_months = $row['AGE_MONTHS'] ?? $row['age_months'] ?? ss_asm_age_to_months(ss_custom_api_first_value($row, ['ANIMALAGE','AnimalAge','animal_age','age','age_text'], ''));
+  $out = plugin_filter_allowed_keys($row, $allowed);
+  plugin_custom_api_ensure_field($out, $row, 'ID', ['id','animal_id','animalid','AnimalID','ANIMALID']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALID', ['animal_id','animalid','id','AnimalID','ID']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALNAME', ['animal_name','animalname','name','Name','AnimalName']);
+  plugin_custom_api_ensure_field($out, $row, 'CODE', ['code','shelter_code','sheltercode','ShelterCode']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALAGE', ['animal_age','age','age_text','AnimalAge']);
+  plugin_custom_api_ensure_field($out, $row, 'SEXNAME', ['sex_name','sex','gender','SexName','SEX']);
+  plugin_custom_api_ensure_field($out, $row, 'BREEDNAME', ['breed_name','breed','primary_breed','BreedName','BreedName1']);
+  plugin_custom_api_ensure_field($out, $row, 'SPECIESID', ['species_id','speciesid','SpeciesID']);
+  plugin_custom_api_ensure_field($out, $row, 'SPECIESNAME', ['species_name','species','SpeciesName']);
+  plugin_custom_api_ensure_field($out, $row, 'WEBSITEIMAGECOUNT', ['website_image_count','image_count','photo_count','WebsiteImageCount','WebsiteImages']);
+  plugin_custom_api_ensure_field($out, $row, 'ANIMALCOMMENTS', ['animal_comments','description','bio','story','AnimalComments']);
+  plugin_custom_api_ensure_field($out, $row, 'MOVEMENTDATE', ['movement_date','adoption_date','date_adopted','adopted_at','MovementDate','AdoptionDate','DateAdopted']);
+  plugin_suite_apply_field_map($out, $row);
+  $age_months = $row['AGE_MONTHS'] ?? $row['age_months'] ?? plugin_asm_age_to_months(plugin_custom_api_first_value($row, ['ANIMALAGE','AnimalAge','animal_age','age','age_text'], ''));
   if ($age_months !== null && $age_months !== '') {
     $out['AGE_MONTHS'] = (int)$age_months;
-    $out['AGE_BAND'] = $row['AGE_BAND'] ?? $row['age_band'] ?? ss_asm_age_band_from_months((int)$age_months);
+    $out['AGE_BAND'] = $row['AGE_BAND'] ?? $row['age_band'] ?? plugin_asm_age_band_from_months((int)$age_months);
   }
   return $out;
 }
 
-function ss_custom_api_adoptables() {
-  $cfg = ss_custom_api_config();
+function plugin_custom_api_adoptables() {
+  $cfg = plugin_custom_api_config();
   $query = $cfg['api_key'] !== '' ? ['api_key' => $cfg['api_key']] : [];
-  $cache_key = 'ss_custom_api_adoptables_v2_' . md5($cfg['adoptables_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+  $cache_key = 'plugin_custom_api_adoptables_v2_' . md5($cfg['adoptables_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
-  $res = ss_custom_api_request($cfg['adoptables_url'], $query);
-  if (is_wp_error($res)) return ss_suite_response_or_last_good($cache_key, $res);
+  $res = plugin_custom_api_request($cfg['adoptables_url'], $query);
+  if (is_wp_error($res)) return plugin_suite_response_or_last_good($cache_key, $res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
-  if (!is_array($data)) return ss_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500));
-  $data = ss_custom_api_extract_items($data, 'adoptables');
-  $filtered = array_values(array_map('ss_custom_api_normalize_adoptable', array_filter($data, 'is_array')));
-  ss_suite_last_good_set($cache_key, $filtered);
-  ss_suite_cache_set($cache_key, $filtered, ss_suite_cache_ttl('cache_adoptables_seconds', 60));
+  if (!is_array($data)) return plugin_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500));
+  $data = plugin_custom_api_extract_items($data, 'adoptables');
+  $filtered = array_values(array_map('plugin_custom_api_normalize_adoptable', array_filter($data, 'is_array')));
+  plugin_suite_last_good_set($cache_key, $filtered);
+  plugin_suite_cache_set($cache_key, $filtered, plugin_suite_cache_ttl('cache_adoptables_seconds', 60));
   return rest_ensure_response($filtered);
 }
 
-function ss_custom_api_adoptions(WP_REST_Request $req) {
-  $cfg = ss_custom_api_config();
+function plugin_custom_api_adoptions(WP_REST_Request $req) {
+  $cfg = plugin_custom_api_config();
   $query = [];
   foreach (['speciesid','year','years'] as $key) {
     $val = $req->get_param($key);
     if ($val !== null && $val !== '') $query[$key] = $val;
   }
   if ($cfg['api_key'] !== '') $query['api_key'] = $cfg['api_key'];
-  $cache_key = 'ss_custom_api_adoptions_v2_' . md5($cfg['adoptions_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+  $cache_key = 'plugin_custom_api_adoptions_v2_' . md5($cfg['adoptions_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
-  $res = ss_custom_api_request($cfg['adoptions_url'], $query);
-  if (is_wp_error($res)) return ss_suite_response_or_last_good($cache_key, $res);
+  $res = plugin_custom_api_request($cfg['adoptions_url'], $query);
+  if (is_wp_error($res)) return plugin_suite_response_or_last_good($cache_key, $res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
-  if (!is_array($data)) return ss_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500));
-  $data = ss_custom_api_extract_items($data, 'adoptions');
-  $filtered = array_values(array_map('ss_custom_api_normalize_adoption', array_filter($data, 'is_array')));
-  ss_suite_last_good_set($cache_key, $filtered);
-  ss_suite_cache_set($cache_key, $filtered, ss_suite_cache_ttl('cache_adoptions_seconds', 300));
+  if (!is_array($data)) return plugin_suite_response_or_last_good($cache_key, new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500));
+  $data = plugin_custom_api_extract_items($data, 'adoptions');
+  $filtered = array_values(array_map('plugin_custom_api_normalize_adoption', array_filter($data, 'is_array')));
+  plugin_suite_last_good_set($cache_key, $filtered);
+  plugin_suite_cache_set($cache_key, $filtered, plugin_suite_cache_ttl('cache_adoptions_seconds', 300));
   return rest_ensure_response($filtered);
 }
 
-function ss_custom_api_report(WP_REST_Request $req) {
-  $cfg = ss_custom_api_config();
+function plugin_custom_api_report(WP_REST_Request $req) {
+  $cfg = plugin_custom_api_config();
   $title = trim((string)$req->get_param('title'));
   if ($title === '') return new WP_REST_Response(['error' => 'title required'], 400);
   $query = ['title' => $title];
   if ($cfg['api_key'] !== '') $query['api_key'] = $cfg['api_key'];
-  $cache_key = 'ss_custom_api_report_v2_' . md5($cfg['report_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+  $cache_key = 'plugin_custom_api_report_v2_' . md5($cfg['report_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
   if (empty($cfg['report_url'])) {
-    $fallback = ss_suite_fallback_report('custom_api', $title, $req);
+    $fallback = plugin_suite_fallback_report('custom_api', $title, $req);
     if ($fallback !== null) {
-      ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+      plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
       return rest_ensure_response($fallback);
     }
   }
-  $res = ss_custom_api_request($cfg['report_url'], $query);
+  $res = plugin_custom_api_request($cfg['report_url'], $query);
   if (is_wp_error($res)) {
-    $fallback = ss_suite_fallback_report('custom_api', $title, $req);
+    $fallback = plugin_suite_fallback_report('custom_api', $title, $req);
     if ($fallback !== null) {
-      ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+      plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
       return rest_ensure_response($fallback);
     }
-    return ss_asm_error_response($res);
+    return plugin_asm_error_response($res);
   }
   $data = json_decode(wp_remote_retrieve_body($res), true);
   if (!is_array($data)) {
-    $fallback = ss_suite_fallback_report('custom_api', $title, $req);
+    $fallback = plugin_suite_fallback_report('custom_api', $title, $req);
     if ($fallback !== null) {
-      ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+      plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
       return rest_ensure_response($fallback);
     }
     return new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500);
   }
-  if (!ss_suite_array_is_list($data)) {
-    $items = ss_custom_api_extract_items($data, 'items');
+  if (!plugin_suite_array_is_list($data)) {
+    $items = plugin_custom_api_extract_items($data, 'items');
     if (!empty($items)) $data = $items;
   }
-  ss_suite_cache_set($cache_key, $data, ss_suite_cache_ttl('cache_reports_seconds', 60));
+  plugin_suite_cache_set($cache_key, $data, plugin_suite_cache_ttl('cache_reports_seconds', 60));
   return rest_ensure_response($data);
 }
 
-function ss_custom_api_incare() {
-  $cfg = ss_custom_api_config();
+function plugin_custom_api_incare() {
+  $cfg = plugin_custom_api_config();
   $query = $cfg['api_key'] !== '' ? ['api_key' => $cfg['api_key']] : [];
-  $cache_key = 'ss_custom_api_incare_v2_' . md5($cfg['incare_url'] . '|' . wp_json_encode($query));
-  $cached = ss_suite_cache_get($cache_key);
+  $cache_key = 'plugin_custom_api_incare_v2_' . md5($cfg['incare_url'] . '|' . wp_json_encode($query));
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
-  $res = ss_custom_api_request($cfg['incare_url'], $query);
-  if (is_wp_error($res)) return ss_asm_error_response($res);
+  $res = plugin_custom_api_request($cfg['incare_url'], $query);
+  if (is_wp_error($res)) return plugin_asm_error_response($res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
   if (is_numeric($data)) {
     $count = (int)$data;
   } elseif (is_array($data)) {
-    if (!ss_suite_array_is_list($data)) {
-      $items = ss_custom_api_extract_items($data, 'items');
+    if (!plugin_suite_array_is_list($data)) {
+      $items = plugin_custom_api_extract_items($data, 'items');
       if (isset($items[0]) && is_array($items[0])) $data = $items[0];
     }
     if (isset($data[0]) && is_array($data[0])) $data = $data[0];
@@ -863,12 +863,12 @@ function ss_custom_api_incare() {
     return new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500);
   }
   $out = ['count' => $count];
-  ss_suite_cache_set($cache_key, $out, ss_suite_cache_ttl('cache_incare_seconds', 60));
+  plugin_suite_cache_set($cache_key, $out, plugin_suite_cache_ttl('cache_incare_seconds', 60));
   return rest_ensure_response($out);
 }
 
-function ss_custom_api_image(WP_REST_Request $req) {
-  $cfg = ss_custom_api_config();
+function plugin_custom_api_image(WP_REST_Request $req) {
+  $cfg = plugin_custom_api_config();
   $query = [];
   foreach (['animalid','seq'] as $key) {
     $val = $req->get_param($key);
@@ -876,35 +876,35 @@ function ss_custom_api_image(WP_REST_Request $req) {
   }
   if (!empty($query['animalid']) && empty($query['id'])) $query['id'] = $query['animalid'];
   if ($cfg['api_key'] !== '') $query['api_key'] = $cfg['api_key'];
-  $res = ss_custom_api_request($cfg['image_url'], $query, true);
-  if (is_wp_error($res)) return ss_asm_error_response($res);
+  $res = plugin_custom_api_request($cfg['image_url'], $query, true);
+  if (is_wp_error($res)) return plugin_asm_error_response($res);
   $body = wp_remote_retrieve_body($res);
   $ct = wp_remote_retrieve_header($res, 'content-type');
   if (!is_string($body) || $body === '' || stripos((string)$ct, 'image/') !== 0) return new WP_REST_Response(['error' => 'Image not available'], 404);
-  ss_cache_image_to_uploads($ct, $body, $query['animalid'] ?? ($query['id'] ?? ''), $query['seq'] ?? '1');
-  ss_stream_image_response($ct, $body);
+  plugin_cache_image_to_uploads($ct, $body, $query['animalid'] ?? ($query['id'] ?? ''), $query['seq'] ?? '1');
+  plugin_stream_image_response($ct, $body);
 }
 
-function ss_asm_get_reservations() {
-  $cache_key = 'ss_asm_reservations_v3';
-  $cached = ss_suite_cache_get($cache_key);
+function plugin_asm_get_reservations() {
+  $cache_key = 'plugin_asm_reservations_v3';
+  $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return $cached;
 
-  $res = ss_asm_http_get([
+  $res = plugin_asm_http_get([
     'method'   => 'json_report',
-    'username' => ss_asm_user(),
-    'password' => ss_asm_pass(),
+    'username' => plugin_asm_user(),
+    'password' => plugin_asm_pass(),
     'title'    => 'Active Reservations Proxy',
   ]);
 
   if (is_wp_error($res)) {
-    ss_suite_cache_set($cache_key, [], ss_suite_cache_ttl('cache_reports_seconds', 60));
+    plugin_suite_cache_set($cache_key, [], plugin_suite_cache_ttl('cache_reports_seconds', 60));
     return [];
   }
 
   $data = json_decode(wp_remote_retrieve_body($res), true);
   if (!is_array($data)) {
-    ss_suite_cache_set($cache_key, [], ss_suite_cache_ttl('cache_reports_seconds', 60));
+    plugin_suite_cache_set($cache_key, [], plugin_suite_cache_ttl('cache_reports_seconds', 60));
     return [];
   }
 
@@ -916,8 +916,8 @@ function ss_asm_get_reservations() {
     $aid = (int)($row['AID'] ?? $row['aid'] ?? 0);
     if ($aid <= 0) continue;
 
-    $raw_status = ss_asm_pick_report_status_field($row);
-    $statuses = ss_asm_split_statuses($raw_status);
+    $raw_status = plugin_asm_pick_report_status_field($row);
+    $statuses = plugin_asm_split_statuses($raw_status);
     if (empty($statuses)) $statuses = ['Reserved'];
 
     if (!isset($by_animal[$aid])) {
@@ -933,35 +933,35 @@ function ss_asm_get_reservations() {
     }
   }
 
-  ss_suite_cache_set($cache_key, $by_animal, ss_suite_cache_ttl('cache_reports_seconds', 60));
+  plugin_suite_cache_set($cache_key, $by_animal, plugin_suite_cache_ttl('cache_reports_seconds', 60));
   return $by_animal;
 }
 
 add_action('rest_api_init', function () {
 
-  register_rest_route('straysafe/v1', '/adoptables', [
+  register_rest_route('plugin/v1', '/adoptables', [
     'methods' => 'GET',
     'callback' => function() {
-      $source = ss_suite_data_source();
-      if ($source === 'custom_api') return ss_custom_api_adoptables();
-      if (in_array($source, ['shelterluv','petpoint'], true)) return ss_provider_adoptables($source);
+      $source = plugin_suite_data_source();
+      if ($source === 'custom_api') return plugin_custom_api_adoptables();
+      if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_adoptables($source);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
-      $cache_key = 'ss_asm_adoptables_v7';
-      $cached = ss_suite_cache_get($cache_key);
+      $cache_key = 'plugin_asm_adoptables_v7';
+      $cached = plugin_suite_cache_get($cache_key);
       if ($cached !== false) return rest_ensure_response($cached);
 
-      $res = ss_asm_http_get([
+      $res = plugin_asm_http_get([
         'method'   => 'json_adoptable_animals',
-        'username' => ss_asm_user(),
-        'password' => ss_asm_pass(),
+        'username' => plugin_asm_user(),
+        'password' => plugin_asm_pass(),
       ]);
 
-      if (is_wp_error($res)) return ss_asm_error_response($res);
+      if (is_wp_error($res)) return plugin_asm_error_response($res);
 
       $data = json_decode(wp_remote_retrieve_body($res), true);
       if (!is_array($data)) return new WP_REST_Response(['error' => 'Unexpected ASM response'], 500);
 
-      $reservations = ss_asm_get_reservations();
+      $reservations = plugin_asm_get_reservations();
 
       $allowed = [
         'ID','ANIMALID','ANIMALNAME','CODE','ANIMALAGE','SEXNAME','SEX',
@@ -984,10 +984,10 @@ add_action('rest_api_init', function () {
         $aid = (int)($row['ID'] ?? $row['AnimalID'] ?? $row['ANIMALID'] ?? 0);
         $reservation_row = ($aid > 0 && isset($reservations[$aid])) ? $reservations[$aid] : null;
 
-        $age_months = ss_asm_age_to_months($row['ANIMALAGE'] ?? $row['AnimalAge'] ?? '');
+        $age_months = plugin_asm_age_to_months($row['ANIMALAGE'] ?? $row['AnimalAge'] ?? '');
         if ($age_months !== null) {
           $out['AGE_MONTHS'] = $age_months;
-          $out['AGE_BAND'] = ss_asm_age_band_from_months($age_months);
+          $out['AGE_BAND'] = plugin_asm_age_band_from_months($age_months);
         }
 
         if ($reservation_row) {
@@ -1041,18 +1041,18 @@ add_action('rest_api_init', function () {
         return $out;
       }, $data);
 
-      ss_suite_cache_set($cache_key, $filtered, ss_suite_cache_ttl('cache_adoptables_seconds', 60));
+      plugin_suite_cache_set($cache_key, $filtered, plugin_suite_cache_ttl('cache_adoptables_seconds', 60));
       return rest_ensure_response($filtered);
     },
     'permission_callback' => '__return_true',
   ]);
 
-  register_rest_route('straysafe/v1', '/report', [
+  register_rest_route('plugin/v1', '/report', [
     'methods' => 'GET',
     'callback' => function(WP_REST_Request $req) {
-      $source = ss_suite_data_source();
-      if ($source === 'custom_api') return ss_custom_api_report($req);
-      if (in_array($source, ['shelterluv','petpoint'], true)) return ss_provider_report($source, $req);
+      $source = plugin_suite_data_source();
+      if ($source === 'custom_api') return plugin_custom_api_report($req);
+      if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_report($source, $req);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
       $title = trim((string)$req->get_param('title'));
       if ($title === '') return new WP_REST_Response(['error' => 'title required'], 400);
@@ -1062,61 +1062,61 @@ add_action('rest_api_init', function () {
         return new WP_REST_Response(['error' => 'Report not allowed'], 403);
       }
 
-      $cache_key = 'ss_asm_report_' . md5($title);
-      $cached = ss_suite_cache_get($cache_key);
+      $cache_key = 'plugin_asm_report_' . md5($title);
+      $cached = plugin_suite_cache_get($cache_key);
       if ($cached !== false) return rest_ensure_response($cached);
 
-      $res = ss_asm_http_get([
+      $res = plugin_asm_http_get([
         'method'   => 'json_report',
-        'username' => ss_asm_user(),
-        'password' => ss_asm_pass(),
+        'username' => plugin_asm_user(),
+        'password' => plugin_asm_pass(),
         'title'    => $title,
       ]);
 
       if (is_wp_error($res)) {
-        $fallback = ss_asm_fallback_report($title, $req);
+        $fallback = plugin_asm_fallback_report($title, $req);
         if ($fallback !== null) {
-          ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+          plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
           return rest_ensure_response($fallback);
         }
-        return ss_asm_error_response($res);
+        return plugin_asm_error_response($res);
       }
 
       $data = json_decode(wp_remote_retrieve_body($res), true);
       if (!is_array($data)) {
-        $fallback = ss_asm_fallback_report($title, $req);
+        $fallback = plugin_asm_fallback_report($title, $req);
         if ($fallback !== null) {
-          ss_suite_cache_set($cache_key, $fallback, ss_suite_cache_ttl('cache_reports_seconds', 60));
+          plugin_suite_cache_set($cache_key, $fallback, plugin_suite_cache_ttl('cache_reports_seconds', 60));
           return rest_ensure_response($fallback);
         }
         return new WP_REST_Response(['error' => 'Unexpected ASM response'], 500);
       }
 
-      ss_suite_cache_set($cache_key, $data, ss_suite_cache_ttl('cache_reports_seconds', 60));
+      plugin_suite_cache_set($cache_key, $data, plugin_suite_cache_ttl('cache_reports_seconds', 60));
       return rest_ensure_response($data);
     },
     'permission_callback' => '__return_true',
   ]);
 
-  register_rest_route('straysafe/v1', '/in-care-count', [
+  register_rest_route('plugin/v1', '/in-care-count', [
     'methods' => 'GET',
     'callback' => function() {
-      $source = ss_suite_data_source();
-      if ($source === 'custom_api') return ss_custom_api_incare();
-      if (in_array($source, ['shelterluv','petpoint'], true)) return ss_provider_incare($source);
+      $source = plugin_suite_data_source();
+      if ($source === 'custom_api') return plugin_custom_api_incare();
+      if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_incare($source);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
-      $cache_key = 'ss_asm_in_care_count_v1';
-      $cached = ss_suite_cache_get($cache_key);
+      $cache_key = 'plugin_asm_in_care_count_v1';
+      $cached = plugin_suite_cache_get($cache_key);
       if ($cached !== false) return rest_ensure_response($cached);
 
-      $res = ss_asm_http_get([
+      $res = plugin_asm_http_get([
         'method'   => 'json_report',
-        'username' => ss_asm_user(),
-        'password' => ss_asm_pass(),
+        'username' => plugin_asm_user(),
+        'password' => plugin_asm_pass(),
         'title'    => 'Cats In Care Now',
       ]);
 
-      if (is_wp_error($res)) return ss_asm_error_response($res);
+      if (is_wp_error($res)) return plugin_asm_error_response($res);
 
       $data = json_decode(wp_remote_retrieve_body($res), true);
       if (!is_array($data) || !isset($data[0]) || !is_array($data[0])) {
@@ -1131,18 +1131,18 @@ add_action('rest_api_init', function () {
 
       $count = is_numeric($raw) ? (int)$raw : 0;
       $out = ['count' => $count];
-      ss_suite_cache_set($cache_key, $out, ss_suite_cache_ttl('cache_incare_seconds', 60));
+      plugin_suite_cache_set($cache_key, $out, plugin_suite_cache_ttl('cache_incare_seconds', 60));
       return rest_ensure_response($out);
     },
     'permission_callback' => '__return_true',
   ]);
 
-  register_rest_route('straysafe/v1', '/adoptions', [
+  register_rest_route('plugin/v1', '/adoptions', [
     'methods' => 'GET',
     'callback' => function(WP_REST_Request $req) {
-      $source = ss_suite_data_source();
-      if ($source === 'custom_api') return ss_custom_api_adoptions($req);
-      if (in_array($source, ['shelterluv','petpoint'], true)) return ss_provider_adoptions($source, $req);
+      $source = plugin_suite_data_source();
+      if ($source === 'custom_api') return plugin_custom_api_adoptions($req);
+      if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_adoptions($source, $req);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
       $speciesid = (int) $req->get_param('speciesid');
       $year      = (int) $req->get_param('year');
@@ -1164,14 +1164,14 @@ add_action('rest_api_init', function () {
       ];
 
       foreach ($ranges as $try) {
-        $cache_key = 'ss_asm_adoptions_v2_' . md5($try['label'].'|'.$try['fromdate'].'|'.$try['todate'].'|sid:' . ($speciesid ?: 0));
-        $cached = ss_suite_cache_get($cache_key);
+        $cache_key = 'plugin_asm_adoptions_v2_' . md5($try['label'].'|'.$try['fromdate'].'|'.$try['todate'].'|sid:' . ($speciesid ?: 0));
+        $cached = plugin_suite_cache_get($cache_key);
         if ($cached !== false) return rest_ensure_response($cached);
 
-        $res = ss_asm_http_get([
+        $res = plugin_asm_http_get([
           'method'   => 'json_adopted_animals',
-          'username' => ss_asm_user(),
-          'password' => ss_asm_pass(),
+          'username' => plugin_asm_user(),
+          'password' => plugin_asm_pass(),
           'fromdate' => $try['fromdate'],
           'todate'   => $try['todate'],
         ]);
@@ -1220,15 +1220,15 @@ add_action('rest_api_init', function () {
           foreach ($allowed as $k) {
             if (array_key_exists($k, $row)) $out[$k] = $row[$k];
           }
-          $age_months = ss_asm_age_to_months($row['ANIMALAGE'] ?? $row['AnimalAge'] ?? '');
+          $age_months = plugin_asm_age_to_months($row['ANIMALAGE'] ?? $row['AnimalAge'] ?? '');
           if ($age_months !== null) {
             $out['AGE_MONTHS'] = $age_months;
-            $out['AGE_BAND'] = ss_asm_age_band_from_months($age_months);
+            $out['AGE_BAND'] = plugin_asm_age_band_from_months($age_months);
           }
           return $out;
         }, $data);
 
-        ss_suite_cache_set($cache_key, $filtered, ss_suite_cache_ttl('cache_adoptions_seconds', 300));
+        plugin_suite_cache_set($cache_key, $filtered, plugin_suite_cache_ttl('cache_adoptions_seconds', 300));
         return rest_ensure_response($filtered);
       }
 
@@ -1240,12 +1240,12 @@ add_action('rest_api_init', function () {
     'permission_callback' => '__return_true',
   ]);
 
-  register_rest_route('straysafe/v1', '/animal-image', [
+  register_rest_route('plugin/v1', '/animal-image', [
     'methods' => 'GET',
     'callback' => function(WP_REST_Request $req) {
-      $source = ss_suite_data_source();
-      if ($source === 'custom_api') return ss_custom_api_image($req);
-      if (in_array($source, ['shelterluv','petpoint'], true)) return ss_provider_image($source, $req);
+      $source = plugin_suite_data_source();
+      if ($source === 'custom_api') return plugin_custom_api_image($req);
+      if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_image($source, $req);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
       $animalid = preg_replace('/\D+/', '', (string) $req->get_param('animalid'));
       $raw_seq  = $req->get_param('seq');
@@ -1263,7 +1263,7 @@ add_action('rest_api_init', function () {
       $last_debug = null;
 
       foreach ($seqs_to_try as $s) {
-        $img = ss_fetch_asm_image($animalid, (string)$s, $last_debug);
+        $img = plugin_fetch_asm_image($animalid, (string)$s, $last_debug);
         if ($img && isset($img['ct']) && isset($img['body'])) {
           if ($debug) {
             return rest_ensure_response([
@@ -1277,8 +1277,8 @@ add_action('rest_api_init', function () {
               'attempt_info' => $last_debug,
             ]);
           }
-          ss_cache_image_to_uploads($img['ct'], $img['body'], $animalid, (string)$s);
-          ss_stream_image_response($img['ct'], $img['body']);
+          plugin_cache_image_to_uploads($img['ct'], $img['body'], $animalid, (string)$s);
+          plugin_stream_image_response($img['ct'], $img['body']);
         }
       }
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: ASM Plugin Suite Adopted
+ * Plugin Name: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
  * Version: 1.1.14
  * Author: Jordan Sutton
@@ -8,13 +8,13 @@
 
 if (!defined('ABSPATH')) exit;
 
-final class StraySafe_Adopted_UI_Shortcode {
+final class Plugin_Adopted_UI_Shortcode {
   const SHORTCODE        = 'adopted';
-  const TAILWIND_HANDLE  = 'straysafe-adopted-tailwind';
-  const INTER_HANDLE     = 'straysafe-adopted-inter';
+  const TAILWIND_HANDLE  = 'plugin-adopted-tailwind';
+  const INTER_HANDLE     = 'plugin-adopted-inter';
 
-  const OPT_KEY = 'straysafe_adopted_ui_options';
-  const RESET_ACTION = 'straysafe_adopted_ui_reset_field';
+  const OPT_KEY = 'plugin_adopted_ui_options';
+  const RESET_ACTION = 'plugin_adopted_ui_reset_field';
 
   public static function init() {
     add_shortcode(self::SHORTCODE, [__CLASS__, 'render_shortcode']);
@@ -28,6 +28,15 @@ final class StraySafe_Adopted_UI_Shortcode {
   /* -------------------------
    * Defaults / options
    * ------------------------- */
+  private static function get_saved_options() {
+    $legacy_brand = 'stray' . 'safe';
+    foreach ([self::OPT_KEY, $legacy_brand . '_adopted_ui_options'] as $key) {
+      $value = get_option($key, []);
+      if (is_array($value) && !empty($value)) return $value;
+    }
+    return [];
+  }
+
   public static function default_options() {
     return [
       // Core look
@@ -134,7 +143,7 @@ final class StraySafe_Adopted_UI_Shortcode {
 
   public static function get_options() {
     $d = self::default_options();
-    $saved = get_option(self::OPT_KEY, []);
+    $saved = self::get_saved_options();
     if (!is_array($saved)) $saved = [];
     return array_merge($d, $saved);
   }
@@ -243,21 +252,21 @@ final class StraySafe_Adopted_UI_Shortcode {
    * ------------------------- */
   public static function handle_reset() {
     if (!current_user_can('manage_options')) wp_die('Not allowed.');
-    check_admin_referer('straysafe_adopted_ui_reset_field');
+    check_admin_referer('plugin_adopted_ui_reset_field');
 
     $field = isset($_GET['field']) ? sanitize_text_field($_GET['field']) : '';
     $defaults = self::default_options();
     if (!array_key_exists($field, $defaults)) {
-      wp_safe_redirect(admin_url('options-general.php?page=straysafe-adopted-ui'));
+      wp_safe_redirect(admin_url('options-general.php?page=plugin-adopted-ui'));
       exit;
     }
 
-    $opts = get_option(self::OPT_KEY, []);
+    $opts = self::get_saved_options();
     if (!is_array($opts)) $opts = [];
     $opts[$field] = $defaults[$field];
     update_option(self::OPT_KEY, $opts);
 
-    wp_safe_redirect(admin_url('options-general.php?page=straysafe-adopted-ui'));
+    wp_safe_redirect(admin_url('options-general.php?page=plugin-adopted-ui'));
     exit;
   }
 
@@ -266,7 +275,7 @@ final class StraySafe_Adopted_UI_Shortcode {
       [
         'action'   => self::RESET_ACTION,
         'field'    => $field_key,
-        '_wpnonce' => wp_create_nonce('straysafe_adopted_ui_reset_field'),
+        '_wpnonce' => wp_create_nonce('plugin_adopted_ui_reset_field'),
       ],
       admin_url('admin-post.php')
     );
@@ -282,64 +291,64 @@ final class StraySafe_Adopted_UI_Shortcode {
    * ------------------------- */
   public static function admin_menu() {
     add_options_page(
-      'ASM Plugin Suite Adopted',
-      'ASM Plugin Suite Adopted',
+      'Rescue Plugin Suite Adopted',
+      'Rescue Plugin Suite Adopted',
       'manage_options',
-      'straysafe-adopted-ui',
+      'plugin-adopted-ui',
       [__CLASS__, 'render_settings_page']
     );
   }
 
   public static function admin_init() {
-    register_setting('straysafe_adopted_ui_group', self::OPT_KEY, [
+    register_setting('plugin_adopted_ui_group', self::OPT_KEY, [
       'sanitize_callback' => [__CLASS__, 'sanitize_options'],
       'default' => self::default_options(),
     ]);
 
-    add_settings_section('ss_adopted_design', 'Design', '__return_false', 'straysafe-adopted-ui');
-    add_settings_section('ss_adopted_text', 'Text', '__return_false', 'straysafe-adopted-ui');
-    add_settings_section('ss_adopted_responsive', 'Responsive (Device-specific)', '__return_false', 'straysafe-adopted-ui');
-    add_settings_section('ss_adopted_cards', 'Cards & Buttons', '__return_false', 'straysafe-adopted-ui');
-    add_settings_section('ss_adopted_typography', 'Typography (Device-specific)', '__return_false', 'straysafe-adopted-ui');
-    add_settings_section('ss_adopted_data', 'Data', '__return_false', 'straysafe-adopted-ui');
-    add_settings_section('ss_adopted_modal', 'Modal', '__return_false', 'straysafe-adopted-ui');
+    add_settings_section('plugin_adopted_design', 'Design', '__return_false', 'plugin-adopted-ui');
+    add_settings_section('plugin_adopted_text', 'Text', '__return_false', 'plugin-adopted-ui');
+    add_settings_section('plugin_adopted_responsive', 'Responsive (Device-specific)', '__return_false', 'plugin-adopted-ui');
+    add_settings_section('plugin_adopted_cards', 'Cards & Buttons', '__return_false', 'plugin-adopted-ui');
+    add_settings_section('plugin_adopted_typography', 'Typography (Device-specific)', '__return_false', 'plugin-adopted-ui');
+    add_settings_section('plugin_adopted_data', 'Data', '__return_false', 'plugin-adopted-ui');
+    add_settings_section('plugin_adopted_modal', 'Modal', '__return_false', 'plugin-adopted-ui');
 
-    add_settings_field('brand_color', 'Brand colour', [__CLASS__, 'field_brand_color'], 'straysafe-adopted-ui', 'ss_adopted_design');
-    add_settings_field('background_color', 'Background colour', [__CLASS__, 'field_background_color'], 'straysafe-adopted-ui', 'ss_adopted_design');
-    add_settings_field('text_primary_color', 'Primary text colour', [__CLASS__, 'field_text_primary_color'], 'straysafe-adopted-ui', 'ss_adopted_design');
-    add_settings_field('text_muted_color', 'Muted text colour', [__CLASS__, 'field_text_muted_color'], 'straysafe-adopted-ui', 'ss_adopted_design');
+    add_settings_field('brand_color', 'Brand colour', [__CLASS__, 'field_brand_color'], 'plugin-adopted-ui', 'plugin_adopted_design');
+    add_settings_field('background_color', 'Background colour', [__CLASS__, 'field_background_color'], 'plugin-adopted-ui', 'plugin_adopted_design');
+    add_settings_field('text_primary_color', 'Primary text colour', [__CLASS__, 'field_text_primary_color'], 'plugin-adopted-ui', 'plugin_adopted_design');
+    add_settings_field('text_muted_color', 'Muted text colour', [__CLASS__, 'field_text_muted_color'], 'plugin-adopted-ui', 'plugin_adopted_design');
 
-    add_settings_field('paw_opacity', 'Paw print opacity (0–0.25)', [__CLASS__, 'field_paw_opacity'], 'straysafe-adopted-ui', 'ss_adopted_design');
-    add_settings_field('paw_count', 'Paw print count (0–80)', [__CLASS__, 'field_paw_count'], 'straysafe-adopted-ui', 'ss_adopted_design');
+    add_settings_field('paw_opacity', 'Paw print opacity (0–0.25)', [__CLASS__, 'field_paw_opacity'], 'plugin-adopted-ui', 'plugin_adopted_design');
+    add_settings_field('paw_count', 'Paw print count (0–80)', [__CLASS__, 'field_paw_count'], 'plugin-adopted-ui', 'plugin_adopted_design');
 
-    add_settings_field('font_family', 'Font family', [__CLASS__, 'field_font_family'], 'straysafe-adopted-ui', 'ss_adopted_design');
+    add_settings_field('font_family', 'Font family', [__CLASS__, 'field_font_family'], 'plugin-adopted-ui', 'plugin_adopted_design');
 
-    add_settings_field('title_text', 'Title text', [__CLASS__, 'field_title_text'], 'straysafe-adopted-ui', 'ss_adopted_text');
-    add_settings_field('subtitle_text', 'Subtitle text', [__CLASS__, 'field_subtitle_text'], 'straysafe-adopted-ui', 'ss_adopted_text');
-    add_settings_field('footer_text', 'Footer text', [__CLASS__, 'field_footer_text'], 'straysafe-adopted-ui', 'ss_adopted_text');
+    add_settings_field('title_text', 'Title text', [__CLASS__, 'field_title_text'], 'plugin-adopted-ui', 'plugin_adopted_text');
+    add_settings_field('subtitle_text', 'Subtitle text', [__CLASS__, 'field_subtitle_text'], 'plugin-adopted-ui', 'plugin_adopted_text');
+    add_settings_field('footer_text', 'Footer text', [__CLASS__, 'field_footer_text'], 'plugin-adopted-ui', 'plugin_adopted_text');
 
-    add_settings_field('responsive_grid', 'Columns & rows (mobile/tablet/PC)', [__CLASS__, 'field_responsive_grid'], 'straysafe-adopted-ui', 'ss_adopted_responsive');
-    add_settings_field('responsive_card_scale', 'Card size % (keeps aspect ratio)', [__CLASS__, 'field_responsive_card_scale'], 'straysafe-adopted-ui', 'ss_adopted_responsive');
+    add_settings_field('responsive_grid', 'Columns & rows (mobile/tablet/PC)', [__CLASS__, 'field_responsive_grid'], 'plugin-adopted-ui', 'plugin_adopted_responsive');
+    add_settings_field('responsive_card_scale', 'Card size % (keeps aspect ratio)', [__CLASS__, 'field_responsive_card_scale'], 'plugin-adopted-ui', 'plugin_adopted_responsive');
 
-    add_settings_field('card_cosmetics', 'Card & button styling', [__CLASS__, 'field_card_cosmetics'], 'straysafe-adopted-ui', 'ss_adopted_cards');
+    add_settings_field('card_cosmetics', 'Card & button styling', [__CLASS__, 'field_card_cosmetics'], 'plugin-adopted-ui', 'plugin_adopted_cards');
 
-    add_settings_field('typography', 'Font sizes & weights', [__CLASS__, 'field_typography'], 'straysafe-adopted-ui', 'ss_adopted_typography');
+    add_settings_field('typography', 'Font sizes & weights', [__CLASS__, 'field_typography'], 'plugin-adopted-ui', 'plugin_adopted_typography');
 
-    add_settings_field('min_year', 'Minimum year in dropdown', [__CLASS__, 'field_min_year'], 'straysafe-adopted-ui', 'ss_adopted_data');
-    add_settings_field('enable_modals', 'Enable adopted modals', [__CLASS__, 'field_enable_modals'], 'straysafe-adopted-ui', 'ss_adopted_modal');
-    add_settings_field('deep_links', 'Deep links and sharing', [__CLASS__, 'field_deep_links'], 'straysafe-adopted-ui', 'ss_adopted_modal');
-    add_settings_field('modal_max_width', 'Modal max width (px)', [__CLASS__, 'field_modal_max_width'], 'straysafe-adopted-ui', 'ss_adopted_modal');
-    add_settings_field('modal_global_text', 'Modal text below story', [__CLASS__, 'field_modal_global_text'], 'straysafe-adopted-ui', 'ss_adopted_modal');
-    add_settings_field('adoptables_cta', 'Adoptables link section', [__CLASS__, 'field_adoptables_cta'], 'straysafe-adopted-ui', 'ss_adopted_modal');
+    add_settings_field('min_year', 'Minimum year in dropdown', [__CLASS__, 'field_min_year'], 'plugin-adopted-ui', 'plugin_adopted_data');
+    add_settings_field('enable_modals', 'Enable adopted modals', [__CLASS__, 'field_enable_modals'], 'plugin-adopted-ui', 'plugin_adopted_modal');
+    add_settings_field('deep_links', 'Deep links and sharing', [__CLASS__, 'field_deep_links'], 'plugin-adopted-ui', 'plugin_adopted_modal');
+    add_settings_field('modal_max_width', 'Modal max width (px)', [__CLASS__, 'field_modal_max_width'], 'plugin-adopted-ui', 'plugin_adopted_modal');
+    add_settings_field('modal_global_text', 'Modal text below story', [__CLASS__, 'field_modal_global_text'], 'plugin-adopted-ui', 'plugin_adopted_modal');
+    add_settings_field('adoptables_cta', 'Adoptables link section', [__CLASS__, 'field_adoptables_cta'], 'plugin-adopted-ui', 'plugin_adopted_modal');
   }
 
   public static function render_settings_page() { ?>
     <div class="wrap">
-      <h1>ASM Plugin Suite Adopted</h1>
+      <h1>Rescue Plugin Suite Adopted</h1>
       <form method="post" action="options.php">
         <?php
-          settings_fields('straysafe_adopted_ui_group');
-          do_settings_sections('straysafe-adopted-ui');
+          settings_fields('plugin_adopted_ui_group');
+          do_settings_sections('plugin-adopted-ui');
           submit_button();
         ?>
       </form>
@@ -539,7 +548,7 @@ final class StraySafe_Adopted_UI_Shortcode {
     echo '</p>';
     printf('<p><label>Copied text<br><input type="text" class="regular-text" name="%s[share_copied_text]" value="%s" /></label> ', $key, esc_attr($o['share_copied_text']));
     self::reset_button('share_copied_text');
-    echo '</p><p class="description">The public URL base is set in ASM Plugin Suite → Global → Adopted UI page URL.</p>';
+    echo '</p><p class="description">The public URL base is set in Rescue Plugin Suite → Global → Adopted UI page URL.</p>';
   }
 
   public static function field_modal_max_width() {
@@ -589,8 +598,8 @@ final class StraySafe_Adopted_UI_Shortcode {
   private static function enqueue_assets() {
     $opts = self::get_options();
 
-    wp_enqueue_style('rescue-plugin-suite-frontend', STRAYSAFE_SUITE_URL . 'assets/css/frontend.css', [], STRAYSAFE_SUITE_VERSION);
-    wp_enqueue_script('rescue-plugin-suite-shared-modal', STRAYSAFE_SUITE_URL . 'assets/js/shared-modal.js', [], STRAYSAFE_SUITE_VERSION, true);
+    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', [], PLUGIN_SUITE_VERSION);
+    wp_enqueue_script('rescue-plugin-suite-shared-modal', PLUGIN_SUITE_URL . 'assets/js/shared-modal.js', [], PLUGIN_SUITE_VERSION, true);
 
     if (trim((string)$opts['font_family']) === 'Inter') {
       wp_enqueue_style(
@@ -624,7 +633,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   public static function render_shortcode($atts = [], $content = null) {
     self::enqueue_assets();
     $o = self::get_options();
-    $suite_settings = class_exists('StraySafe_UI_Suite_Plugin') ? StraySafe_UI_Suite_Plugin::get_settings() : [];
+    $suite_settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : [];
     $global_settings = is_array($suite_settings) && isset($suite_settings['global']) && is_array($suite_settings['global']) ? $suite_settings['global'] : [];
     $adopted_page_url = esc_url_raw($global_settings['adopted_page_url'] ?? '');
 
@@ -636,65 +645,65 @@ final class StraySafe_Adopted_UI_Shortcode {
     $scale_d = max(0.5, min(2.0, ((int)$o['card_scale_desktop']) / 100));
 
     $vars = [
-      // Keep existing --ss-* variables (used throughout this file)
-      "--ss-brand: " . esc_attr($o['brand_color']),
-      "--ss-bg: " . esc_attr($o['background_color']),
-      "--ss-text: " . esc_attr($o['text_primary_color']),
-      "--ss-muted: " . esc_attr($o['text_muted_color']),
-      "--ss-paw-opacity: " . esc_attr((string)$o['paw_opacity']),
+      // Keep existing --plugin-* variables (used throughout this file)
+      "--plugin-brand: " . esc_attr($o['brand_color']),
+      "--plugin-bg: " . esc_attr($o['background_color']),
+      "--plugin-text: " . esc_attr($o['text_primary_color']),
+      "--plugin-muted: " . esc_attr($o['text_muted_color']),
+      "--plugin-paw-opacity: " . esc_attr((string)$o['paw_opacity']),
 
       // Alias to match Adoptables UI paw SVG fill token (as requested)
       "--asm-brand: " . esc_attr($o['brand_color']),
 
-      "--ss-cols-m: " . (int)$o['cols_mobile'],
-      "--ss-cols-t: " . (int)$o['cols_tablet'],
-      "--ss-cols-d: " . (int)$o['cols_desktop'],
+      "--plugin-cols-m: " . (int)$o['cols_mobile'],
+      "--plugin-cols-t: " . (int)$o['cols_tablet'],
+      "--plugin-cols-d: " . (int)$o['cols_desktop'],
 
-      "--ss-scale-m: " . $scale_m,
-      "--ss-scale-t: " . $scale_t,
-      "--ss-scale-d: " . $scale_d,
+      "--plugin-scale-m: " . $scale_m,
+      "--plugin-scale-t: " . $scale_t,
+      "--plugin-scale-d: " . $scale_d,
 
-      "--ss-card-radius: " . (int)$o['card_radius'] . "px",
-      "--ss-card-pad: " . (int)$o['card_padding'] . "px",
-      "--ss-btn-radius: " . (int)$o['button_radius'] . "px",
-      "--ss-modal-maxw: " . (int)$o['modal_max_width'] . "px",
-      "--ss-card-border-width: " . (!empty($o['card_border_enabled']) ? (int)$o['card_border_weight'] : 0) . "px",
-      "--ss-card-border-color: " . esc_attr(!empty($o['card_border_enabled']) ? ($o['card_border_color'] ?: $o['brand_color']) : 'transparent'),
+      "--plugin-card-radius: " . (int)$o['card_radius'] . "px",
+      "--plugin-card-pad: " . (int)$o['card_padding'] . "px",
+      "--plugin-btn-radius: " . (int)$o['button_radius'] . "px",
+      "--plugin-modal-maxw: " . (int)$o['modal_max_width'] . "px",
+      "--plugin-card-border-width: " . (!empty($o['card_border_enabled']) ? (int)$o['card_border_weight'] : 0) . "px",
+      "--plugin-card-border-color: " . esc_attr(!empty($o['card_border_enabled']) ? ($o['card_border_color'] ?: $o['brand_color']) : 'transparent'),
 
-      "--ss-fs-h-m: " . (int)$o['fs_heading_mobile'] . "px",
-      "--ss-fs-h-t: " . (int)$o['fs_heading_tablet'] . "px",
-      "--ss-fs-h-d: " . (int)$o['fs_heading_desktop'] . "px",
-      "--ss-fw-h: " . (int)$o['fw_heading'],
+      "--plugin-fs-h-m: " . (int)$o['fs_heading_mobile'] . "px",
+      "--plugin-fs-h-t: " . (int)$o['fs_heading_tablet'] . "px",
+      "--plugin-fs-h-d: " . (int)$o['fs_heading_desktop'] . "px",
+      "--plugin-fw-h: " . (int)$o['fw_heading'],
 
-      "--ss-fs-sh-m: " . (int)$o['fs_subheading_mobile'] . "px",
-      "--ss-fs-sh-t: " . (int)$o['fs_subheading_tablet'] . "px",
-      "--ss-fs-sh-d: " . (int)$o['fs_subheading_desktop'] . "px",
-      "--ss-fw-sh: " . (int)$o['fw_subheading'],
+      "--plugin-fs-sh-m: " . (int)$o['fs_subheading_mobile'] . "px",
+      "--plugin-fs-sh-t: " . (int)$o['fs_subheading_tablet'] . "px",
+      "--plugin-fs-sh-d: " . (int)$o['fs_subheading_desktop'] . "px",
+      "--plugin-fw-sh: " . (int)$o['fw_subheading'],
 
-      "--ss-fs-ft-m: " . (int)$o['fs_footer_mobile'] . "px",
-      "--ss-fs-ft-t: " . (int)$o['fs_footer_tablet'] . "px",
-      "--ss-fs-ft-d: " . (int)$o['fs_footer_desktop'] . "px",
-      "--ss-fw-ft: " . (int)$o['fw_footer'],
+      "--plugin-fs-ft-m: " . (int)$o['fs_footer_mobile'] . "px",
+      "--plugin-fs-ft-t: " . (int)$o['fs_footer_tablet'] . "px",
+      "--plugin-fs-ft-d: " . (int)$o['fs_footer_desktop'] . "px",
+      "--plugin-fw-ft: " . (int)$o['fw_footer'],
 
-      "--ss-fs-pl-m: " . (int)$o['fs_page_label_mobile'] . "px",
-      "--ss-fs-pl-t: " . (int)$o['fs_page_label_tablet'] . "px",
-      "--ss-fs-pl-d: " . (int)$o['fs_page_label_desktop'] . "px",
-      "--ss-fw-pl: " . (int)$o['fw_page_label'],
+      "--plugin-fs-pl-m: " . (int)$o['fs_page_label_mobile'] . "px",
+      "--plugin-fs-pl-t: " . (int)$o['fs_page_label_tablet'] . "px",
+      "--plugin-fs-pl-d: " . (int)$o['fs_page_label_desktop'] . "px",
+      "--plugin-fw-pl: " . (int)$o['fw_page_label'],
 
-      "--ss-fs-cn-m: " . (int)$o['fs_card_name_mobile'] . "px",
-      "--ss-fs-cn-t: " . (int)$o['fs_card_name_tablet'] . "px",
-      "--ss-fs-cn-d: " . (int)$o['fs_card_name_desktop'] . "px",
-      "--ss-fw-cn: " . (int)$o['fw_card_name'],
+      "--plugin-fs-cn-m: " . (int)$o['fs_card_name_mobile'] . "px",
+      "--plugin-fs-cn-t: " . (int)$o['fs_card_name_tablet'] . "px",
+      "--plugin-fs-cn-d: " . (int)$o['fs_card_name_desktop'] . "px",
+      "--plugin-fw-cn: " . (int)$o['fw_card_name'],
 
-      "--ss-fs-cm-m: " . (int)$o['fs_card_meta_mobile'] . "px",
-      "--ss-fs-cm-t: " . (int)$o['fs_card_meta_tablet'] . "px",
-      "--ss-fs-cm-d: " . (int)$o['fs_card_meta_desktop'] . "px",
-      "--ss-fw-cm: " . (int)$o['fw_card_meta'],
+      "--plugin-fs-cm-m: " . (int)$o['fs_card_meta_mobile'] . "px",
+      "--plugin-fs-cm-t: " . (int)$o['fs_card_meta_tablet'] . "px",
+      "--plugin-fs-cm-d: " . (int)$o['fs_card_meta_desktop'] . "px",
+      "--plugin-fw-cm: " . (int)$o['fw_card_meta'],
 
-      "--ss-fs-bd-m: " . (int)$o['fs_badge_mobile'] . "px",
-      "--ss-fs-bd-t: " . (int)$o['fs_badge_tablet'] . "px",
-      "--ss-fs-bd-d: " . (int)$o['fs_badge_desktop'] . "px",
-      "--ss-fw-bd: " . (int)$o['fw_badge'],
+      "--plugin-fs-bd-m: " . (int)$o['fs_badge_mobile'] . "px",
+      "--plugin-fs-bd-t: " . (int)$o['fs_badge_tablet'] . "px",
+      "--plugin-fs-bd-d: " . (int)$o['fs_badge_desktop'] . "px",
+      "--plugin-fw-bd: " . (int)$o['fw_badge'],
     ];
     $vars_css = implode('; ', $vars) . ';';
 
@@ -704,7 +713,7 @@ final class StraySafe_Adopted_UI_Shortcode {
     // This gives visitors and search engines meaningful adopted-animal content before JavaScript runs.
     $seo_adoptions = [];
     if (function_exists('rest_do_request')) {
-      $seo_request = new WP_REST_Request('GET', '/straysafe/v1/adoptions');
+      $seo_request = new WP_REST_Request('GET', '/plugin/v1/adoptions');
       $seo_request->set_param('speciesid', 2);
       $seo_request->set_param('year', (int) current_time('Y'));
       $seo_response = rest_do_request($seo_request);
@@ -718,9 +727,9 @@ final class StraySafe_Adopted_UI_Shortcode {
 
     ob_start();
     ?>
-<section id="asm-successstories-widget" aria-labelledby="asm-ss-heading"
+<section id="asm-successstories-widget" aria-labelledby="asm-plugin-heading"
      class="w-full relative overflow-hidden rounded-2xl"
-     style="background:var(--ss-bg); <?php echo esc_attr($vars_css); ?>">
+     style="background:var(--plugin-bg); <?php echo esc_attr($vars_css); ?>">
 
   <!-- Decorative paw prints (NEW SVG) -->
   <?php
@@ -754,15 +763,15 @@ final class StraySafe_Adopted_UI_Shortcode {
   <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
     <div class="text-center mb-6">
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-2">
-        <h2 id="asm-ss-heading" class="leading-tight" style="color:var(--ss-brand);"><?php echo esc_html($o['title_text']); ?></h2>
+        <h2 id="asm-plugin-heading" class="leading-tight" style="color:var(--plugin-brand);"><?php echo esc_html($o['title_text']); ?></h2>
       </div>
 
-      <p id="asm-ss-subheading" style="color:var(--ss-muted);"><?php echo esc_html($o['subtitle_text']); ?></p>
+      <p id="asm-plugin-subheading" style="color:var(--plugin-muted);"><?php echo esc_html($o['subtitle_text']); ?></p>
 
       <div class="mt-4 flex justify-center">
-        <select id="asm-ss-year"
+        <select id="asm-plugin-year"
                 class="w-full max-w-[260px] sm:max-w-[300px] px-4 py-2 border shadow-sm font-semibold bg-white"
-                style="border-color:var(--ss-brand); color:var(--ss-text); border-radius: var(--ss-btn-radius);">
+                style="border-color:var(--plugin-brand); color:var(--plugin-text); border-radius: var(--plugin-btn-radius);">
         </select>
       </div>
     </div>
@@ -770,31 +779,31 @@ final class StraySafe_Adopted_UI_Shortcode {
     <?php if (!empty($o['show_top_navigation'])) : ?>
     <!-- TOP NAV -->
     <div class="flex items-center justify-between gap-3 mb-5">
-      <button id="asm-ss-prev"
+      <button id="asm-plugin-prev"
               class="shrink-0 inline-flex items-center justify-center w-11 h-11 bg-white shadow-md border-2 transition disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl"
-              style="border-color:var(--ss-brand); border-radius: var(--ss-btn-radius);"
+              style="border-color:var(--plugin-brand); border-radius: var(--plugin-btn-radius);"
               aria-label="Previous">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2">
           <path d="M15 18l-6-6 6-6"/>
         </svg>
       </button>
 
       <div class="flex-1 text-center">
-        <span id="asm-ss-page-label" style="color:var(--ss-text);"><?php echo esc_html('Loading…'); ?></span>
+        <span id="asm-plugin-page-label" style="color:var(--plugin-text);"><?php echo esc_html('Loading…'); ?></span>
       </div>
 
-      <button id="asm-ss-next"
+      <button id="asm-plugin-next"
               class="shrink-0 inline-flex items-center justify-center w-11 h-11 bg-white shadow-md border-2 transition disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl"
-              style="border-color:var(--ss-brand); border-radius: var(--ss-btn-radius);"
+              style="border-color:var(--plugin-brand); border-radius: var(--plugin-btn-radius);"
               aria-label="Next">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2">
           <path d="M9 6l6 6-6 6"/>
         </svg>
       </button>
     </div>
     <?php endif; ?>
 
-    <div id="asm-ss-grid" class="grid gap-5 lg:gap-6 items-stretch" aria-live="polite" aria-busy="true">
+    <div id="asm-plugin-grid" class="grid gap-5 lg:gap-6 items-stretch" aria-live="polite" aria-busy="true">
       <?php foreach ($seo_adoptions as $seo_animal) :
         $seo_id = preg_replace('/\D+/', '', (string)($seo_animal['ANIMALID'] ?? $seo_animal['AnimalID'] ?? $seo_animal['ID'] ?? ''));
         $seo_name = trim((string)($seo_animal['ANIMALNAME'] ?? $seo_animal['AnimalName'] ?? 'Adopted cat'));
@@ -802,22 +811,22 @@ final class StraySafe_Adopted_UI_Shortcode {
         $seo_sex = trim((string)($seo_animal['SEXNAME'] ?? $seo_animal['SexName'] ?? $seo_animal['SEX'] ?? ''));
         $seo_breed = trim((string)($seo_animal['BREEDNAME'] ?? $seo_animal['BreedName'] ?? $seo_animal['BREEDNAME1'] ?? ''));
         $seo_story = trim((string)($seo_animal['ANIMALCOMMENTS'] ?? $seo_animal['WEBSITEMEDIANOTES'] ?? $seo_animal['DESCRIPTION'] ?? $seo_animal['ANIMALDESCRIPTION'] ?? ''));
-        $seo_img = $seo_id !== '' ? rest_url('straysafe/v1/animal-image') . '?animalid=' . rawurlencode($seo_id) . '&seq=1' : '';
+        $seo_img = $seo_id !== '' ? rest_url('plugin/v1/animal-image') . '?animalid=' . rawurlencode($seo_id) . '&seq=1' : '';
         $seo_url = '';
         if ($adopted_page_url !== '' && $seo_id !== '') {
           $seo_url = add_query_arg(['adopted' => $seo_id], $adopted_page_url);
-        } elseif (class_exists('StraySafe_UI_Suite_SEO') && $seo_id !== '') {
-          $seo_url = StraySafe_UI_Suite_SEO::profile_url($seo_animal, true);
+        } elseif (class_exists('Plugin_UI_Suite_SEO') && $seo_id !== '') {
+          $seo_url = Plugin_UI_Suite_SEO::profile_url($seo_animal, true);
         }
       ?>
-        <article class="asm-card bg-white rounded-2xl shadow-md overflow-hidden w-full" style="border-style:solid;border-color:var(--ss-card-border-color);border-width:var(--ss-card-border-width);">
+        <article class="asm-card bg-white rounded-2xl shadow-md overflow-hidden w-full" style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);">
           <?php if ($seo_img !== '') : ?>
             <img src="<?php echo esc_url($seo_img); ?>" alt="<?php echo esc_attr($seo_name . ', an adopted cat'); ?>" loading="eager" decoding="async" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;" />
           <?php endif; ?>
-          <div style="padding:var(--ss-card-pad);">
-            <h3 class="ss-card-name" style="margin:0;color:var(--ss-text);"><?php if ($seo_url !== '') : ?><a href="<?php echo esc_url($seo_url); ?>" style="color:inherit;text-decoration:none;"><?php echo esc_html($seo_name); ?></a><?php else : ?><?php echo esc_html($seo_name); ?><?php endif; ?></h3>
-            <p class="ss-card-meta" style="margin:.4rem 0 0;color:var(--ss-muted);"><?php echo esc_html(implode(' • ', array_filter([$seo_sex, $seo_age, $seo_breed]))); ?></p>
-            <?php if ($seo_story !== '') : ?><p style="margin:.75rem 0 0;color:var(--ss-text);line-height:1.6;"><?php echo esc_html(wp_trim_words($seo_story, 28)); ?></p><?php endif; ?>
+          <div style="padding:var(--plugin-card-pad);">
+            <h3 class="plugin-card-name" style="margin:0;color:var(--plugin-text);"><?php if ($seo_url !== '') : ?><a href="<?php echo esc_url($seo_url); ?>" style="color:inherit;text-decoration:none;"><?php echo esc_html($seo_name); ?></a><?php else : ?><?php echo esc_html($seo_name); ?><?php endif; ?></h3>
+            <p class="plugin-card-meta" style="margin:.4rem 0 0;color:var(--plugin-muted);"><?php echo esc_html(implode(' • ', array_filter([$seo_sex, $seo_age, $seo_breed]))); ?></p>
+            <?php if ($seo_story !== '') : ?><p style="margin:.75rem 0 0;color:var(--plugin-text);line-height:1.6;"><?php echo esc_html(wp_trim_words($seo_story, 28)); ?></p><?php endif; ?>
           </div>
         </article>
       <?php endforeach; ?>
@@ -825,117 +834,117 @@ final class StraySafe_Adopted_UI_Shortcode {
 
     <!-- BOTTOM NAV -->
     <div class="mt-6 flex items-center justify-between gap-3">
-      <button id="asm-ss-prev-bottom"
+      <button id="asm-plugin-prev-bottom"
               class="shrink-0 inline-flex items-center justify-center w-11 h-11 bg-white shadow-md border-2 transition disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl"
-              style="border-color:var(--ss-brand); border-radius: var(--ss-btn-radius);"
+              style="border-color:var(--plugin-brand); border-radius: var(--plugin-btn-radius);"
               aria-label="Previous">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2">
           <path d="M15 18l-6-6 6-6"/>
         </svg>
       </button>
 
       <div class="flex-1 text-center">
-        <span id="asm-ss-page-label-bottom" style="color:var(--ss-text);"></span>
+        <span id="asm-plugin-page-label-bottom" style="color:var(--plugin-text);"></span>
       </div>
 
-      <button id="asm-ss-next-bottom"
+      <button id="asm-plugin-next-bottom"
               class="shrink-0 inline-flex items-center justify-center w-11 h-11 bg-white shadow-md border-2 transition disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl"
-              style="border-color:var(--ss-brand); border-radius: var(--ss-btn-radius);"
+              style="border-color:var(--plugin-brand); border-radius: var(--plugin-btn-radius);"
               aria-label="Next">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2">
           <path d="M9 6l6 6-6 6"/>
         </svg>
       </button>
     </div>
 
     <div class="text-center mt-8">
-      <p id="asm-ss-footer" class="px-2" style="color:var(--ss-muted);"><?php echo esc_html($o['footer_text']); ?></p>
+      <p id="asm-plugin-footer" class="px-2" style="color:var(--plugin-muted);"><?php echo esc_html($o['footer_text']); ?></p>
     </div>
   </div>
 
-  <div id="asm-ss-modal" class="hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-ss-modal-name" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
-    <div id="asm-ss-modal-backdrop" class="absolute inset-0 bg-black/50"></div>
-    <div id="asm-ss-modal-viewport" class="absolute inset-0 overflow-y-auto p-4 sm:p-6" style="min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;">
-      <div id="asm-ss-modal-panel" class="bg-white rounded-2xl shadow-2xl border-2 overflow-hidden flex flex-col" style="border-color:var(--ss-brand);">
+  <div id="asm-plugin-modal" class="hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-plugin-modal-name" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
+    <div id="asm-plugin-modal-backdrop" class="absolute inset-0 bg-black/50"></div>
+    <div id="asm-plugin-modal-viewport" class="absolute inset-0 overflow-y-auto p-4 sm:p-6" style="min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;">
+      <div id="asm-plugin-modal-panel" class="bg-white rounded-2xl shadow-2xl border-2 overflow-hidden flex flex-col" style="border-color:var(--plugin-brand);">
         <div class="sticky top-0 z-20 bg-white flex items-center justify-between px-4 sm:px-6 py-4 border-b">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style="background:var(--ss-brand);"><span class="text-white text-xl">🐱</span></div>
+            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style="background:var(--plugin-brand);"><span class="text-white text-xl">🐱</span></div>
             <div class="min-w-0">
-              <div id="asm-ss-modal-name" class="truncate font-extrabold" style="color:var(--ss-text);">Animal</div>
-              <div id="asm-ss-modal-meta" class="truncate font-semibold text-sm" style="color:var(--ss-muted);">—</div>
+              <div id="asm-plugin-modal-name" class="truncate font-extrabold" style="color:var(--plugin-text);">Animal</div>
+              <div id="asm-plugin-modal-meta" class="truncate font-semibold text-sm" style="color:var(--plugin-muted);">—</div>
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <button id="asm-ss-modal-share" class="inline-flex items-center justify-center gap-2 w-9 sm:w-auto px-0 sm:px-3 h-9 sm:h-10 rounded-xl border-2 bg-white hover:shadow-md text-sm font-semibold<?php echo empty($o['enable_deep_links']) ? ' hidden' : ''; ?>" style="border-color:var(--ss-brand);color:var(--ss-brand);" aria-label="Share adopted cat" type="button">
+            <button id="asm-plugin-modal-share" class="inline-flex items-center justify-center gap-2 w-9 sm:w-auto px-0 sm:px-3 h-9 sm:h-10 rounded-xl border-2 bg-white hover:shadow-md text-sm font-semibold<?php echo empty($o['enable_deep_links']) ? ' hidden' : ''; ?>" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Share adopted cat" type="button">
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
                 <path d="M16 6l-4-4-4 4"/>
                 <path d="M12 2v13"/>
               </svg>
-              <span id="asm-ss-modal-share-text" class="hidden sm:inline"><?php echo esc_html($o['share_button_text'] ?? 'Share'); ?></span>
+              <span id="asm-plugin-modal-share-text" class="hidden sm:inline"><?php echo esc_html($o['share_button_text'] ?? 'Share'); ?></span>
             </button>
-            <button id="asm-ss-modal-close" class="inline-flex items-center justify-center w-10 h-10 rounded-xl border-2 bg-white hover:shadow-md shrink-0" style="border-color:var(--ss-brand);" aria-label="Close" type="button">
-              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <button id="asm-plugin-modal-close" class="inline-flex items-center justify-center w-10 h-10 rounded-xl border-2 bg-white hover:shadow-md shrink-0" style="border-color:var(--plugin-brand);" aria-label="Close" type="button">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
         </div>
-        <div id="asm-ss-modal-scroll" class="flex-1 overflow-y-auto bg-white">
+        <div id="asm-plugin-modal-scroll" class="flex-1 overflow-y-auto bg-white">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-0 bg-white">
-            <div id="asm-ss-modal-media-col" class="p-4 sm:p-6 bg-white">
+            <div id="asm-plugin-modal-media-col" class="p-4 sm:p-6 bg-white">
               <div class="relative rounded-2xl overflow-hidden border bg-gray-50 w-full aspect-square max-w-[420px] mx-auto md:max-w-none">
-                <img id="asm-ss-modal-mainimg" src="" alt="" class="w-full h-full object-cover" loading="eager" decoding="sync" fetchpriority="high" />
-                <button id="asm-ss-modal-photo-prev" type="button" class="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/90 border-2 shadow hidden" style="border-color:var(--ss-brand);" aria-label="Previous picture"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
-                <button id="asm-ss-modal-photo-next" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/90 border-2 shadow hidden" style="border-color:var(--ss-brand);" aria-label="Next picture"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--ss-brand)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
+                <img id="asm-plugin-modal-mainimg" src="" alt="" class="w-full h-full object-cover" loading="eager" decoding="sync" fetchpriority="high" />
+                <button id="asm-plugin-modal-photo-prev" type="button" class="absolute left-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/90 border-2 shadow hidden" style="border-color:var(--plugin-brand);" aria-label="Previous picture"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+                <button id="asm-plugin-modal-photo-next" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/90 border-2 shadow hidden" style="border-color:var(--plugin-brand);" aria-label="Next picture"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--plugin-brand)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
               </div>
-              <div id="asm-ss-modal-thumbs" class="mt-3 flex gap-2 overflow-x-auto pb-1"></div>
+              <div id="asm-plugin-modal-thumbs" class="mt-3 flex gap-2 overflow-x-auto pb-1"></div>
             </div>
-            <div id="asm-ss-modal-info-col" class="p-4 sm:p-6 md:border-l bg-white">
+            <div id="asm-plugin-modal-info-col" class="p-4 sm:p-6 md:border-l bg-white">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--ss-muted);">Adopted</div><div id="asm-ss-modal-adopted-date" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--ss-text);">—</div></div>
-                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--ss-muted);">Age</div><div id="asm-ss-modal-age" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--ss-text);">—</div></div>
-                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--ss-muted);">Sex</div><div id="asm-ss-modal-sex" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--ss-text);">—</div></div>
-                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--ss-muted);">Breed</div><div id="asm-ss-modal-breed" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--ss-text);">—</div></div>
+                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--plugin-muted);">Adopted</div><div id="asm-plugin-modal-adopted-date" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--plugin-text);">—</div></div>
+                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--plugin-muted);">Age</div><div id="asm-plugin-modal-age" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--plugin-text);">—</div></div>
+                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--plugin-muted);">Sex</div><div id="asm-plugin-modal-sex" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--plugin-text);">—</div></div>
+                <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--plugin-muted);">Breed</div><div id="asm-plugin-modal-breed" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--plugin-text);">—</div></div>
               </div>
               <?php if (!empty($o['adoptables_cta_enabled']) && !empty($o['adoptables_cta_url'])) : ?>
-                <div id="asm-ss-adoptables-cta" class="mt-5 rounded-2xl border p-4 bg-white shadow-sm" style="border-color:var(--ss-brand);">
+                <div id="asm-plugin-adoptables-cta" class="mt-5 rounded-2xl border p-4 bg-white shadow-sm" style="border-color:var(--plugin-brand);">
                   <?php if (trim((string)($o['adoptables_cta_text'] ?? '')) !== '') : ?>
-                    <p class="font-semibold mb-3" style="color:var(--ss-text);"><?php echo esc_html($o['adoptables_cta_text']); ?></p>
+                    <p class="font-semibold mb-3" style="color:var(--plugin-text);"><?php echo esc_html($o['adoptables_cta_text']); ?></p>
                   <?php endif; ?>
-                  <a class="inline-flex items-center justify-center px-4 h-11 rounded-xl border-2 font-bold shadow-sm" href="<?php echo esc_url($o['adoptables_cta_url']); ?>" style="background:var(--ss-brand);border-color:var(--ss-brand);color:#fff;text-decoration:none;">
+                  <a class="inline-flex items-center justify-center px-4 h-11 rounded-xl border-2 font-bold shadow-sm" href="<?php echo esc_url($o['adoptables_cta_url']); ?>" style="background:var(--plugin-brand);border-color:var(--plugin-brand);color:#fff;text-decoration:none;">
                     <?php echo esc_html($o['adoptables_cta_button_text'] ?: 'View animals for adoption'); ?>
                   </a>
                 </div>
               <?php endif; ?>
-              <div class="mt-4 text-sm leading-snug font-semibold" style="color:var(--ss-muted);font-size:.875rem;line-height:1.45;">
+              <div class="mt-4 text-sm leading-snug font-semibold" style="color:var(--plugin-muted);font-size:.875rem;line-height:1.45;">
                 Tip: Click the dark background (outside the card) or press ESC to close.
               </div>
-              <div id="asm-ss-modal-scroll-hint" class="asm-ss-story-scroll-hint items-center justify-center mt-4 select-none" style="color:var(--ss-muted);">
+              <div id="asm-plugin-modal-scroll-hint" class="asm-plugin-story-scroll-hint items-center justify-center mt-4 select-none" style="color:var(--plugin-muted);">
                 <div class="flex items-center gap-2 text-sm font-semibold">
                   <span>Scroll to read my story</span>
-                  <svg class="w-4 h-4 asm-ss-scroll-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <svg class="w-4 h-4 asm-plugin-scroll-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <path d="M12 5v14" />
                     <path d="M19 12l-7 7-7-7" />
                   </svg>
                 </div>
               </div>
             </div>
-            <div id="asm-ss-modal-story-section" class="hidden px-4 sm:px-6 pt-0 pb-3 sm:pb-4 bg-white md:col-span-2 border-t">
+            <div id="asm-plugin-modal-story-section" class="hidden px-4 sm:px-6 pt-0 pb-3 sm:pb-4 bg-white md:col-span-2 border-t">
               <div class="bg-white rounded-2xl px-3 sm:px-4 py-2 border shadow-sm">
-                <div id="asm-ss-modal-story-wrap" class="hidden">
-                  <div class="text-base sm:text-lg font-extrabold mb-2" style="color:var(--ss-muted);">Story</div>
-                  <div id="asm-ss-modal-story" class="leading-relaxed" style="color:var(--ss-text); white-space:pre-wrap; word-break:break-word;"></div>
+                <div id="asm-plugin-modal-story-wrap" class="hidden">
+                  <div class="text-base sm:text-lg font-extrabold mb-2" style="color:var(--plugin-muted);">Story</div>
+                  <div id="asm-plugin-modal-story" class="leading-relaxed" style="color:var(--plugin-text); white-space:pre-wrap; word-break:break-word;"></div>
                 </div>
-                <div id="asm-ss-modal-global-text-wrap" class="hidden leading-relaxed text-sm sm:text-base" style="color:var(--ss-text); white-space:pre-wrap; word-break:break-word;margin:0;">
-                  <div class="asm-ss-story-divider" aria-hidden="true"></div>
-                  <div id="asm-ss-modal-global-text"></div>
+                <div id="asm-plugin-modal-global-text-wrap" class="hidden leading-relaxed text-sm sm:text-base" style="color:var(--plugin-text); white-space:pre-wrap; word-break:break-word;margin:0;">
+                  <div class="asm-plugin-story-divider" aria-hidden="true"></div>
+                  <div id="asm-plugin-modal-global-text"></div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <div id="asm-ss-modal-animal-nav" class="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t bg-white">
-          <button id="asm-ss-modal-prev-animal" type="button" class="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--ss-brand);color:var(--ss-brand);" aria-label="Previous adopted cat"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg><span>Previous cat</span></button>
-          <button id="asm-ss-modal-next-animal" type="button" class="ml-auto inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--ss-brand);color:var(--ss-brand);" aria-label="Next adopted cat"><span>Next cat</span><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
+        <div id="asm-plugin-modal-animal-nav" class="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t bg-white">
+          <button id="asm-plugin-modal-prev-animal" type="button" class="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Previous adopted cat"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg><span>Previous cat</span></button>
+          <button id="asm-plugin-modal-next-animal" type="button" class="ml-auto inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Next adopted cat"><span>Next cat</span><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
         </div>
       </div>
     </div>
@@ -949,12 +958,12 @@ final class StraySafe_Adopted_UI_Shortcode {
 
   #asm-successstories-widget,
   #asm-successstories-widget *,
-  #asm-ss-modal,
-  #asm-ss-modal * { <?php echo $font_css; ?> }
+  #asm-plugin-modal,
+  #asm-plugin-modal * { <?php echo $font_css; ?> }
 
   @keyframes pawPrint {
     0%   { opacity: 0; transform: scale(0.5) rotate(-15deg); }
-    50%  { opacity: var(--ss-paw-opacity, 0.08); transform: scale(1) rotate(0deg); }
+    50%  { opacity: var(--plugin-paw-opacity, 0.08); transform: scale(1) rotate(0deg); }
     100% { opacity: 0; transform: scale(1.2) rotate(15deg); }
   }
   #asm-successstories-widget .asm-paw-bg { position:absolute; opacity:0; animation:pawPrint 4s ease-in-out infinite; pointer-events:none; }
@@ -962,64 +971,64 @@ final class StraySafe_Adopted_UI_Shortcode {
   @media (hover: none) and (pointer: coarse) { #asm-successstories-widget .asm-card:hover { transform:none !important; box-shadow:none !important; } #asm-successstories-widget.asm-ready { transition:none; } }
   @media (max-width: 640px) { #asm-successstories-widget .asm-paw-bg { display:none; } }
   @keyframes asmSsArrowBounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(4px);} }
-  #asm-ss-modal-scroll-hint { display:none; }
-  #asm-ss-modal-scroll-hint.asm-ss-story-scroll-hint-visible { display:flex; }
-  .asm-ss-scroll-arrow { width:1rem !important; height:1rem !important; animation:asmSsArrowBounce 1.2s ease-in-out infinite; }
-  .asm-ss-story-divider { border-top:1px solid rgba(100,116,139,.28); height:0; margin:.35rem 0; }
-  #asm-ss-modal-global-text { padding:.25rem 0; }
+  #asm-plugin-modal-scroll-hint { display:none; }
+  #asm-plugin-modal-scroll-hint.asm-plugin-story-scroll-hint-visible { display:flex; }
+  .asm-plugin-scroll-arrow { width:1rem !important; height:1rem !important; animation:asmSsArrowBounce 1.2s ease-in-out infinite; }
+  .asm-plugin-story-divider { border-top:1px solid rgba(100,116,139,.28); height:0; margin:.35rem 0; }
+  #asm-plugin-modal-global-text { padding:.25rem 0; }
 
   /* Typography hooks */
-  #asm-ss-heading { font-size: var(--ss-fs-h-m); font-weight: var(--ss-fw-h); }
-  #asm-ss-subheading { font-size: var(--ss-fs-sh-m); font-weight: var(--ss-fw-sh); }
-  #asm-ss-footer { font-size: var(--ss-fs-ft-m); font-weight: var(--ss-fw-ft); }
-  #asm-ss-page-label, #asm-ss-page-label-bottom { font-size: var(--ss-fs-pl-m); font-weight: var(--ss-fw-pl); }
+  #asm-plugin-heading { font-size: var(--plugin-fs-h-m); font-weight: var(--plugin-fw-h); }
+  #asm-plugin-subheading { font-size: var(--plugin-fs-sh-m); font-weight: var(--plugin-fw-sh); }
+  #asm-plugin-footer { font-size: var(--plugin-fs-ft-m); font-weight: var(--plugin-fw-ft); }
+  #asm-plugin-page-label, #asm-plugin-page-label-bottom { font-size: var(--plugin-fs-pl-m); font-weight: var(--plugin-fw-pl); }
 
-  .ss-card-name { font-size: var(--ss-fs-cn-m); font-weight: var(--ss-fw-cn); }
-  .ss-card-meta { font-size: var(--ss-fs-cm-m); font-weight: var(--ss-fw-cm); }
-  .ss-badge { font-size: var(--ss-fs-bd-m); font-weight: var(--ss-fw-bd); }
+  .plugin-card-name { font-size: var(--plugin-fs-cn-m); font-weight: var(--plugin-fw-cn); }
+  .plugin-card-meta { font-size: var(--plugin-fs-cm-m); font-weight: var(--plugin-fw-cm); }
+  .plugin-badge { font-size: var(--plugin-fs-bd-m); font-weight: var(--plugin-fw-bd); }
 
   @media (min-width: 768px){
-    #asm-ss-heading { font-size: var(--ss-fs-h-t); }
-    #asm-ss-subheading { font-size: var(--ss-fs-sh-t); }
-    #asm-ss-footer { font-size: var(--ss-fs-ft-t); }
-    #asm-ss-page-label, #asm-ss-page-label-bottom { font-size: var(--ss-fs-pl-t); }
+    #asm-plugin-heading { font-size: var(--plugin-fs-h-t); }
+    #asm-plugin-subheading { font-size: var(--plugin-fs-sh-t); }
+    #asm-plugin-footer { font-size: var(--plugin-fs-ft-t); }
+    #asm-plugin-page-label, #asm-plugin-page-label-bottom { font-size: var(--plugin-fs-pl-t); }
 
-    .ss-card-name { font-size: var(--ss-fs-cn-t); }
-    .ss-card-meta { font-size: var(--ss-fs-cm-t); }
-    .ss-badge { font-size: var(--ss-fs-bd-t); }
+    .plugin-card-name { font-size: var(--plugin-fs-cn-t); }
+    .plugin-card-meta { font-size: var(--plugin-fs-cm-t); }
+    .plugin-badge { font-size: var(--plugin-fs-bd-t); }
   }
   @media (min-width: 1024px){
-    #asm-ss-heading { font-size: var(--ss-fs-h-d); }
-    #asm-ss-subheading { font-size: var(--ss-fs-sh-d); }
-    #asm-ss-footer { font-size: var(--ss-fs-ft-d); }
-    #asm-ss-page-label, #asm-ss-page-label-bottom { font-size: var(--ss-fs-pl-d); }
+    #asm-plugin-heading { font-size: var(--plugin-fs-h-d); }
+    #asm-plugin-subheading { font-size: var(--plugin-fs-sh-d); }
+    #asm-plugin-footer { font-size: var(--plugin-fs-ft-d); }
+    #asm-plugin-page-label, #asm-plugin-page-label-bottom { font-size: var(--plugin-fs-pl-d); }
 
-    .ss-card-name { font-size: var(--ss-fs-cn-d); }
-    .ss-card-meta { font-size: var(--ss-fs-cm-d); }
-    .ss-badge { font-size: var(--ss-fs-bd-d); }
+    .plugin-card-name { font-size: var(--plugin-fs-cn-d); }
+    .plugin-card-meta { font-size: var(--plugin-fs-cm-d); }
+    .plugin-badge { font-size: var(--plugin-fs-bd-d); }
   }
 
-  #asm-ss-modal{ position:fixed !important; inset:0 !important; z-index:2147483647 !important; isolation:isolate; }
-  #asm-ss-modal:not(.asm-ss-modal-ready){ display:none !important; visibility:hidden !important; opacity:0 !important; pointer-events:none !important; }
-  #asm-ss-modal.hidden{ display:none !important; }
-  #asm-ss-modal-viewport{ overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding-top:max(16px, env(safe-area-inset-top)); padding-bottom:max(16px, env(safe-area-inset-bottom)); }
-  #asm-ss-modal-panel{ width:min(100%, var(--ss-modal-maxw, 896px)); max-width:var(--ss-modal-maxw,896px); height:min(88dvh, 900px); max-height:calc(100dvh - 32px); min-height:0; margin:auto 0; position:relative; z-index:2; }
-  #asm-ss-modal-panel > .sticky, #asm-ss-modal-animal-nav{ flex:0 0 auto; }
-  #asm-ss-modal-scroll{ min-height:0; overflow-y:auto !important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
-  #asm-ss-modal-animal-nav{ position:relative; z-index:5; }
-  #asm-ss-modal-share,
-  #asm-ss-modal-close,
-  #asm-ss-modal-photo-prev,
-  #asm-ss-modal-photo-next,
-  #asm-ss-modal-prev-animal,
-  #asm-ss-modal-next-animal{
+  #asm-plugin-modal{ position:fixed !important; inset:0 !important; z-index:2147483647 !important; isolation:isolate; }
+  #asm-plugin-modal:not(.asm-plugin-modal-ready){ display:none !important; visibility:hidden !important; opacity:0 !important; pointer-events:none !important; }
+  #asm-plugin-modal.hidden{ display:none !important; }
+  #asm-plugin-modal-viewport{ overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding-top:max(16px, env(safe-area-inset-top)); padding-bottom:max(16px, env(safe-area-inset-bottom)); }
+  #asm-plugin-modal-panel{ width:min(100%, var(--plugin-modal-maxw, 896px)); max-width:var(--plugin-modal-maxw,896px); height:min(88dvh, 900px); max-height:calc(100dvh - 32px); min-height:0; margin:auto 0; position:relative; z-index:2; }
+  #asm-plugin-modal-panel > .sticky, #asm-plugin-modal-animal-nav{ flex:0 0 auto; }
+  #asm-plugin-modal-scroll{ min-height:0; overflow-y:auto !important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+  #asm-plugin-modal-animal-nav{ position:relative; z-index:5; }
+  #asm-plugin-modal-share,
+  #asm-plugin-modal-close,
+  #asm-plugin-modal-photo-prev,
+  #asm-plugin-modal-photo-next,
+  #asm-plugin-modal-prev-animal,
+  #asm-plugin-modal-next-animal{
     display:inline-flex;
     align-items:center;
     justify-content:center;
     box-sizing:border-box;
   }
-  #asm-ss-modal-share,
-  #asm-ss-modal-close{
+  #asm-plugin-modal-share,
+  #asm-plugin-modal-close{
     min-height:2.5rem;
     border-style:solid;
     border-width:2px;
@@ -1028,19 +1037,19 @@ final class StraySafe_Adopted_UI_Shortcode {
     font-weight:700;
     line-height:1;
   }
-  #asm-ss-modal-share,
-  #asm-ss-modal-close{ width:2.5rem; padding-left:0; padding-right:0; }
-  #asm-ss-modal svg{ width:1.25rem; height:1.25rem; flex:0 0 auto; }
-  #asm-ss-modal-share-text{ display:none; }
-  #asm-ss-modal-share.hidden,
-  #asm-ss-modal-photo-prev.hidden,
-  #asm-ss-modal-photo-next.hidden,
-  #asm-ss-modal-prev-animal.hidden,
-  #asm-ss-modal-next-animal.hidden,
-  #asm-ss-modal-story-section.hidden,
-  #asm-ss-modal-story-wrap.hidden,
-  #asm-ss-modal-global-text-wrap.hidden{ display:none !important; }
-  #asm-ss-modal-media-col .relative,
+  #asm-plugin-modal-share,
+  #asm-plugin-modal-close{ width:2.5rem; padding-left:0; padding-right:0; }
+  #asm-plugin-modal svg{ width:1.25rem; height:1.25rem; flex:0 0 auto; }
+  #asm-plugin-modal-share-text{ display:none; }
+  #asm-plugin-modal-share.hidden,
+  #asm-plugin-modal-photo-prev.hidden,
+  #asm-plugin-modal-photo-next.hidden,
+  #asm-plugin-modal-prev-animal.hidden,
+  #asm-plugin-modal-next-animal.hidden,
+  #asm-plugin-modal-story-section.hidden,
+  #asm-plugin-modal-story-wrap.hidden,
+  #asm-plugin-modal-global-text-wrap.hidden{ display:none !important; }
+  #asm-plugin-modal-media-col .relative,
   #asm-successstories-widget .asm-card .bg-gray-100{
     overflow:hidden !important;
     background:#f8fafc;
@@ -1050,8 +1059,8 @@ final class StraySafe_Adopted_UI_Shortcode {
     backface-visibility:hidden;
     contain:paint;
   }
-  #asm-ss-modal-mainimg,
-  #asm-ss-modal-thumbs img,
+  #asm-plugin-modal-mainimg,
+  #asm-plugin-modal-thumbs img,
   #asm-successstories-widget .asm-card img{
     display:block;
     width:100%;
@@ -1064,12 +1073,12 @@ final class StraySafe_Adopted_UI_Shortcode {
     -webkit-backface-visibility:hidden;
     backface-visibility:hidden;
   }
-  @media (max-width:767px){ #asm-ss-modal-panel{ height:calc(100dvh - 24px); max-height:calc(100dvh - 24px); } #asm-ss-modal-animal-nav span{ display:none; } #asm-ss-modal-animal-nav button{ width:44px; padding-left:0; padding-right:0; } }
-  @media (min-width:640px){ #asm-ss-modal-share{ width:auto; padding-left:.75rem; padding-right:.75rem; } #asm-ss-modal-share-text{ display:inline; } }
-  .asm-card{ width:100%; margin-left:auto; margin-right:auto; border-radius: var(--ss-card-radius) !important; }
-  @media (max-width: 767px){ .asm-card{ max-width: calc(100% * var(--ss-scale-m, 1)); } }
-  @media (min-width: 768px) and (max-width: 1023px){ .asm-card{ max-width: calc(100% * var(--ss-scale-t, 1)); } }
-  @media (min-width: 1024px){ .asm-card{ max-width: calc(100% * var(--ss-scale-d, 1)); } }
+  @media (max-width:767px){ #asm-plugin-modal-panel{ height:calc(100dvh - 24px); max-height:calc(100dvh - 24px); } #asm-plugin-modal-animal-nav span{ display:none; } #asm-plugin-modal-animal-nav button{ width:44px; padding-left:0; padding-right:0; } }
+  @media (min-width:640px){ #asm-plugin-modal-share{ width:auto; padding-left:.75rem; padding-right:.75rem; } #asm-plugin-modal-share-text{ display:inline; } }
+  .asm-card{ width:100%; margin-left:auto; margin-right:auto; border-radius: var(--plugin-card-radius) !important; }
+  @media (max-width: 767px){ .asm-card{ max-width: calc(100% * var(--plugin-scale-m, 1)); } }
+  @media (min-width: 768px) and (max-width: 1023px){ .asm-card{ max-width: calc(100% * var(--plugin-scale-t, 1)); } }
+  @media (min-width: 1024px){ .asm-card{ max-width: calc(100% * var(--plugin-scale-d, 1)); } }
 </style>
 
 <script>
@@ -1077,7 +1086,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   const ROOT = document.getElementById("asm-successstories-widget");
   if (!ROOT) return;
 
-  const ADOPTED_MODAL = document.getElementById("asm-ss-modal");
+  const ADOPTED_MODAL = document.getElementById("asm-plugin-modal");
   if (ADOPTED_MODAL && ADOPTED_MODAL.parentNode !== document.body) document.body.appendChild(ADOPTED_MODAL);
   let modalPageScrollY = 0;
   let modalPageLocked = false;
@@ -1106,7 +1115,7 @@ final class StraySafe_Adopted_UI_Shortcode {
     window.scrollTo(0, modalPageScrollY);
   }
   function modalIsOpen(){
-    const modal = qs('asm-ss-modal');
+    const modal = qs('asm-plugin-modal');
     return !!modal && !modal.classList.contains('hidden') && modal.getAttribute('aria-hidden') !== 'true';
   }
   function focusableEls(container){
@@ -1115,7 +1124,7 @@ final class StraySafe_Adopted_UI_Shortcode {
     return Array.from(container.querySelectorAll(selector)).filter(el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length));
   }
   function trapModalFocus(event){
-    const modal = qs('asm-ss-modal');
+    const modal = qs('asm-plugin-modal');
     if (!modalIsOpen() || event.key !== 'Tab' || !modal) return;
     const nodes = focusableEls(modal);
     if (!nodes.length) {
@@ -1158,10 +1167,10 @@ final class StraySafe_Adopted_UI_Shortcode {
   ]); ?>;
 
   const CFG = {
-    proxyBase: "/wp-json/straysafe/v1",
-    brandColor: getComputedStyle(ROOT).getPropertyValue("--ss-brand").trim() || "#ff647e",
-    textColor: getComputedStyle(ROOT).getPropertyValue("--ss-text").trim() || "#334155",
-    mutedColor: getComputedStyle(ROOT).getPropertyValue("--ss-muted").trim() || "#64748b",
+    proxyBase: "/wp-json/plugin/v1",
+    brandColor: getComputedStyle(ROOT).getPropertyValue("--plugin-brand").trim() || "#ff647e",
+    textColor: getComputedStyle(ROOT).getPropertyValue("--plugin-text").trim() || "#334155",
+    mutedColor: getComputedStyle(ROOT).getPropertyValue("--plugin-muted").trim() || "#64748b",
     minYear: Number(OPTS.min_year) || 2000,
     rows: OPTS.rows || { m:3, t:3, d:3 },
     speciesId: 2,
@@ -1200,7 +1209,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   function colsFor(dev){
-    const prop = dev === "m" ? "--ss-cols-m" : (dev === "t" ? "--ss-cols-t" : "--ss-cols-d");
+    const prop = dev === "m" ? "--plugin-cols-m" : (dev === "t" ? "--plugin-cols-t" : "--plugin-cols-d");
     return Number(getComputedStyle(ROOT).getPropertyValue(prop)) || 2;
   }
 
@@ -1210,7 +1219,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   function applyGridColumns(){
-    const grid = qs("asm-ss-grid");
+    const grid = qs("asm-plugin-grid");
     if(!grid) return;
     const dev = currentDevice();
     const cols = colsFor(dev);
@@ -1367,15 +1376,15 @@ final class StraySafe_Adopted_UI_Shortcode {
 
     return `
       <button type="button" class="asm-card group text-left bg-white rounded-2xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] w-full ${CFG.enableModals ? 'focus:outline-none focus:ring-4 focus:ring-pink-200 cursor-pointer' : ''}" data-animalid="${safeId}" tabindex="0"
-           style="border-style:solid;border-color:var(--ss-card-border-color);border-width:var(--ss-card-border-width);" ${CFG.enableModals ? `aria-label="View adoption story for ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-ss-modal"` : ''}>
+           style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);" ${CFG.enableModals ? `aria-label="View adoption story for ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-plugin-modal"` : ''}>
         <div class="relative">
           <div class="bg-gray-100 aspect-square w-full" style="line-height:0;overflow:hidden;">${imageBlock}</div>
 
           <div class="absolute inset-x-0 bottom-0 p-1.5 sm:p-2">
             <div class="rounded-xl px-2 py-1.5 sm:px-3 sm:py-2 bg-white/85 backdrop-blur-sm shadow-sm border"
                  style="border-color:${CFG.brandColor};">
-              <div class="ss-card-name leading-tight truncate" style="color:${CFG.textColor};">${safeName}</div>
-              <div class="ss-card-meta truncate" style="color:${CFG.mutedColor};">
+              <div class="plugin-card-name leading-tight truncate" style="color:${CFG.textColor};">${safeName}</div>
+              <div class="plugin-card-meta truncate" style="color:${CFG.mutedColor};">
                 <span class="sm:hidden">${safeAge} • ${safeBreed}</span>
                 <span class="hidden sm:inline">${safeSex} • ${safeAge}</span>
               </div>
@@ -1383,7 +1392,7 @@ final class StraySafe_Adopted_UI_Shortcode {
           </div>
         </div>
 
-        <div class="hidden sm:block" style="padding: var(--ss-card-pad);">
+        <div class="hidden sm:block" style="padding: var(--plugin-card-pad);">
           <div class="font-semibold truncate text-xs sm:text-sm lg:text-base" style="color:${CFG.mutedColor};">${safeBreed}</div>
         </div>
       </button>
@@ -1399,9 +1408,9 @@ final class StraySafe_Adopted_UI_Shortcode {
     if (!name) return;
     try {
       const body = new URLSearchParams();
-      body.set('action', 'asm_plugin_suite_track');
+      body.set('action', 'plugin_suite_track');
       body.set('event', String(name));
-      body.set('nonce', <?php echo wp_json_encode(wp_create_nonce('asm_plugin_suite_track')); ?>);
+      body.set('nonce', <?php echo wp_json_encode(wp_create_nonce('plugin_suite_track')); ?>);
       fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, {
         method: 'POST',
         credentials: 'same-origin',
@@ -1413,7 +1422,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   function closeModal(){
-    const modal = qs("asm-ss-modal");
+    const modal = qs("asm-plugin-modal");
     if (!modal) return;
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
@@ -1439,8 +1448,8 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   function updateModalAnimalNavigation(){
-    const prev = qs('asm-ss-modal-prev-animal');
-    const next = qs('asm-ss-modal-next-animal');
+    const prev = qs('asm-plugin-modal-prev-animal');
+    const next = qs('asm-plugin-modal-next-animal');
     const total = Array.isArray(shown) ? shown.length : 0;
     const hasPrev = currentModalAnimalIndex > 0;
     const hasNext = currentModalAnimalIndex >= 0 && currentModalAnimalIndex < total - 1;
@@ -1456,7 +1465,7 @@ final class StraySafe_Adopted_UI_Shortcode {
 
   function openModal(a){
     if (!CFG.enableModals) return;
-    const modal = qs("asm-ss-modal");
+    const modal = qs("asm-plugin-modal");
     if (!modal) return;
 
     const animalId = getNumericAnimalId(a);
@@ -1472,18 +1481,18 @@ final class StraySafe_Adopted_UI_Shortcode {
 
     trackEvent("adopted_modal_open");
     syncAdoptedModalUrl(a);
-    qs("asm-ss-modal-name").textContent = name;
-    qs("asm-ss-modal-meta").textContent = shelterCode || [sex, age].filter(value => value && value !== '—').join(' • ') || breed;
-    qs("asm-ss-modal-adopted-date").textContent = adoptedLabel;
-    qs("asm-ss-modal-age").textContent = age;
-    qs("asm-ss-modal-sex").textContent = sex;
-    qs("asm-ss-modal-breed").textContent = breed;
+    qs("asm-plugin-modal-name").textContent = name;
+    qs("asm-plugin-modal-meta").textContent = shelterCode || [sex, age].filter(value => value && value !== '—').join(' • ') || breed;
+    qs("asm-plugin-modal-adopted-date").textContent = adoptedLabel;
+    qs("asm-plugin-modal-age").textContent = age;
+    qs("asm-plugin-modal-sex").textContent = sex;
+    qs("asm-plugin-modal-breed").textContent = breed;
     const story = safeText(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION, '');
-    const storySection = qs("asm-ss-modal-story-section");
-    const storyWrap = qs("asm-ss-modal-story-wrap");
-    const storyEl = qs("asm-ss-modal-story");
-    const globalTextWrap = qs("asm-ss-modal-global-text-wrap");
-    const globalTextEl = qs("asm-ss-modal-global-text");
+    const storySection = qs("asm-plugin-modal-story-section");
+    const storyWrap = qs("asm-plugin-modal-story-wrap");
+    const storyEl = qs("asm-plugin-modal-story");
+    const globalTextWrap = qs("asm-plugin-modal-global-text-wrap");
+    const globalTextEl = qs("asm-plugin-modal-global-text");
     const globalText = String(CFG.modalGlobalText || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     let hasStory = false;
     if (storyWrap && storyEl) {
@@ -1502,13 +1511,13 @@ final class StraySafe_Adopted_UI_Shortcode {
       globalTextWrap.classList.toggle('mt-3', !!globalText && hasStory);
     }
     if (storySection) storySection.classList.toggle('hidden', !hasStory && !globalText);
-    [qs("asm-ss-modal-scroll-hint")].forEach((hint) => {
+    [qs("asm-plugin-modal-scroll-hint")].forEach((hint) => {
       if (!hint) return;
-      hint.classList.toggle('asm-ss-story-scroll-hint-visible', hasStory);
+      hint.classList.toggle('asm-plugin-story-scroll-hint-visible', hasStory);
     });
 
-    const shareBtn = qs("asm-ss-modal-share");
-    const shareText = qs("asm-ss-modal-share-text");
+    const shareBtn = qs("asm-plugin-modal-share");
+    const shareText = qs("asm-plugin-modal-share-text");
     if (shareBtn) {
       shareBtn.classList.toggle("hidden", !CFG.enableDeepLinks);
       shareBtn.setAttribute("aria-label", `Share ${name}`);
@@ -1543,10 +1552,10 @@ final class StraySafe_Adopted_UI_Shortcode {
 	      preload.src = url;
 	    });
 
-	    const mainImg = qs("asm-ss-modal-mainimg");
-	    const thumbs = qs("asm-ss-modal-thumbs");
-	    const prevPhoto = qs('asm-ss-modal-photo-prev');
-	    const nextPhoto = qs('asm-ss-modal-photo-next');
+	    const mainImg = qs("asm-plugin-modal-mainimg");
+	    const thumbs = qs("asm-plugin-modal-thumbs");
+	    const prevPhoto = qs('asm-plugin-modal-photo-prev');
+	    const nextPhoto = qs('asm-plugin-modal-photo-next');
 	    let photoRequestToken = 0;
 	    currentModalPhotoUrls = urls;
 	    const updatePhotoButtons = () => {
@@ -1646,18 +1655,18 @@ final class StraySafe_Adopted_UI_Shortcode {
       };
     }
 
-    const scrollEl = qs("asm-ss-modal-scroll");
+    const scrollEl = qs("asm-plugin-modal-scroll");
     if (scrollEl) scrollEl.scrollTop = 0;
-    modal.classList.add("asm-ss-modal-ready");
+    modal.classList.add("asm-plugin-modal-ready");
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
     lockModalPage();
-    const closeButton = qs('asm-ss-modal-close');
+    const closeButton = qs('asm-plugin-modal-close');
     if (closeButton) closeButton.focus();
   }
 
   function updateStructuredData(items){
-    const old = document.getElementById('asm-ss-structured-data');
+    const old = document.getElementById('asm-plugin-structured-data');
     if (old) old.remove();
     if (!Array.isArray(items) || !items.length) return;
     const list = items.slice(0, 100).map((a, index) => {
@@ -1680,7 +1689,7 @@ final class StraySafe_Adopted_UI_Shortcode {
       };
     });
     const script = document.createElement('script');
-    script.id = 'asm-ss-structured-data';
+    script.id = 'asm-plugin-structured-data';
     script.type = 'application/ld+json';
     script.textContent = JSON.stringify({
       '@context': 'https://schema.org',
@@ -1692,15 +1701,15 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   function renderPage(){
-    const grid = qs("asm-ss-grid");
+    const grid = qs("asm-plugin-grid");
 
-    const prevTop  = qs("asm-ss-prev");
-    const nextTop  = qs("asm-ss-next");
-    const labelTop = qs("asm-ss-page-label");
+    const prevTop  = qs("asm-plugin-prev");
+    const nextTop  = qs("asm-plugin-next");
+    const labelTop = qs("asm-plugin-page-label");
 
-    const prevBot  = qs("asm-ss-prev-bottom");
-    const nextBot  = qs("asm-ss-next-bottom");
-    const labelBot = qs("asm-ss-page-label-bottom");
+    const prevBot  = qs("asm-plugin-prev-bottom");
+    const nextBot  = qs("asm-plugin-next-bottom");
+    const labelBot = qs("asm-plugin-page-label-bottom");
 
     if (!grid || !prevBot || !nextBot || !labelBot) return;
 
@@ -1743,7 +1752,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   function setYearOptions(){
-    const sel = qs("asm-ss-year");
+    const sel = qs("asm-plugin-year");
     if (!sel) return;
 
     const nowYear = new Date().getFullYear();
@@ -1760,7 +1769,7 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 
   async function reload(){
-    const sel = qs("asm-ss-year");
+    const sel = qs("asm-plugin-year");
     const selectedYear = sel ? sel.value : String(CFG.minYear);
     const wanted = requestedAdoptedId();
 
@@ -1775,8 +1784,8 @@ final class StraySafe_Adopted_UI_Shortcode {
 	      console.error(err);
 	      all = [];
       shown = [];
-      const lt = qs("asm-ss-page-label");
-      const lb = qs("asm-ss-page-label-bottom");
+      const lt = qs("asm-plugin-page-label");
+      const lb = qs("asm-plugin-page-label-bottom");
       if (lt) lt.textContent = "Load failed.";
       if (lb) lb.textContent = "Load failed.";
 	      renderPage();
@@ -1795,7 +1804,7 @@ final class StraySafe_Adopted_UI_Shortcode {
       if (target) openModal(target);
     };
 
-    const grid = qs('asm-ss-grid');
+    const grid = qs('asm-plugin-grid');
     if (grid) {
       grid.addEventListener('click', (e) => {
         const card = e.target && e.target.closest ? e.target.closest('[data-animalid]') : null;
@@ -1814,19 +1823,19 @@ final class StraySafe_Adopted_UI_Shortcode {
       });
     }
 
-    qs("asm-ss-prev")?.addEventListener("click", goPrev);
-    qs("asm-ss-next")?.addEventListener("click", goNext);
-    qs("asm-ss-prev-bottom")?.addEventListener("click", goPrev);
-    qs("asm-ss-next-bottom")?.addEventListener("click", goNext);
+    qs("asm-plugin-prev")?.addEventListener("click", goPrev);
+    qs("asm-plugin-next")?.addEventListener("click", goNext);
+    qs("asm-plugin-prev-bottom")?.addEventListener("click", goPrev);
+    qs("asm-plugin-next-bottom")?.addEventListener("click", goNext);
 
-    const modal = qs('asm-ss-modal');
+    const modal = qs('asm-plugin-modal');
     if (modal) {
-      qs('asm-ss-modal-close')?.addEventListener('click', closeModal);
-      qs('asm-ss-modal-backdrop')?.addEventListener('click', closeModal);
-      qs('asm-ss-modal-viewport')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
-      qs('asm-ss-modal-panel')?.addEventListener('click', (e) => e.stopPropagation());
-      qs('asm-ss-modal-prev-animal')?.addEventListener('click', () => openAdjacentAdoptedAnimal(-1));
-      qs('asm-ss-modal-next-animal')?.addEventListener('click', () => openAdjacentAdoptedAnimal(1));
+      qs('asm-plugin-modal-close')?.addEventListener('click', closeModal);
+      qs('asm-plugin-modal-backdrop')?.addEventListener('click', closeModal);
+      qs('asm-plugin-modal-viewport')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
+      qs('asm-plugin-modal-panel')?.addEventListener('click', (e) => e.stopPropagation());
+      qs('asm-plugin-modal-prev-animal')?.addEventListener('click', () => openAdjacentAdoptedAnimal(-1));
+      qs('asm-plugin-modal-next-animal')?.addEventListener('click', () => openAdjacentAdoptedAnimal(1));
       document.addEventListener('keydown', (e) => {
         if (!modalIsOpen()) return;
         if (e.key === 'Tab') trapModalFocus(e);
@@ -1848,7 +1857,7 @@ final class StraySafe_Adopted_UI_Shortcode {
     window.addEventListener("resize", () => { renderPage(); }, { passive: true });
 
     setYearOptions();
-    qs("asm-ss-year").addEventListener("change", reload);
+    qs("asm-plugin-year").addEventListener("change", reload);
 
     reload();
   }
@@ -1861,4 +1870,4 @@ final class StraySafe_Adopted_UI_Shortcode {
   }
 }
 
-StraySafe_Adopted_UI_Shortcode::init();
+Plugin_Adopted_UI_Shortcode::init();

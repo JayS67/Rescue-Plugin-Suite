@@ -6,12 +6,12 @@ Load integrations from a plugin after the suite is available, for example on `pl
 
 ## Registration helpers
 
-### `registerPaymentProvider( StraySafe_Payment_Provider_Interface $provider )`
+### `registerPaymentProvider( Plugin_Payment_Provider_Interface $provider )`
 
 Registers a payment provider object with the gateway manager.
 
 ```php
-add_action('straysafe_payments_register_providers', function ($manager) {
+add_action('plugin_payments_register_providers', function ($manager) {
   registerPaymentProvider(new Acme_Direct_Bank_Provider());
 });
 ```
@@ -21,7 +21,7 @@ add_action('straysafe_payments_register_providers', function ($manager) {
 Removes a provider from the runtime registry.
 
 ```php
-add_action('straysafe_payments_register_providers', function () {
+add_action('plugin_payments_register_providers', function () {
   unregisterPaymentProvider('sumup');
 });
 ```
@@ -65,10 +65,10 @@ add_action('init', function () {
 
 ## Provider API
 
-Providers implement `StraySafe_Payment_Provider_Interface` or extend `StraySafe_Abstract_Payment_Provider`.
+Providers implement `Plugin_Payment_Provider_Interface` or extend `Plugin_Abstract_Payment_Provider`.
 
 ```php
-final class Acme_Direct_Bank_Provider extends StraySafe_Abstract_Payment_Provider {
+final class Acme_Direct_Bank_Provider extends Plugin_Abstract_Payment_Provider {
   public function __construct() {
     $this->id = 'acme_bank';
     $this->name = 'Acme Bank';
@@ -103,10 +103,10 @@ final class Acme_Direct_Bank_Provider extends StraySafe_Abstract_Payment_Provide
 
 ## Checkout handler example
 
-Use `straysafe_payments_custom_checkout_handler` to bypass the active provider for a custom payment type or provider-specific scenario.
+Use `plugin_payments_custom_checkout_handler` to bypass the active provider for a custom payment type or provider-specific scenario.
 
 ```php
-add_filter('straysafe_payments_custom_checkout_handler', function ($result, $request, $settings, $provider) {
+add_filter('plugin_payments_custom_checkout_handler', function ($result, $request, $settings, $provider) {
   if (($request['type'] ?? '') !== 'sponsor') {
     return $result;
   }
@@ -125,27 +125,27 @@ add_filter('straysafe_payments_custom_checkout_handler', function ($result, $req
 
 ## Actions
 
-### `straysafe_payments_register_providers`
+### `plugin_payments_register_providers`
 
 Fires when the gateway manager is ready to accept provider registration.
 
 Parameters:
 
-- `StraySafe_Payment_Gateway_Manager $manager`
+- `Plugin_Payment_Gateway_Manager $manager`
 
-### `straysafe_payments_register_settings`
+### `plugin_payments_register_settings`
 
 Fires after the module registers its Settings API option.
 
 Parameters: none.
 
-### `straysafe_payments_enqueue_assets`
+### `plugin_payments_enqueue_assets`
 
 Fires after the payment widget frontend style and script are enqueued.
 
 Parameters: none.
 
-### `straysafe_payments_before_checkout_validation`
+### `plugin_payments_before_checkout_validation`
 
 Fires after nonce verification and before amount/type validation.
 
@@ -154,7 +154,7 @@ Parameters:
 - `array $request` — raw checkout context: `type`, `amount`, and `campaign`.
 - `array $settings` — active settings after campaign overrides.
 
-### `straysafe_payments_before_checkout`
+### `plugin_payments_before_checkout`
 
 Fires after validation and before checkout creation.
 
@@ -163,7 +163,7 @@ Parameters:
 - `array $request` — normalized checkout request passed toward the provider.
 - `array $settings` — active settings after campaign overrides.
 
-### `straysafe_payments_checkout_created`
+### `plugin_payments_checkout_created`
 
 Fires after checkout is created successfully.
 
@@ -173,7 +173,7 @@ Parameters:
 - `array $request` — normalized checkout request.
 - `array $settings` — active settings after campaign overrides.
 
-### `straysafe_payments_checkout_failed`
+### `plugin_payments_checkout_failed`
 
 Fires when checkout creation returns a `WP_Error`.
 
@@ -183,7 +183,7 @@ Parameters:
 - `array $request`
 - `array $settings`
 
-### `straysafe_payments_payment_event_recorded`
+### `plugin_payments_payment_event_recorded`
 
 Fires after a payment event is saved to payment history.
 
@@ -195,7 +195,7 @@ Parameters:
 - `array $data`
 - `string $provider`
 
-### `straysafe_payments_subscription_event_recorded`
+### `plugin_payments_subscription_event_recorded`
 
 Fires after a subscription event is saved.
 
@@ -207,7 +207,7 @@ Parameters:
 - `array $data`
 - `string $provider`
 
-### `straysafe_payments_audit_logged`
+### `plugin_payments_audit_logged`
 
 Fires after an audit log entry is written.
 
@@ -217,7 +217,7 @@ Parameters:
 
 ## Filters
 
-### `straysafe_payments_providers`
+### `plugin_payments_providers`
 
 Filters registered providers.
 
@@ -227,7 +227,7 @@ Parameters:
 
 Return `array` of provider objects keyed by provider ID.
 
-### `straysafe_payments_settings`
+### `plugin_payments_settings`
 
 Filters loaded settings after defaults and registered campaigns are merged.
 
@@ -237,7 +237,7 @@ Parameters:
 
 Return the adjusted settings array.
 
-### `straysafe_payments_admin_capability`
+### `plugin_payments_admin_capability`
 
 Filters the capability required to view and update the Payments admin page.
 
@@ -247,7 +247,7 @@ Parameters:
 
 Return a WordPress capability string.
 
-### `straysafe_payments_frontend_config`
+### `plugin_payments_frontend_config`
 
 Filters localized JavaScript config for the donation widget.
 
@@ -257,7 +257,7 @@ Parameters:
 
 Return the adjusted config array.
 
-### `straysafe_payments_payment_types`
+### `plugin_payments_payment_types`
 
 Filters payment type definitions available to checkout handlers.
 
@@ -267,7 +267,7 @@ Parameters:
 
 Return an array keyed by payment type ID.
 
-### `straysafe_payments_campaigns`
+### `plugin_payments_campaigns`
 
 Filters reusable campaigns available to shortcodes and checkout.
 
@@ -277,7 +277,7 @@ Parameters:
 
 Return an array keyed by campaign slug.
 
-### `straysafe_payments_applied_campaign_settings`
+### `plugin_payments_applied_campaign_settings`
 
 Filters settings after a campaign is applied, or when a requested campaign is missing.
 
@@ -289,7 +289,7 @@ Parameters:
 
 Return the adjusted settings array.
 
-### `straysafe_payments_widget_settings`
+### `plugin_payments_widget_settings`
 
 Filters settings used to render a specific donation widget instance.
 
@@ -300,7 +300,7 @@ Parameters:
 
 Return the adjusted settings array.
 
-### `straysafe_payments_fee_profile`
+### `plugin_payments_fee_profile`
 
 Filters provider fee recovery calculations.
 
@@ -312,7 +312,7 @@ Parameters:
 
 Return the adjusted fee profile.
 
-### `straysafe_payments_sanitized_settings`
+### `plugin_payments_sanitized_settings`
 
 Filters settings immediately before they are stored by the Settings API.
 
@@ -323,7 +323,7 @@ Parameters:
 
 Return sanitized settings.
 
-### `straysafe_payments_checkout_validation_error`
+### `plugin_payments_checkout_validation_error`
 
 Filters checkout validation result.
 
@@ -335,7 +335,7 @@ Parameters:
 
 Return `null` for valid checkout or a user-facing error string.
 
-### `straysafe_payments_custom_checkout_handler`
+### `plugin_payments_custom_checkout_handler`
 
 Lets extensions completely handle checkout creation.
 
@@ -344,11 +344,11 @@ Parameters:
 - `null|array|WP_Error $result`
 - `array $request`
 - `array $settings`
-- `StraySafe_Payment_Provider_Interface $provider`
+- `Plugin_Payment_Provider_Interface $provider`
 
 Return `null` to continue with the active provider, a checkout result array to stop provider execution, or `WP_Error` to fail checkout.
 
-### `straysafe_payments_checkout_request`
+### `plugin_payments_checkout_request`
 
 Filters the normalized checkout request before provider execution.
 
@@ -356,11 +356,11 @@ Parameters:
 
 - `array $request`
 - `array $settings`
-- `StraySafe_Payment_Provider_Interface $provider`
+- `Plugin_Payment_Provider_Interface $provider`
 
 Return the adjusted request array.
 
-### `straysafe_payments_checkout_result`
+### `plugin_payments_checkout_result`
 
 Filters the provider checkout result before it is returned to the browser.
 
@@ -369,7 +369,7 @@ Parameters:
 - `array|WP_Error $result`
 - `array $request`
 - `array $settings`
-- `StraySafe_Payment_Provider_Interface $provider`
+- `Plugin_Payment_Provider_Interface $provider`
 
 Return an adjusted result array or `WP_Error`.
 
@@ -378,7 +378,7 @@ Return an adjusted result array or `WP_Error`.
 Custom webhook handlers can use the public recording methods to populate the built-in history, dashboard, and audit log.
 
 ```php
-StraySafe_Payments_Module::record_payment_event(
+Plugin_Payments_Module::record_payment_event(
   'pay_123',
   'succeeded',
   'acme_event_123',
@@ -386,7 +386,7 @@ StraySafe_Payments_Module::record_payment_event(
   'acme_bank'
 );
 
-StraySafe_Payments_Module::record_subscription_event(
+Plugin_Payments_Module::record_subscription_event(
   'sub_123',
   'active',
   'acme_event_124',
@@ -394,5 +394,5 @@ StraySafe_Payments_Module::record_subscription_event(
   'acme_bank'
 );
 
-StraySafe_Payments_Module::audit('acme_webhook_received', ['event_id' => 'acme_event_123']);
+Plugin_Payments_Module::audit('acme_webhook_received', ['event_id' => 'acme_event_123']);
 ```

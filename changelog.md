@@ -29,40 +29,40 @@
 - Expanded cache/uninstall cleanup to include provider diagnostics and Shelterluv/PetPoint transient caches.
 
 14.0.26
-- Removed user-facing StraySafe defaults so the suite is rescue-neutral.
+- Removed user-facing Plugin defaults so the suite is rescue-neutral.
 - Added live configurable Shelterluv and PetPoint connector paths for adoptables, adoptions, reports, in-care counts and image proxying.
 - Added shared frontend CSS/JS assets, analytics rate limiting, and full uninstall cleanup.
 
-# ASM Plugin Suite 14.0.25
+# Rescue Plugin Suite 14.0.25
 
 ## Fixed
 - Added mobile Safari-focused image rendering safeguards for adoptable/adopted cards and modals.
 - Added critical modal fallback styles so direct-linked animal modals do not flash unstyled before utility CSS is ready.
 - Adoptable and adopted modal galleries now eager-load visible images and retry transient image failures before removing missing photos.
 
-# ASM Plugin Suite 14.0.24
+# Rescue Plugin Suite 14.0.24
 
 ## Improved
 - Removed the trailing divider after the adopted modal below-story text while keeping the separator before it.
 
-# ASM Plugin Suite 14.0.23
+# Rescue Plugin Suite 14.0.23
 
 ## Improved
 - Moved the divider-wrapped adopted modal text block below the animal story.
 - Updated adopted modal settings labels so the configurable text is described as below-story content.
 
-# ASM Plugin Suite 14.0.22
+# Rescue Plugin Suite 14.0.22
 
 ## Improved
 - Added subtle divider lines before and after the adopted modal text above story section.
 
-# ASM Plugin Suite 14.0.21
+# Rescue Plugin Suite 14.0.21
 
 ## Improved
 - Moved the adopted modal tip below the adoptables CTA block and above the "Scroll to read my story" prompt.
 - Reduced top and bottom padding around the configurable adopted modal text above story section.
 
-# ASM Plugin Suite 14.0.20
+# Rescue Plugin Suite 14.0.20
 
 ## Improved
 - Adopted modal headers now show the shelter code under the animal name instead of repeating sex and age.
@@ -71,7 +71,7 @@
 - Tightened spacing around the configurable modal text above the story.
 - Increased the adopted modal Story heading size and weight.
 
-# ASM Plugin Suite 14.0.19
+# Rescue Plugin Suite 14.0.19
 
 ## Improved
 - Widened the adopted modal story area so it spans the modal beneath the photo/details row.
@@ -82,12 +82,12 @@
 ## Fixed
 - Restored close-on-outside-click for adopted modals by handling clicks on the empty viewport as well as the backdrop.
 
-# ASM Plugin Suite 14.0.18
+# Rescue Plugin Suite 14.0.18
 
 ## Improved
 - Moved adopted modal story text into the photo column beneath the gallery thumbnails, matching the Adoptables modal flow where longer narrative content sits below the images instead of beside them.
 
-# ASM Plugin Suite 14.0.17
+# Rescue Plugin Suite 14.0.17
 
 ## Added
 - Added social metadata previews for modal deep links, including animal title, shelter code, description excerpt and primary image.
@@ -99,7 +99,7 @@
 ## Fixed
 - Removed failed or unpublished photo slots from Adoptables and Adopted modal galleries instead of showing broken image thumbnails.
 
-# ASM Plugin Suite 14.0.16
+# Rescue Plugin Suite 14.0.16
 
 ## Added
 - Added Global settings for the Adoptables UI page URL and Adopted UI page URL.
@@ -113,12 +113,12 @@
 - Fixed the adoptables modal application form loader so the ASM form script is inserted next to its target and blank renders show a visible error instead of an empty panel.
 - Fixed duplicated gallery photos caused by the image proxy serving later photo slots as fallbacks for missing requested slots.
 
-# ASM Plugin Suite 14.0.15
+# Rescue Plugin Suite 14.0.15
 
 ## Fixed
 - Fixed Adoptables and Adopted widgets rendering as blank space when an HTML/entity processor decoded inline JavaScript entity strings and broke script parsing before the widgets could reveal themselves.
 
-# ASM Plugin Suite 14.0.14
+# Rescue Plugin Suite 14.0.14
 
 ## Added
 - Added a Global cache bypass toggle so ASM/Custom API data and SEO profile feeds can skip plugin transients for immediate content updates.
@@ -134,7 +134,7 @@
 - Prevented hidden settings subtabs from resetting unrelated fields when saved.
 - Made frontend pagination scripts tolerate disabled upper navigation controls.
 
-# ASM Plugin Suite 14.0.13
+# Rescue Plugin Suite 14.0.13
 
 ## Fixed
 - Removed duplicate core initialization from the class file so hooks and handlers register once through the main plugin file.
@@ -152,20 +152,20 @@
 - Made Custom API and ASM proxy caches respect the suite cache settings, and clear both ASM and Custom API cache keys from the cache tool.
 - Added Favourite to the modal header layout builder action order.
 
-# ASM Plugin Suite 14.0.12
+# Rescue Plugin Suite 14.0.12
 
 ## Fixed
 - Prevented the Adoptables modal, filter overlay, favourites overlay and comparison overlay from flashing as unstyled content during page refresh.
 - Added critical inline hiding that works before Tailwind CDN utilities are available.
 - Constrained modal SVG icons during initial rendering so navigation arrows cannot briefly expand to their browser-default size.
 
-# ASM Plugin Suite 14.0.11
+# Rescue Plugin Suite 14.0.11
 
 - Reworked ASM application success detection so the modal scrolls to the top even when Shelter Manager does not dispatch a conventional form submit event.
 - Detects confirmation text, major form replacement, button activation and iframe reloads.
 - Resets every relevant modal and nested form scroll container repeatedly while the asynchronous confirmation is rendered.
 
-# ASM Plugin Suite 14.0.10
+# Rescue Plugin Suite 14.0.10
 
 - Fixed the Adoptables application form so the modal scrolls back to the top after submission.
 - Added delayed scroll correction for Shelter Manager's asynchronous form replacement.
@@ -173,7 +173,7 @@
 - Scrolls the modal viewport itself rather than the page behind the modal.
 - Retained the single-form-instance fix and all V14 SEO and modal functionality.
 
-# ASM Plugin Suite 14.0.9
+# Rescue Plugin Suite 14.0.9
 
 - Fixed the Adoptables modal form conflict when the same ASM adoption form is already present elsewhere on the page.
 - Prevented duplicate `asm3-onlineform` IDs, which stop Shelter Manager's embedded form script from initialising the modal copy.
@@ -182,7 +182,7 @@
 - The form is restored to its original page position when the user returns to the animal details.
 - Retained submission success scroll-to-top behaviour and all V14 SEO and modal features.
 
-# ASM Plugin Suite 14.0.8
+# Rescue Plugin Suite 14.0.8
 
 - Restored the proven V13.6.15 adoption-form rendering method.
 - The exact application-form shortcode saved in Plugin Suite settings is now rendered server-side inside the Adoptables modal.
@@ -201,7 +201,7 @@
 - The form now loads on demand and explicitly executes the returned ASM script after inserting the form container.
 - Added clear loading and error states for the application form.
 
-# ASM Plugin Suite changelog
+# Rescue Plugin Suite changelog
 
 ## 14.0.5
 
@@ -233,7 +233,7 @@
 - Fixed a JavaScript syntax error in the Adopted UI card accessibility label that left the widget hidden as a blank space.
 - Retained all V14.0.0 SEO profile, sitemap, metadata and structured-data features.
 
-# ASM Plugin Suite changelog
+# Rescue Plugin Suite changelog
 
 ## 14.0.0 - SEO and profile architecture
 

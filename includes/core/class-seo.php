@@ -2,12 +2,12 @@
 if (!defined('ABSPATH')) exit;
 
 /**
- * SEO and public profile layer for ASM Plugin Suite.
+ * SEO and public profile layer for Rescue Plugin Suite.
  * Keeps modal-based UIs while exposing crawlable, canonical animal pages.
  */
-final class StraySafe_UI_Suite_SEO {
-  const ADOPTABLE_VAR = 'straysafe_animal_slug';
-  const ADOPTED_VAR   = 'straysafe_adopted_slug';
+final class Plugin_UI_Suite_SEO {
+  const ADOPTABLE_VAR = 'plugin_animal_slug';
+  const ADOPTED_VAR   = 'plugin_adopted_slug';
 
   public static function init() {
     add_action('init', [__CLASS__, 'rewrite_rules'], 5);
@@ -60,7 +60,7 @@ final class StraySafe_UI_Suite_SEO {
   private static function ui_modal_url($animal, $adopted = false) {
     $id = self::animal_id($animal);
     if (!$id) return self::profile_url($animal, $adopted);
-    $settings = class_exists('StraySafe_UI_Suite_Plugin') ? StraySafe_UI_Suite_Plugin::get_settings() : get_option('straysafe_ui_suite_settings_v83', []);
+    $settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : get_option('plugin_ui_suite_settings_v83', []);
     $global = is_array($settings) && isset($settings['global']) && is_array($settings['global']) ? $settings['global'] : [];
     $base = $adopted ? ($global['adopted_page_url'] ?? '') : ($global['adoptables_page_url'] ?? '');
     $base = esc_url_raw($base);
@@ -113,13 +113,13 @@ final class StraySafe_UI_Suite_SEO {
 
   private static function image_url($a, $seq = 1) {
     $id = self::animal_id($a);
-    return $id ? add_query_arg(['animalid'=>$id, 'seq'=>(int)$seq], rest_url('straysafe/v1/animal-image')) : '';
+    return $id ? add_query_arg(['animalid'=>$id, 'seq'=>(int)$seq], rest_url('plugin/v1/animal-image')) : '';
   }
 
   private static function cache_bypass() {
-    if (function_exists('ss_suite_cache_bypass')) return ss_suite_cache_bypass();
-    $settings = get_option('straysafe_ui_suite_settings_v83', []);
-    return is_array($settings) && !empty($settings['global']['bypass_cache']);
+    if (function_exists('plugin_suite_cache_bypass')) return plugin_suite_cache_bypass();
+    $settings = get_option('plugin_ui_suite_settings_v83', []);
+    return is_array($settings) && !empty($settings['global']['bypass_plugin_cache']);
   }
 
   private static function cache_get($key) {
@@ -133,16 +133,16 @@ final class StraySafe_UI_Suite_SEO {
   }
 
   private static function fetch_custom_api_items($endpoint_key, $preferred_key, $normalizer, $query = []) {
-    if (!function_exists('ss_custom_api_config') || !function_exists('ss_custom_api_request') || !function_exists('ss_custom_api_extract_items')) return [];
-    $cfg = ss_custom_api_config();
+    if (!function_exists('plugin_custom_api_config') || !function_exists('plugin_custom_api_request') || !function_exists('plugin_custom_api_extract_items')) return [];
+    $cfg = plugin_custom_api_config();
     $url = $cfg[$endpoint_key] ?? '';
     if (!$url) return [];
     if (!empty($cfg['api_key'])) $query['api_key'] = $cfg['api_key'];
-    $res = ss_custom_api_request($url, $query);
+    $res = plugin_custom_api_request($url, $query);
     if (is_wp_error($res)) return [];
     $data = json_decode(wp_remote_retrieve_body($res), true);
     if (!is_array($data)) return [];
-    $items = ss_custom_api_extract_items($data, $preferred_key);
+    $items = plugin_custom_api_extract_items($data, $preferred_key);
     $items = array_values(array_filter($items, 'is_array'));
     return function_exists($normalizer) ? array_values(array_map($normalizer, $items)) : $items;
   }
@@ -150,18 +150,18 @@ final class StraySafe_UI_Suite_SEO {
   private static function fetch_adoptables() {
     $cache = self::cache_get('asm_suite_seo_adoptables_v1');
     if (is_array($cache)) return $cache;
-    $source = function_exists('ss_suite_data_source') ? ss_suite_data_source() : 'asm';
+    $source = function_exists('plugin_suite_data_source') ? plugin_suite_data_source() : 'asm';
     if ($source === 'custom_api') {
-      $data = self::fetch_custom_api_items('adoptables_url', 'adoptables', 'ss_custom_api_normalize_adoptable');
+      $data = self::fetch_custom_api_items('adoptables_url', 'adoptables', 'plugin_custom_api_normalize_adoptable');
       self::cache_set('asm_suite_seo_adoptables_v1', $data, 300);
       return $data;
     }
     if ($source !== 'asm') return [];
-    if (!function_exists('ss_asm_http_get')) return [];
-    $res = ss_asm_http_get([
+    if (!function_exists('plugin_asm_http_get')) return [];
+    $res = plugin_asm_http_get([
       'method' => 'json_adoptable_animals',
-      'username' => function_exists('ss_asm_user') ? ss_asm_user() : '',
-      'password' => function_exists('ss_asm_pass') ? ss_asm_pass() : '',
+      'username' => function_exists('plugin_asm_user') ? plugin_asm_user() : '',
+      'password' => function_exists('plugin_asm_pass') ? plugin_asm_pass() : '',
     ]);
     if (is_wp_error($res)) return [];
     $data = json_decode(wp_remote_retrieve_body($res), true);
@@ -173,20 +173,20 @@ final class StraySafe_UI_Suite_SEO {
   private static function fetch_adopted() {
     $cache = self::cache_get('asm_suite_seo_adopted_v1');
     if (is_array($cache)) return $cache;
-    $source = function_exists('ss_suite_data_source') ? ss_suite_data_source() : 'asm';
+    $source = function_exists('plugin_suite_data_source') ? plugin_suite_data_source() : 'asm';
     if ($source === 'custom_api') {
-      $data = self::fetch_custom_api_items('adoptions_url', 'adoptions', 'ss_custom_api_normalize_adoption', ['years' => 10]);
+      $data = self::fetch_custom_api_items('adoptions_url', 'adoptions', 'plugin_custom_api_normalize_adoption', ['years' => 10]);
       self::cache_set('asm_suite_seo_adopted_v1', $data, 900);
       return $data;
     }
     if ($source !== 'asm') return [];
-    if (!function_exists('ss_asm_http_get')) return [];
+    if (!function_exists('plugin_asm_http_get')) return [];
     $to = current_time('timestamp');
     $from = strtotime('-10 years', $to);
-    $res = ss_asm_http_get([
+    $res = plugin_asm_http_get([
       'method' => 'json_adopted_animals',
-      'username' => function_exists('ss_asm_user') ? ss_asm_user() : '',
-      'password' => function_exists('ss_asm_pass') ? ss_asm_pass() : '',
+      'username' => function_exists('plugin_asm_user') ? plugin_asm_user() : '',
+      'password' => function_exists('plugin_asm_pass') ? plugin_asm_pass() : '',
       'fromdate' => date('d/m/Y', $from),
       'todate' => date('d/m/Y', $to),
     ]);
@@ -385,21 +385,21 @@ final class StraySafe_UI_Suite_SEO {
     if (!is_singular()) return;
     $post = get_queried_object();
     if (!$post || empty($post->post_content)) return;
-    $settings = class_exists('StraySafe_UI_Suite_Plugin') ? StraySafe_UI_Suite_Plugin::get_settings() : [];
+    $settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : [];
     $content = (string)$post->post_content;
     $schemas = [];
     $adoptables_tag = $settings['shortcodes']['adoptables'] ?? 'adoptables';
     $adopted_tag = $settings['shortcodes']['adopted'] ?? 'adopted';
     $stats_tag = $settings['shortcodes']['statistics'] ?? 'stats';
     $quiz_tag = $settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz';
-    if (has_shortcode($content, $adoptables_tag) || has_shortcode($content, 'straysafe_adoptables_ui')) {
+    if (has_shortcode($content, $adoptables_tag) || has_shortcode($content, 'plugin_adoptables_ui')) {
       $items = [];
       foreach (array_slice(self::fetch_adoptables(), 0, 50) as $i=>$a) {
         $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::ui_modal_url($a,false),'name'=>self::animal_name($a)];
       }
       $schemas[] = ['@context'=>'https://schema.org','@type'=>'ItemList','name'=>'Cats available for adoption','itemListElement'=>$items];
     }
-    if (has_shortcode($content, $adopted_tag) || has_shortcode($content, 'straysafe_adopted_ui')) {
+    if (has_shortcode($content, $adopted_tag) || has_shortcode($content, 'plugin_adopted_ui')) {
       $items = [];
       foreach (array_slice(self::fetch_adopted(), 0, 50) as $i=>$a) {
         $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::ui_modal_url($a,true),'name'=>self::animal_name($a)];
@@ -413,7 +413,7 @@ final class StraySafe_UI_Suite_SEO {
       $schemas[] = ['@context'=>'https://schema.org','@type'=>'WebApplication','name'=>'Cat adoption match quiz','applicationCategory'=>'LifestyleApplication','operatingSystem'=>'Web','url'=>get_permalink($post)];
     }
     $suite_tags = [];
-    if (class_exists('StraySafe_UI_Suite_Plugin')) $suite_tags = StraySafe_UI_Suite_Plugin::all_suite_shortcodes();
+    if (class_exists('Plugin_UI_Suite_Plugin')) $suite_tags = Plugin_UI_Suite_Plugin::all_suite_shortcodes();
     $has_suite = false;
     foreach ($suite_tags as $tag) { if ($tag && has_shortcode($content, $tag)) { $has_suite = true; break; } }
     if ($has_suite) {
@@ -423,7 +423,7 @@ final class StraySafe_UI_Suite_SEO {
         'knowsAbout'=>['Cat rescue','Cat adoption','Cat fostering','Animal welfare']
       ];
     }
-    $form_tags = class_exists('StraySafe_UI_Suite_Plugin') ? array_keys(StraySafe_UI_Suite_Plugin::get_forms()) : [];
+    $form_tags = class_exists('Plugin_UI_Suite_Plugin') ? array_keys(Plugin_UI_Suite_Plugin::get_forms()) : [];
     foreach ($form_tags as $tag) {
       if ($tag && has_shortcode($content, $tag)) {
         $schemas[] = ['@context'=>'https://schema.org','@type'=>'ContactPage','name'=>get_the_title($post),'url'=>get_permalink($post)];
@@ -443,15 +443,15 @@ final class StraySafe_UI_Suite_SEO {
   public static function register_sitemap_provider($server) {
     if (!class_exists('WP_Sitemaps_Provider')) return;
     $provider = new class extends WP_Sitemaps_Provider {
-      public function __construct() { $this->name='straysafe-animals'; $this->object_type='straysafe-animals'; }
+      public function __construct() { $this->name='plugin-animals'; $this->object_type='plugin-animals'; }
       public function get_url_list($page_num, $object_subtype='') {
         $urls=[];
-        foreach (StraySafe_UI_Suite_SEO::sitemap_animals() as $item) $urls[]=['loc'=>$item['url'],'lastmod'=>$item['lastmod']];
+        foreach (Plugin_UI_Suite_SEO::sitemap_animals() as $item) $urls[]=['loc'=>$item['url'],'lastmod'=>$item['lastmod']];
         return $urls;
       }
       public function get_max_num_pages($object_subtype='') { return 1; }
     };
-    $server->registry->add_provider('straysafe-animals', $provider);
+    $server->registry->add_provider('plugin-animals', $provider);
   }
 
   public static function sitemap_animals() {

@@ -174,7 +174,7 @@
           return;
         }
 
-        if (!window.StraySafePayments || !window.StraySafePayments.ajaxUrl || !window.StraySafePayments.nonce) {
+        if (!window.PluginPayments || !window.PluginPayments.ajaxUrl || !window.PluginPayments.nonce) {
           console.log('Donation widget selection', {
             type: currentType,
             amount: toNumber(state.amount),
@@ -187,15 +187,15 @@
 
         continueButton.disabled = true;
         var formData = new FormData();
-        formData.append('action', 'straysafe_payments_checkout');
-        formData.append('nonce', window.StraySafePayments.nonce);
+        formData.append('action', 'plugin_payments_checkout');
+        formData.append('nonce', window.PluginPayments.nonce);
         formData.append('type', currentType);
         formData.append('amount', state.amount);
         formData.append('campaign', widget.dataset.campaign || '');
         formData.append('gift_aid', widget.querySelector('[data-payment-gift-aid]') && widget.querySelector('[data-payment-gift-aid]').checked ? '1' : '0');
         formData.append('fee_recovery', feeRecovery && feeRecovery.checked ? '1' : '0');
 
-        fetch(window.StraySafePayments.ajaxUrl, {
+        fetch(window.PluginPayments.ajaxUrl, {
           method: 'POST',
           credentials: 'same-origin',
           body: formData
@@ -219,6 +219,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    Array.prototype.slice.call(document.querySelectorAll('.ss-payments-widget')).forEach(init);
+    Array.prototype.slice.call(document.querySelectorAll('.plugin-payments-widget')).forEach(init);
   });
 }());
