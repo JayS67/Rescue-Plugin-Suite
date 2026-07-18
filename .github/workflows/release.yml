@@ -32,6 +32,7 @@ jobs:
           rsync -a --delete --exclude='.git' --exclude='.github' --exclude='build' ./ build/rescue-plugin-suite/
           cd build
           zip -r rescue-plugin-suite-${GITHUB_REF_NAME}.zip rescue-plugin-suite
+          test "$(unzip -Z1 rescue-plugin-suite-${GITHUB_REF_NAME}.zip | grep -cx 'rescue-plugin-suite/plugin-ui-suite.php')" = "1"
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
