@@ -198,12 +198,11 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function include_modules() {
-    self::define_proxy_constants_from_settings();
+    require_once PLUGIN_SUITE_PATH . 'includes/modules/asm-proxy/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/forms/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/adoptables/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/adopted/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/statistics/class-module.php';
-    require_once PLUGIN_SUITE_PATH . 'includes/modules/asm-proxy/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/payments/class-module.php';
   }
 
@@ -403,7 +402,7 @@ final class Plugin_UI_Suite_Plugin {
         'answer_mappings' => "age|ANIMALAGE|10\nsex|SEXNAME|8\nindoor|ANIMALCOMMENTS|6\nbonded|ANIMALCOMMENTS|4\ngood_cats|GOODWITHCATS|5\ngood_dogs|GOODWITHDOGS|5\ngood_children|GOODWITHCHILDREN|5"
       ],
       'forms' => [
-        'account' => 'plugin',
+        'account' => '',
         'items' => [
           ['shortcode' => 'adoption_form', 'form_id' => '59'],
           ['shortcode' => 'volunteer_form', 'form_id' => '104'],
@@ -418,6 +417,7 @@ final class Plugin_UI_Suite_Plugin {
         'account' => '',
         'username' => '',
         'password' => '',
+        'api_key' => '',
         'cache_adoptables_seconds' => 60,
         'cache_reports_seconds' => 60,
         'cache_incare_seconds' => 60,
@@ -450,6 +450,16 @@ final class Plugin_UI_Suite_Plugin {
         update_option(self::OPT_KEY, $settings, false);
       }
       $target = '1.2.0';
+    }
+    if (version_compare($target, '1.2.2', '<')) {
+      $settings = self::get_settings();
+      // Earlier releases let Forms keep a separate ASM account. Move that
+      // value into the single Integration source before Forms stops reading it.
+      if (empty($settings['proxy']['account']) && !empty($settings['forms']['account'])) {
+        $settings['proxy']['account'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$settings['forms']['account']);
+        update_option(self::OPT_KEY, $settings, false);
+      }
+      $target = '1.2.2';
     }
     update_option(self::SCHEMA_VERSION_KEY, self::SCHEMA_VERSION, false);
     delete_transient($lock);
@@ -597,11 +607,10 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function render_form_shortcode($form_id) {
-    $settings = self::get_settings();
-    $account = sanitize_text_field($settings['forms']['account'] ?? ($settings['proxy']['account'] ?? ''));
+    $account = function_exists('plugin_asm_account') ? plugin_asm_account() : '';
     $form_id = preg_replace('/[^0-9]/', '', (string)$form_id);
     if (!$account || !$form_id) return '<p>Form could not be loaded.</p>';
-    $script_url = esc_url('https://service.sheltermanager.com/asmservice?account=' . rawurlencode($account) . '&method=online_form_js&formid=' . rawurlencode($form_id));
+    $script_url = function_exists('plugin_asm_online_form_url') ? esc_url(plugin_asm_online_form_url($form_id)) : '';
     ob_start(); ?>
     <section class="rescue-suite-form-wrap" aria-label="Online application form"><noscript><p>This application form requires JavaScript. Please contact the rescue if you need help applying.</p></noscript><div id="asm3-onlineform" aria-live="polite"></div><script type="text/javascript" src="<?php echo esc_url($script_url); ?>"></script></section>
     <?php return ob_get_clean();
@@ -1022,7 +1031,8 @@ final class Plugin_UI_Suite_Plugin {
       $clean['quiz']['answer_mappings'] = sanitize_textarea_field($q['answer_mappings'] ?? ($clean['quiz']['answer_mappings'] ?? $defaults['quiz']['answer_mappings']));
     } elseif ($active_tab === 'forms') {
       $fo = $input['forms'] ?? [];
-      $clean['forms']['account'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($fo['account'] ?? ($clean['forms']['account'] ?? $defaults['forms']['account'])));
+      // The legacy forms account is no longer a connection source. Forms use
+      // the same ASM Integration account as every other ASM consumer.
       $clean['forms']['items'] = [];
       $items = isset($fo['items']) && is_array($fo['items']) ? $fo['items'] : [];
       for ($i=0; $i<10; $i++) {
@@ -1033,11 +1043,17 @@ final class Plugin_UI_Suite_Plugin {
       $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes'] ?? ($clean['forms']['platform_support_notes'] ?? $defaults['forms']['platform_support_notes']));
     } elseif ($active_tab === 'data-source') {
       $g = $input['global'] ?? [];
+      $pr = $input['proxy'] ?? [];
       $source = sanitize_key($g['data_source'] ?? ($clean['global']['data_source'] ?? 'asm'));
       $clean['global']['data_source'] = in_array($source, ['asm','custom_api','shelterluv','petpoint'], true) ? $source : 'asm';
       foreach (['custom_api_url','custom_api_adoptables_url','custom_api_adoptions_url','custom_api_report_url','custom_api_incare_url','custom_api_image_url','shelterluv_base_url','shelterluv_adoptables_url','shelterluv_adoptions_url','shelterluv_report_url','shelterluv_incare_url','shelterluv_image_url','petpoint_base_url','petpoint_adoptables_url','petpoint_adoptions_url','petpoint_report_url','petpoint_incare_url','petpoint_image_url'] as $k) $clean['global'][$k] = esc_url_raw($g[$k] ?? ($clean['global'][$k] ?? ''));
       foreach (['custom_api_key','custom_api_auth_header','provider_profile','field_map','shelterluv_api_key','shelterluv_org_id','petpoint_username','petpoint_shelter_id','petpoint_adopted_report_id'] as $k) $clean['global'][$k] = sanitize_text_field($g[$k] ?? ($clean['global'][$k] ?? ''));
       if (array_key_exists('petpoint_password', $g) && $g['petpoint_password'] !== '') $clean['global']['petpoint_password'] = sanitize_text_field((string)$g['petpoint_password']);
+      $clean['proxy']['base_url'] = esc_url_raw($pr['base_url'] ?? ($clean['proxy']['base_url'] ?? $defaults['proxy']['base_url']));
+      $clean['proxy']['account'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($pr['account'] ?? ($clean['proxy']['account'] ?? '')));
+      $clean['proxy']['username'] = sanitize_text_field((string)($pr['username'] ?? ($clean['proxy']['username'] ?? '')));
+      if (array_key_exists('password', $pr) && $pr['password'] !== '') $clean['proxy']['password'] = (string)$pr['password'];
+      if (array_key_exists('api_key', $pr) && $pr['api_key'] !== '') $clean['proxy']['api_key'] = sanitize_text_field((string)$pr['api_key']);
       if (array_key_exists('preview_mode', $g)) $clean['global']['preview_mode'] = !empty($g['preview_mode']) ? 1 : 0;
       if (array_key_exists('bypass_plugin_cache', $g)) $clean['global']['bypass_plugin_cache'] = !empty($g['bypass_plugin_cache']) ? 1 : 0;
     } elseif ($active_tab === 'layout') {
@@ -1064,6 +1080,9 @@ final class Plugin_UI_Suite_Plugin {
       if (array_key_exists('password', $pr) && $pr['password'] !== '') {
         $clean['proxy']['password'] = (string)$pr['password'];
       }
+      if (array_key_exists('api_key', $pr) && $pr['api_key'] !== '') {
+        $clean['proxy']['api_key'] = sanitize_text_field((string)$pr['api_key']);
+      }
       $clean['proxy']['cache_adoptables_seconds'] = self::sanitise_int($pr['cache_adoptables_seconds'] ?? '', $clean['proxy']['cache_adoptables_seconds'] ?? $defaults['proxy']['cache_adoptables_seconds'], 0, 600);
       $clean['proxy']['cache_reports_seconds'] = self::sanitise_int($pr['cache_reports_seconds'] ?? '', $clean['proxy']['cache_reports_seconds'] ?? $defaults['proxy']['cache_reports_seconds'], 0, 600);
       $clean['proxy']['cache_incare_seconds'] = self::sanitise_int($pr['cache_incare_seconds'] ?? '', $clean['proxy']['cache_incare_seconds'] ?? $defaults['proxy']['cache_incare_seconds'], 0, 600);
@@ -1075,7 +1094,6 @@ final class Plugin_UI_Suite_Plugin {
 
     self::create_snapshot('save');
     update_option(self::OPT_KEY, $clean, false);
-    self::define_proxy_constants_from_settings($clean);
     $args=['page'=>'plugin-ui-suite','tab'=>$active_tab,'updated'=>'true']; if($active_subtab!=='') $args['subtab']=$active_subtab; wp_safe_redirect(add_query_arg($args, admin_url('options-general.php')));
     exit;
   }
@@ -1343,7 +1361,15 @@ final class Plugin_UI_Suite_Plugin {
     echo '<div class="plugin-suite-card"><h2>'.esc_html($items[$sub]).' integration</h2><p class="description">Complete the details supplied by this service, save, then use Diagnostics to confirm the connection. Leave optional endpoint overrides blank unless your provider or developer supplied them.</p><table class="form-table">';
     ob_start(); self::select_input('global','data_source',$s['global']['data_source'] ?? 'asm', ['asm'=>'Animal Shelter Manager (ASM)','custom_api'=>'Custom API','shelterluv'=>'Shelterluv','petpoint'=>'PetPoint']); self::row('Use as live animal source', ob_get_clean());
     if ($sub === 'asm') {
-      self::row('Credentials', '<p class="description">ASM service URL, account, username and password are read from the existing ASM proxy constants/settings. Use Developer Tools only when a developer needs raw proxy checks.</p>');
+      $proxy = self::get_proxy_settings($s);
+      $configuration = function_exists('plugin_asm_configuration') ? plugin_asm_configuration() : [];
+      $source_label = function($key) use ($configuration) { $source = $configuration[$key]['source'] ?? 'saved_setting'; return ['environment'=>'environment variable','constant'=>'wp-config.php constant','saved_setting'=>'saved Integration setting','default'=>'plugin default'][$source] ?? $source; };
+      self::row('Service URL', '<input type="url" name="suite[proxy][base_url]" value="'.esc_attr($proxy['base_url'] ?? '').'" class="regular-text code" /><p class="description">Active value: '.esc_html($configuration['base_url']['value'] ?? '').' (from '.esc_html($source_label('base_url')).').</p>');
+      self::row('Account name', '<input type="text" name="suite[proxy][account]" value="'.esc_attr($proxy['account'] ?? '').'" class="regular-text" /><p class="description">Active value: '.esc_html($configuration['account']['value'] ?? '').' (from '.esc_html($source_label('account')).').</p>');
+      self::row('Username', '<input type="text" name="suite[proxy][username]" value="'.esc_attr($proxy['username'] ?? '').'" class="regular-text" autocomplete="off" /><p class="description">Active value is supplied by '.esc_html($source_label('username')).'.</p>');
+      self::row('Password', '<input type="password" name="suite[proxy][password]" value="" class="regular-text" autocomplete="new-password" /><p class="description">'.(!empty($proxy['password']) ? 'Saved value present. ' : '').'Leave blank to keep the saved value. Active value is supplied by '.esc_html($source_label('password')).'.</p>');
+      self::row('API key', '<input type="password" name="suite[proxy][api_key]" value="" class="regular-text" autocomplete="new-password" /><p class="description">Optional; ASM service endpoints currently use account, username and password. '.(!empty($proxy['api_key']) ? 'A saved value is present. ' : '').'Leave blank to keep the saved value.</p>');
+      self::row('Configuration precedence', '<p class="description">Environment variables (<code>ASM_BASE_URL</code>, <code>ASM_ACCOUNT</code>, <code>ASM_USERNAME</code>, <code>ASM_PASSWORD</code>, <code>ASM_API_KEY</code>) override <code>wp-config.php</code> constants, which override the saved Integration values. Secrets are masked and are never exposed to visitors.</p>');
       self::row('Documentation', '<a href="https://sheltermanager.com/site/en_asm3_help.html" target="_blank" rel="noopener">ASM API documentation</a>');
     } elseif ($sub === 'shelterluv') {
       foreach (['shelterluv_api_key'=>'API key','shelterluv_base_url'=>'Base URL','shelterluv_org_id'=>'Organisation ID','shelterluv_statuses'=>'Statuses','shelterluv_location_ids'=>'Location IDs','shelterluv_animal_type'=>'Animal type'] as $key=>$label) self::row($label, '<input type="'.($key==='shelterluv_api_key'?'password':'text').'" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text" />');
@@ -1619,7 +1645,7 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_forms_tab($settings) {
     self::form_start('forms'); $items=$settings['forms']['items'];
-    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card" style="grid-column:span 2;"><h2>Forms</h2><table class="form-table">'; ob_start(); self::text_input('forms','account',$settings['forms']['account']); self::row('Shelter Manager account', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>#</th><th>Shortcode</th><th>Form ID</th><th>Use</th></tr></thead><tbody>';
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card" style="grid-column:span 2;"><h2>Forms</h2><p class="description">ASM forms use the account and service URL configured in <a href="'.esc_url(self::admin_page_url('data-source').'&subtab=asm').'">Integrations → ASM</a>. This prevents forms and animal widgets from connecting to different ASM accounts.</p><table class="plugin-suite-table"><thead><tr><th>#</th><th>Shortcode</th><th>Form ID</th><th>Use</th></tr></thead><tbody>';
     for($i=0;$i<10;$i++){ $row=$items[$i] ?? ['shortcode'=>'','form_id'=>'']; $tag=self::sanitize_shortcode_tag($row['shortcode'] ?? ''); echo '<tr><td>'.($i+1).'</td><td><input type="text" name="suite[forms][items]['.$i.'][shortcode]" value="'.esc_attr($row['shortcode'] ?? '').'" class="regular-text" /></td><td><input type="text" name="suite[forms][items]['.$i.'][form_id]" value="'.esc_attr($row['form_id'] ?? '').'" class="small-text" /></td><td>'.($tag?'<code>['.esc_html($tag).']</code>':'').'</td></tr>'; }
     echo '</tbody></table></div>';
     echo '<div class="plugin-suite-card" style="grid-column:span 2;"><h2>Platform limitations</h2><textarea class="large-text code" rows="6" name="'.esc_attr(self::field_name('forms','platform_support_notes')).'">'.esc_textarea($settings['forms']['platform_support_notes'] ?? '').'</textarea><p class="description">Format: platform|plain-English support or limitation note. These notes keep platform-specific behaviour explicit for administrators.</p></div>';
@@ -1671,19 +1697,6 @@ final class Plugin_UI_Suite_Plugin {
     $defaults = self::default_settings()['proxy'];
     $proxy = isset($settings['proxy']) && is_array($settings['proxy']) ? array_merge($defaults, $settings['proxy']) : $defaults;
     return $proxy;
-  }
-
-  private static function define_proxy_constants_from_settings($settings = null) {
-    $proxy = self::get_proxy_settings($settings ?: self::load_saved_settings());
-    $pairs = [
-      'ASM_BASE_URL' => $proxy['base_url'] ?? '',
-      'ASM_ACCOUNT' => $proxy['account'] ?? '',
-      'ASM_USERNAME' => $proxy['username'] ?? '',
-      'ASM_PASSWORD' => $proxy['password'] ?? '',
-    ];
-    foreach ($pairs as $name => $value) {
-      if (!defined($name) && $value !== '') define($name, $value);
-    }
   }
 
   private static function module_versions() {
@@ -2049,12 +2062,11 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function credential_source_label() {
-    foreach (['ASM_ACCOUNT','ASM_USERNAME','ASM_PASSWORD'] as $const) {
-      if (getenv($const) !== false && getenv($const) !== '') return 'Environment';
-    }
-    foreach (['ASM_ACCOUNT','ASM_USERNAME','ASM_PASSWORD'] as $const) {
-      if (defined($const) && constant($const) !== '') return 'Suite / config constant';
-    }
+    if (!function_exists('plugin_asm_configuration')) return 'Not configured';
+    $sources = array_unique(array_map(function($field) { return $field['source'] ?? 'default'; }, plugin_asm_configuration()));
+    if (in_array('environment', $sources, true)) return 'Environment override';
+    if (in_array('constant', $sources, true)) return 'wp-config.php constant override';
+    if (in_array('saved_setting', $sources, true)) return 'Saved Integration setting';
     return 'Not configured';
   }
 
@@ -2305,10 +2317,11 @@ final class Plugin_UI_Suite_Plugin {
     $p = is_array($settings['proxy'] ?? null) ? $settings['proxy'] : [];
     $source = $status['key'] ?? 'asm';
     if ($source === 'asm') {
+      $asm = function_exists('plugin_asm_configuration') ? plugin_asm_configuration() : [];
       return [
         'items' => [
-          'Base URL' => (string)($p['base_url'] ?? 'https://service.sheltermanager.com/asmservice'),
-          'Account' => (string)($p['account'] ?? ''),
+          'Base URL' => (string)($asm['base_url']['value'] ?? $p['base_url'] ?? 'https://service.sheltermanager.com/asmservice'),
+          'Account' => (string)($asm['account']['value'] ?? $p['account'] ?? ''),
           'Username saved' => !empty($p['username']) ? 'Yes' : 'No',
           'Password saved' => !empty($p['password']) ? 'Yes' : 'No',
           'REST routes' => implode(' | ', [rest_url('plugin/v1/adoptables'), rest_url('plugin/v1/adoptions'), rest_url('plugin/v1/report'), rest_url('plugin/v1/in-care-count'), rest_url('plugin/v1/animal-image')]),
@@ -2589,7 +2602,7 @@ final class Plugin_UI_Suite_Plugin {
     ob_start(); self::text_input('proxy','base_url',$proxy['base_url']); self::row('ASM base URL', ob_get_clean());
     ob_start(); self::text_input('proxy','account',$proxy['account']); self::row('ASM account', ob_get_clean());
     ob_start(); self::text_input('proxy','username',$proxy['username']); self::row('ASM username', ob_get_clean());
-    printf('<tr><th>ASM password</th><td><input type="password" name="%s" value="%s" class="regular-text" autocomplete="new-password" /></td></tr>', esc_attr(self::field_name('proxy','password')), esc_attr($proxy['password']));
+    printf('<tr><th>ASM password</th><td><input type="password" name="%s" value="" class="regular-text" autocomplete="new-password" /><p class="description">%s Leave blank to keep the saved value.</p></td></tr>', esc_attr(self::field_name('proxy','password')), !empty($proxy['password']) ? 'Saved value present.' : '');
     echo '</table></div>';
     echo '<div class="plugin-suite-card"><h2>Cache</h2><table class="form-table">';
     foreach ([['cache_adoptables_seconds','Adoptables cache seconds'],['cache_reports_seconds','Reports cache seconds'],['cache_incare_seconds','In-care cache seconds'],['cache_adoptions_seconds','Adoptions cache seconds']] as $row) { ob_start(); self::number_input('proxy',$row[0],$proxy[$row[0]],0,3600); self::row($row[1], ob_get_clean()); }

@@ -1,3 +1,9 @@
+## 15.0.4-beta
+
+- Restored editable ASM connection controls in Integrations while retaining the integration-based admin architecture.
+- Centralised ASM URL, account and credential resolution for proxy requests and embedded forms, with environment and `wp-config.php` overrides clearly identified.
+- Made Adoptables application forms and standalone Forms use the same configured ASM service URL and account as all REST-backed widgets.
+
 ## 15.0.3-beta
 
 - Replaced the competing Plugin Update Checker path with one native WordPress update pipeline, keyed by the installed plugin basename.

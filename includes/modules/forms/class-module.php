@@ -40,24 +40,13 @@ final class Plugin_Forms_Shortcodes {
 
     private static function render_form($form_id) {
         $form_id = sanitize_text_field($form_id);
-        $settings = get_option('plugin_ui_suite_settings_v83', []);
-        $account = '';
-        if (is_array($settings) && !empty($settings['forms']['account'])) {
-            $account = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$settings['forms']['account']);
-        } elseif (is_array($settings) && !empty($settings['proxy']['account'])) {
-            $account = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$settings['proxy']['account']);
-        }
+        $account = function_exists('plugin_asm_account') ? plugin_asm_account() : '';
 
         if (empty($account) || empty($form_id)) {
             return '<p>Form could not be loaded.</p>';
         }
 
-        $script_url = esc_url(
-            'https://service.sheltermanager.com/asmservice?account=' .
-            rawurlencode($account) .
-            '&method=online_form_js&formid=' .
-            rawurlencode($form_id)
-        );
+        $script_url = function_exists('plugin_asm_online_form_url') ? esc_url(plugin_asm_online_form_url($form_id)) : '';
 
         ob_start();
         ?>

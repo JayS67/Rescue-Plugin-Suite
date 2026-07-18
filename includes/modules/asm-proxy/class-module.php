@@ -7,17 +7,66 @@
 
 if (!defined('ABSPATH')) exit;
 
+/**
+ * Return the one canonical ASM connection configuration.
+ *
+ * Environment variables and wp-config.php constants intentionally override the
+ * saved Integration values so secrets can remain outside the database. The
+ * saved proxy section is the editable Integration source when no override is
+ * present. Do not add feature-specific ASM settings: every ASM consumer must
+ * use these helpers.
+ */
+function plugin_asm_configuration() {
+  $saved = get_option('plugin_ui_suite_settings_v83', []);
+  $proxy = is_array($saved) && isset($saved['proxy']) && is_array($saved['proxy']) ? $saved['proxy'] : [];
+  $fields = [
+    'ASM_BASE_URL' => ['key' => 'base_url', 'default' => 'https://service.sheltermanager.com/asmservice'],
+    'ASM_ACCOUNT' => ['key' => 'account', 'default' => ''],
+    'ASM_USERNAME' => ['key' => 'username', 'default' => ''],
+    'ASM_PASSWORD' => ['key' => 'password', 'default' => ''],
+    // ASM's public service endpoints do not currently use an API key, but
+    // keeping this slot here prevents a second configuration path if that
+    // changes for a supported deployment.
+    'ASM_API_KEY' => ['key' => 'api_key', 'default' => ''],
+  ];
+  $configuration = [];
+  foreach ($fields as $constant => $field) {
+    $environment = getenv($constant);
+    if ($environment !== false && $environment !== '') {
+      $configuration[$field['key']] = ['value' => (string)$environment, 'source' => 'environment'];
+    } elseif (defined($constant) && constant($constant) !== '') {
+      $configuration[$field['key']] = ['value' => (string)constant($constant), 'source' => 'constant'];
+    } elseif (($proxy[$field['key']] ?? '') !== '') {
+      $configuration[$field['key']] = ['value' => (string)$proxy[$field['key']], 'source' => 'saved_setting'];
+    } else {
+      $configuration[$field['key']] = ['value' => $field['default'], 'source' => 'default'];
+    }
+  }
+  return $configuration;
+}
+
 function plugin_asm_get_secret($name, $default = '') {
   $env = getenv($name);
   if ($env !== false && $env !== '') return $env;
   if (defined($name) && constant($name) !== '') return constant($name);
-  return $default;
+  $keys = ['ASM_BASE_URL' => 'base_url', 'ASM_ACCOUNT' => 'account', 'ASM_USERNAME' => 'username', 'ASM_PASSWORD' => 'password', 'ASM_API_KEY' => 'api_key'];
+  $configuration = plugin_asm_configuration();
+  return isset($keys[$name], $configuration[$keys[$name]]) ? $configuration[$keys[$name]]['value'] : $default;
 }
 
 function plugin_asm_base_url() { return plugin_asm_get_secret('ASM_BASE_URL', 'https://service.sheltermanager.com/asmservice'); }
 function plugin_asm_account()  { return plugin_asm_get_secret('ASM_ACCOUNT', ''); }
 function plugin_asm_user()     { return plugin_asm_get_secret('ASM_USERNAME', ''); }
 function plugin_asm_pass()     { return plugin_asm_get_secret('ASM_PASSWORD', ''); }
+function plugin_asm_api_key()  { return plugin_asm_get_secret('ASM_API_KEY', ''); }
+
+function plugin_asm_online_form_url($form_id) {
+  return add_query_arg([
+    'account' => plugin_asm_account(),
+    'method' => 'online_form_js',
+    'formid' => $form_id,
+  ], plugin_asm_base_url());
+}
 
 function plugin_asm_http_get($params, $opts = []) {
   $base = plugin_asm_base_url();
