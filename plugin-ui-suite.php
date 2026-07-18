@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Rescue Plugin Suite
  * Description: Unified commercial plugin suite for adoptables, adopted animals, statistics and forms, with shared settings, previews, proxy integration, setup wizard, diagnostics and snapshots.
- * Version: 15.0.6-beta
+ * Version: 15.0.8-beta
  * Author: Jordan Sutton | Webstax
  */
 

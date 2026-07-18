@@ -2,9 +2,7 @@
   "name": "rescue-plugin-suite/rescue-plugin-suite",
   "description": "Rescue Plugin Suite WordPress plugin build dependencies.",
   "type": "wordpress-plugin",
-  "require": {
-    "yahnis-elsts/plugin-update-checker": "^5.5"
-  },
+  "require": {},
   "require-dev": {},
   "config": {
     "allow-plugins": false,

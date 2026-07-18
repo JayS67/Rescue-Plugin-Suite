@@ -1,3 +1,8 @@
+## 15.0.8-beta
+
+- Made the GitHub updater the sole authoritative native WordPress update source and persistently inject its verified response entry when WordPress reads `update_plugins`.
+- Added native transient tracing, callback-order diagnostics, safe response-object inspection, and refresh verification before exposing Update Now.
+
 ## 15.0.6-beta
 
 - Rebuilt the GitHub release workflow around an explicit WordPress package allow-list and immutable `rescue-plugin-suite-v*.zip` assets.
