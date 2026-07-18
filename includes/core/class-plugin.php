@@ -517,6 +517,20 @@ final class Plugin_UI_Suite_Plugin {
     return $settings;
   }
 
+  /**
+   * Return the exact Adoptables options consumed by both the public shortcode
+   * and the settings preview. This avoids relying on the legacy option mirror,
+   * which is refreshed on admin requests but can be stale on public requests.
+   */
+  public static function get_adoptables_render_options($settings = null) {
+    if (!is_array($settings)) $settings = self::get_settings();
+    $section = is_array($settings['adoptables'] ?? null) ? $settings['adoptables'] : [];
+    $defaults = class_exists('Plugin_Adoptables_UI_Shortcode')
+      ? Plugin_Adoptables_UI_Shortcode::default_options()
+      : [];
+    return self::resolve_section_style('adoptables', array_merge($defaults, $section), $settings);
+  }
+
   private static function sanitize_shortcode_tag($value) {
     $value = strtolower((string)$value);
     $value = preg_replace('/[^a-z0-9_\-]/', '', $value);
@@ -1124,7 +1138,7 @@ final class Plugin_UI_Suite_Plugin {
 
   public static function sync_legacy_options($settings) {
     if (!is_array($settings)) $settings = self::default_settings();
-    if (class_exists('Plugin_Adoptables_UI_Shortcode')) update_option(Plugin_Adoptables_UI_Shortcode::OPT_KEY, self::resolve_section_style('adoptables', array_merge(Plugin_Adoptables_UI_Shortcode::default_options(), $settings['adoptables']), $settings));
+    if (class_exists('Plugin_Adoptables_UI_Shortcode')) update_option(Plugin_Adoptables_UI_Shortcode::OPT_KEY, self::get_adoptables_render_options($settings));
     if (class_exists('Plugin_Adopted_UI_Shortcode')) update_option(Plugin_Adopted_UI_Shortcode::OPT_KEY, self::resolve_section_style('adopted', array_merge(Plugin_Adopted_UI_Shortcode::default_options(), $settings['adopted']), $settings));
     if (function_exists('plugin_stats_ui_default_options')) update_option('plugin_stats_ui_options', self::resolve_section_style('stats', array_merge(plugin_stats_ui_default_options(), $settings['stats']), $settings));
   }
