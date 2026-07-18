@@ -241,3 +241,12 @@
   color: color-mix(in srgb, var(--ssp-text) 86%, transparent);
   font-weight: 800;
 }
+
+.plugin-payments-amounts[hidden] {
+  display: none !important;
+}
+
+.plugin-payments-widget:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--ssp-primary) 55%, transparent);
+  outline-offset: 4px;
+}
