@@ -1,3 +1,9 @@
+## 15.0.0-beta
+
+- Made the main plugin header the single authoritative suite version source, with runtime constants deriving from that header.
+- Fixed GitHub update detection to include beta/prerelease tags, normalise leading `v` prefixes and compare semantic versions consistently.
+- Appended Settings and Help Centre plugin action links after WordPress native action links.
+
 ## 14.0.34
 - Unified the WordPress admin around a single Rescue Plugin Suite settings submenu with Payments and Updates rendered as internal suite tabs.
 - Moved Payments into internal subtabs for Dashboard, General, Providers, Donation Widget, Campaigns, Gift Aid, Cover Fees, Appearance, Transactions, Reports, Diagnostics and Help, with legacy admin URL redirects.

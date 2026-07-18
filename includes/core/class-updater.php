@@ -11,9 +11,22 @@ final class Plugin_UI_Suite_Updater {
   const LAST_DIAGNOSTICS_KEY = 'plugin_ui_suite_update_diagnostics_v1';
 
   public static function repository() { return self::REPO; }
-  public static function api_url() { return 'https://api.github.com/repos/' . self::repository() . '/releases/latest'; }
+  public static function api_url() { return 'https://api.github.com/repos/' . self::repository() . '/releases'; }
   public static function releases_url() { return 'https://github.com/' . self::repository() . '/releases'; }
   public static function plugin_file() { return plugin_basename(PLUGIN_SUITE_PATH . 'plugin-ui-suite.php'); }
+
+  public static function normalize_version($version) {
+    $version = trim((string)$version);
+    $version = preg_replace('/^refs\/tags\//i', '', $version);
+    $version = preg_replace('/^v(?=\d)/i', '', $version);
+    return $version;
+  }
+
+  public static function compare_versions($left, $right, $operator = null) {
+    $left = self::normalize_version($left);
+    $right = self::normalize_version($right);
+    return $operator === null ? version_compare($left, $right) : version_compare($left, $right, $operator);
+  }
 
   public static function init() {
     add_action('init', [__CLASS__, 'boot_update_checker']);
@@ -43,13 +56,21 @@ final class Plugin_UI_Suite_Updater {
     $diag['last_response_code'] = (int)wp_remote_retrieve_response_code($response);
     if ((int)$diag['last_response_code'] >= 300) { $diag['last_error'] = 'GitHub returned HTTP ' . $diag['last_response_code']; update_option(self::LAST_DIAGNOSTICS_KEY, $diag, false); return []; }
     $json = json_decode((string)wp_remote_retrieve_body($response), true);
-    if (!is_array($json) || !empty($json['prerelease'])) { $diag['last_error'] = 'No stable latest release returned.'; update_option(self::LAST_DIAGNOSTICS_KEY, $diag, false); return []; }
+    if (!is_array($json)) { $diag['last_error'] = 'GitHub returned an invalid release response.'; update_option(self::LAST_DIAGNOSTICS_KEY, $diag, false); return []; }
+    $releases = isset($json['tag_name']) ? [$json] : $json;
+    $json = [];
+    foreach ((array)$releases as $candidate_release) {
+      if (!is_array($candidate_release) || !empty($candidate_release['draft'])) continue;
+      $json = $candidate_release;
+      break;
+    }
+    if (!$json) { $diag['last_error'] = 'No published GitHub release was returned.'; update_option(self::LAST_DIAGNOSTICS_KEY, $diag, false); return []; }
     $asset = ''; $download_url = '';
     foreach ((array)($json['assets'] ?? []) as $candidate) {
       if (!empty($candidate['name']) && preg_match('/\\.zip$/i', $candidate['name']) && !empty($candidate['browser_download_url'])) { $asset = (string)$candidate['name']; $download_url = esc_url_raw($candidate['browser_download_url']); break; }
     }
     if ($download_url === '' && !empty($json['zipball_url'])) $download_url = esc_url_raw($json['zipball_url']);
-    $release = ['version'=>ltrim((string)($json['tag_name'] ?? ''), 'v'),'date'=>(string)($json['published_at'] ?? ''),'notes'=>wp_trim_words(wp_strip_all_tags((string)($json['body'] ?? '')), 40),'url'=>esc_url_raw($json['html_url'] ?? self::releases_url()),'body'=>(string)($json['body'] ?? ''),'asset'=>$asset,'download_url'=>$download_url];
+    $release = ['version'=>self::normalize_version((string)($json['tag_name'] ?? '')),'date'=>(string)($json['published_at'] ?? ''),'notes'=>wp_trim_words(wp_strip_all_tags((string)($json['body'] ?? '')), 40),'url'=>esc_url_raw($json['html_url'] ?? self::releases_url()),'body'=>(string)($json['body'] ?? ''),'asset'=>$asset,'download_url'=>$download_url];
     $diag['latest_version'] = $release['version']; $diag['release_asset_selected'] = $asset; $diag['download_url'] = $download_url;
     if ($release['version'] === '') $diag['last_error'] = 'Release tag did not include a version.';
     if ($download_url === '') $diag['last_error'] = 'No downloadable ZIP asset or source archive was available for this release.';
@@ -60,7 +81,7 @@ final class Plugin_UI_Suite_Updater {
 
   private static function update_object($force=false) {
     $release = self::latest_release($force);
-    if (empty($release['version']) || empty($release['download_url']) || version_compare($release['version'], PLUGIN_SUITE_VERSION, '<=')) return null;
+    if (empty($release['version']) || empty($release['download_url']) || self::compare_versions($release['version'], PLUGIN_SUITE_VERSION, '<=')) return null;
     return (object)['id'=>self::repository(),'slug'=>self::SLUG,'plugin'=>self::plugin_file(),'new_version'=>$release['version'],'url'=>$release['url'] ?: self::releases_url(),'package'=>$release['download_url'],'tested'=>get_bloginfo('version'),'requires_php'=>'7.4','icons'=>[],'banners'=>[]];
   }
 
@@ -106,7 +127,7 @@ final class Plugin_UI_Suite_Updater {
   public static function render_update_banner() {
     if (!current_user_can('update_plugins')) return;
     $release = self::latest_release();
-    if (empty($release['version']) || version_compare($release['version'], PLUGIN_SUITE_VERSION, '<=') || get_option(self::IGNORE_KEY) === $release['version']) return;
+    if (empty($release['version']) || self::compare_versions($release['version'], PLUGIN_SUITE_VERSION, '<=') || get_option(self::IGNORE_KEY) === $release['version']) return;
     $update_url = wp_nonce_url(self_admin_url('update.php?action=upgrade-plugin&plugin=' . rawurlencode(self::plugin_file())), 'upgrade-plugin_' . self::plugin_file());
     $ignore_url = wp_nonce_url(add_query_arg('plugin_suite_ignore_update', rawurlencode($release['version'])), 'plugin_suite_ignore_update');
     echo '<div class="notice notice-warning"><p><strong>' . esc_html__('Rescue Plugin Suite update available.', 'plugin-ui-suite') . '</strong> ' . esc_html(sprintf(__('Installed version: %1$s. Latest version: %2$s.', 'plugin-ui-suite'), PLUGIN_SUITE_VERSION, $release['version'])) . '</p>';
@@ -118,8 +139,8 @@ final class Plugin_UI_Suite_Updater {
   public static function render_updates_panel($embedded=false) {
     if (!current_user_can('update_plugins')) return;
     $release = self::latest_release(!empty($_GET['checked'])); $latest = $release['version'] ?? __('Unknown','plugin-ui-suite');
-    $is_current = !empty($release['version']) ? version_compare($release['version'], PLUGIN_SUITE_VERSION, '<=') : null; $diag = get_option(self::LAST_DIAGNOSTICS_KEY, []); if (!is_array($diag)) $diag=[];
-    $update_url = (!empty($release['download_url']) && !empty($release['version']) && version_compare($release['version'], PLUGIN_SUITE_VERSION, '>')) ? wp_nonce_url(self_admin_url('update.php?action=upgrade-plugin&plugin=' . rawurlencode(self::plugin_file())), 'upgrade-plugin_' . self::plugin_file()) : '';
+    $is_current = !empty($release['version']) ? self::compare_versions($release['version'], PLUGIN_SUITE_VERSION, '<=') : null; $diag = get_option(self::LAST_DIAGNOSTICS_KEY, []); if (!is_array($diag)) $diag=[];
+    $update_url = (!empty($release['download_url']) && !empty($release['version']) && self::compare_versions($release['version'], PLUGIN_SUITE_VERSION, '>')) ? wp_nonce_url(self_admin_url('update.php?action=upgrade-plugin&plugin=' . rawurlencode(self::plugin_file())), 'upgrade-plugin_' . self::plugin_file()) : '';
     if (!$embedded) echo '<div class="wrap plugin-suite-updates"><h1>' . esc_html__('Rescue Plugin Suite Updates', 'plugin-ui-suite') . '</h1>';
     echo '<div class="plugin-suite-update-grid">';
     foreach ([__('Installed version','plugin-ui-suite')=>PLUGIN_SUITE_VERSION, __('Latest version','plugin-ui-suite')=>$latest, __('Repository','plugin-ui-suite')=>self::repository(), __('GitHub API URL','plugin-ui-suite')=>self::api_url(), __('Last checked','plugin-ui-suite')=>get_option(self::LAST_CHECK_KEY, __('Never','plugin-ui-suite')), __('Automatic updates','plugin-ui-suite')=>(get_option(self::AUTO_UPDATES_KEY,0)?__('Enabled','plugin-ui-suite'):__('Disabled','plugin-ui-suite')), __('Status','plugin-ui-suite')=>($is_current === null ? __('Unable to confirm','plugin-ui-suite') : ($is_current ? __('Up to date','plugin-ui-suite') : __('Update available','plugin-ui-suite')))] as $label=>$value) echo '<div class="plugin-suite-update-card"><span>' . esc_html($label) . '</span><strong>' . esc_html($value) . '</strong></div>';
