@@ -20,6 +20,8 @@ jobs:
           tools: composer
       - name: Install dependencies
         run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+      - name: Synchronize release version
+        run: php tools-release-version.php "${GITHUB_REF_NAME}"
       - name: Validate Composer metadata
         run: composer validate --strict
       - name: PHP lint
