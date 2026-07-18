@@ -90,7 +90,7 @@ final class Plugin_UI_Suite_Plugin {
       'settings' => '<a href="' . esc_url(self::admin_page_url('global')) . '">' . esc_html__('Settings', 'plugin-ui-suite') . '</a>',
       'help_centre' => '<a href="' . esc_url(self::help_centre_url()) . '">' . esc_html__('Help Centre', 'plugin-ui-suite') . '</a>',
     ];
-    return array_merge($action_links, $links);
+    return array_merge($links, $action_links);
   }
 
   public static function plugin_row_meta($links, $plugin_file) {
