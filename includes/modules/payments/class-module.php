@@ -810,8 +810,8 @@ final class Plugin_Payments_Module {
         'description'=>sanitize_textarea_field($row['description'] ?? ''),
         'featured_image'=>esc_url_raw($row['featured_image'] ?? ''),
         'goal'=>max(0,(float)($row['goal'] ?? 0)),
-        'progress'=>max(0,(float)($row['progress'] ?? ($row['amount_raised'] ?? 0))),
-        'amount_raised'=>max(0,(float)($row['amount_raised'] ?? ($row['progress'] ?? 0))),
+        'progress'=>0,
+        'amount_raised'=>0,
         'primary'=>sanitize_hex_color($row['primary'] ?? '') ?: '',
         'background'=>sanitize_hex_color($row['background'] ?? '') ?: '',
         'text'=>sanitize_hex_color($row['text'] ?? '') ?: '',
@@ -842,10 +842,39 @@ final class Plugin_Payments_Module {
     foreach ((array)$presets as $preset) if (isset($preset['amount'])) $lines[] = $preset['amount'].' | '.($preset['description'] ?? '');
     return implode("\n", $lines);
   }
+
+  private static function campaign_metrics($slug, $currency='GBP') {
+    $slug = sanitize_key($slug);
+    $rows = self::dashboard_rows(['campaign'=>$slug,'currency'=>strtoupper($currency)]);
+    $successful = ['succeeded','paid','captured','completed','created','declared'];
+    $metrics = ['raised'=>0.0,'donor_count'=>0,'recurring_monthly'=>0.0,'recent'=>[]];
+    $donors = [];
+    foreach ($rows as $row) {
+      if (!in_array((string)($row['status'] ?? ''), $successful, true)) continue;
+      $amount = (float)($row['amount'] ?? 0);
+      if (($row['type'] ?? '') === 'recurring') $metrics['recurring_monthly'] += $amount;
+      else $metrics['raised'] += $amount;
+      if (!empty($row['id'])) $donors[$row['id']] = true;
+      $metrics['recent'][] = $row;
+    }
+    $metrics['donor_count'] = count($donors);
+    usort($metrics['recent'], function($a,$b){ return strcmp((string)($b['date'] ?? ''), (string)($a['date'] ?? '')); });
+    $metrics['recent'] = array_slice($metrics['recent'], 0, 5);
+    return $metrics;
+  }
+  private static function campaign_with_metrics(array $campaign, $currency='GBP') {
+    $metrics = self::campaign_metrics($campaign['slug'] ?? '', $currency);
+    $goal = max(0, (float)($campaign['goal'] ?? 0));
+    $campaign['amount_raised'] = $metrics['raised'];
+    $campaign['progress'] = $metrics['raised'];
+    $campaign['_metrics'] = $metrics + ['goal'=>$goal,'remaining'=>max(0, $goal - $metrics['raised']),'percentage'=>$goal > 0 ? min(100, ($metrics['raised'] / $goal) * 100) : 0];
+    return $campaign;
+  }
+
   private static function apply_campaign($settings, $campaign_slug) {
     $slug = sanitize_key($campaign_slug);
     if ($slug === '' || empty($settings['general']['enable_campaigns']) || empty($settings['campaigns'][$slug]) || !is_array($settings['campaigns'][$slug])) return apply_filters('plugin_payments_applied_campaign_settings', $settings, $slug, null);
-    $campaign = $settings['campaigns'][$slug];
+    $campaign = self::campaign_with_metrics($settings['campaigns'][$slug], $settings['general']['currency'] ?? 'GBP');
     foreach (['title','subtitle'] as $key) if (!empty($campaign[$key])) $settings['general'][$key] = $campaign[$key];
     if (!empty($campaign['description'])) $settings['general']['intro_text'] = $campaign['description'];
     if (!empty($campaign['success_url'])) $settings['general']['success_url'] = $campaign['success_url'];
@@ -993,7 +1022,7 @@ final class Plugin_Payments_Module {
   <?php if($s['general']['intro_text']): ?><p class="plugin-payments-intro"><?php echo esc_html($s['general']['intro_text']); ?></p><?php endif; ?>
   <?php if($s['general']['learn_more_url']): ?><p><a class="plugin-payments-learn" href="<?php echo esc_url($s['general']['learn_more_url']); ?>"><?php esc_html_e('Learn more','plugin-ui-suite'); ?></a></p><?php endif; ?>
   <?php if(!empty($s['active_campaign']['featured_image'])): ?><img class="plugin-payments-campaign-image" src="<?php echo esc_url($s['active_campaign']['featured_image']); ?>" alt="" loading="lazy" /><?php endif; ?>
-  <?php if(!empty($s['active_campaign']['goal'])): $progress=min(100, max(0, ((float)($s['active_campaign']['progress'] ?? 0) / (float)$s['active_campaign']['goal']) * 100)); ?><div class="plugin-payments-campaign-progress" aria-label="<?php esc_attr_e('Campaign progress','plugin-ui-suite'); ?>"><span style="width:<?php echo esc_attr($progress); ?>%"></span></div><p class="plugin-payments-hint"><?php echo esc_html(self::money($s['active_campaign']['progress'] ?? 0,$s['general']['currency']).' raised of '.self::money($s['active_campaign']['goal'],$s['general']['currency'])); ?></p><?php endif; ?>
+  <?php if(!empty($s['active_campaign']['goal'])): $campaign_metrics=$s['active_campaign']['_metrics'] ?? self::campaign_with_metrics($s['active_campaign'],$s['general']['currency'])['_metrics']; $progress=$campaign_metrics['percentage']; ?><div class="plugin-payments-campaign-progress" aria-label="<?php esc_attr_e('Campaign progress','plugin-ui-suite'); ?>"><span style="width:<?php echo esc_attr($progress); ?>%"></span></div><p class="plugin-payments-hint"><?php echo esc_html(self::money($campaign_metrics['raised'] ?? 0,$s['general']['currency']).' raised of '.self::money($s['active_campaign']['goal'],$s['general']['currency'])); ?></p><?php endif; ?>
   <div class="plugin-payments-types" role="tablist" aria-label="<?php esc_attr_e('Donation type','plugin-ui-suite'); ?>">
     <button id="<?php echo esc_attr($widget_id); ?>-tab-one-off" type="button" role="tab" data-payment-type="one_off" aria-controls="<?php echo esc_attr($widget_id); ?>-panel-one-off"><?php esc_html_e('One-off','plugin-ui-suite'); ?></button>
     <?php if($supports_recurring): ?><button id="<?php echo esc_attr($widget_id); ?>-tab-recurring" type="button" role="tab" data-payment-type="recurring" aria-controls="<?php echo esc_attr($widget_id); ?>-panel-recurring"><?php esc_html_e('Monthly','plugin-ui-suite'); ?> <span aria-hidden="true">&hearts;</span></button><?php endif; ?>
@@ -1062,7 +1091,7 @@ final class Plugin_Payments_Module {
     foreach ([['Today',$today],['This month',$month],['This year',$year],['Recurring monthly income',$recurring],['Average donation',$avg],['Payment success rate',$success_rate.'%'],['Refund rate',$refund_rate.'%']] as $card) echo '<div class="ssp-card"><span>'.esc_html($card[0]).'</span><strong>'.esc_html(is_numeric($card[1])?self::money($card[1],$filters['currency']?:'GBP'):$card[1]).'</strong></div>';
     echo '<div class="ssp-dashboard-charts"><div class="ssp-chart"><h3>Campaign progress</h3>'.self::dashboard_campaign_progress_chart($settings['campaigns']??[],$filters['currency']?:'GBP').'</div><div class="ssp-chart"><h3>Top campaigns</h3>'.self::dashboard_chart(self::dashboard_top($rows,'campaign'),$filters['currency']?:'GBP').'</div><div class="ssp-chart"><h3>Top payment methods</h3>'.self::dashboard_chart(self::dashboard_top($rows,'provider'),$filters['currency']?:'GBP').'</div></div></div>';
   }
-  private static function dashboard_campaign_progress_chart($campaigns, $currency){ $items=[]; foreach((array)$campaigns as $slug=>$campaign){ if(!empty($campaign['goal'])) $items[$slug]=['progress'=>(float)($campaign['progress']??0),'goal'=>(float)$campaign['goal']]; } if(empty($items)) return '<p>'.esc_html__('No campaign goals configured.','plugin-ui-suite').'</p>'; $html=''; foreach($items as $slug=>$data){ $pct=$data['goal']>0?min(100,($data['progress']/$data['goal'])*100):0; $html.='<div class="ssp-chart-row"><span>'.esc_html($slug).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($data['progress'],$currency).' / '.self::money($data['goal'],$currency)).'</strong></div>'; } return $html; }
+  private static function dashboard_campaign_progress_chart($campaigns, $currency){ $items=[]; foreach((array)$campaigns as $slug=>$campaign){ if(!empty($campaign['goal'])){ $campaign=self::campaign_with_metrics((array)$campaign,$currency); $items[$slug]=['progress'=>(float)($campaign['amount_raised']??0),'goal'=>(float)$campaign['goal']]; }} if(empty($items)) return '<p>'.esc_html__('No campaign goals configured.','plugin-ui-suite').'</p>'; $html=''; foreach($items as $slug=>$data){ $pct=$data['goal']>0?min(100,($data['progress']/$data['goal'])*100):0; $html.='<div class="ssp-chart-row"><span>'.esc_html($slug).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($data['progress'],$currency).' / '.self::money($data['goal'],$currency)).'</strong></div>'; } return $html; }
   private static function dashboard_chart($items,$currency){ if(empty($items)) return '<p>'.esc_html__('No data yet.','plugin-ui-suite').'</p>'; $max=max($items); $html=''; foreach($items as $label=>$value){ $pct=$max>0?($value/$max)*100:0; $html.='<div class="ssp-chart-row"><span>'.esc_html($label).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($value,$currency)).'</strong></div>'; } return $html; }
   public static function render_admin_page($embedded=false) {
     if(!current_user_can(self::admin_capability())) return;
@@ -1071,19 +1100,19 @@ final class Plugin_Payments_Module {
     $name=self::OPTION_KEY;
     if (!$embedded) echo '<div class="wrap"><h1>'.esc_html__('Payments','plugin-ui-suite').'</h1>';
     else echo '<h2>'.esc_html__('Payments','plugin-ui-suite').'</h2>';
-    $payments_tabs=['general'=>'General','providers'=>'Providers','widget'=>'Donation Widget','campaigns'=>'Campaign Manager','gift-aid'=>'Gift Aid','fees'=>'Cover Processing Fees','appearance'=>'Appearance','diagnostics'=>'Diagnostics'];
+    $payments_tabs=['dashboard'=>'Dashboard','general'=>'General','providers'=>'Providers','widget'=>'Donation Widget','campaigns'=>'Campaign Manager','gift-aid'=>'Gift Aid','fees'=>'Cover Processing Fees','appearance'=>'Appearance','diagnostics'=>'Diagnostics','help'=>'Help'];
     echo '<nav class="plugin-suite-subnav plugin-payments-subnav">'; foreach($payments_tabs as $tab_id=>$tab_label) echo '<a href="#payments-'.esc_attr($tab_id).'">'.esc_html($tab_label).'</a>'; echo '</nav>';
-    self::render_dashboard($s, $providers);
+    echo '<section id="payments-dashboard">'; self::render_dashboard($s, $providers); echo '</section>'; 
     if (isset($_GET['settings-updated'])) echo '<div class="notice notice-success is-dismissible"><p>'.esc_html__('Payments settings saved.','plugin-ui-suite').'</p></div>';
     echo '<form method="post" action="'.esc_url(admin_url('options.php')).'">';
     settings_fields('plugin_payments_settings');
     echo '<section id="payments-general"><h2>'.esc_html__('General','plugin-ui-suite').'</h2><table class="form-table" role="presentation">';
-    foreach(['enabled'=>'Enable Payments','test_mode'=>'Test Mode','live_mode'=>'Live Mode'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="checkbox" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="1" '.checked($s['general'][$k]??0,1,false).'/></td></tr>';
-    echo '<tr><th>'.esc_html__('Currency','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[general][currency]" value="'.esc_attr($s['general']['currency']).'"/></td></tr></table></section>';
+    foreach(['enabled'=>'Enable payments','test_mode'=>'Test mode','live_mode'=>'Live mode'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="checkbox" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="1" '.checked($s['general'][$k]??0,1,false).'/></td></tr>';
+    echo '<tr><th>'.esc_html__('Currency','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[general][currency]" value="'.esc_attr($s['general']['currency']).'"/></td></tr><tr><th>'.esc_html__('Default provider','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[active_provider]">'; foreach($providers as $id=>$p) echo '<option value="'.esc_attr($id).'" '.selected($s['active_provider'],$id,false).'>'.esc_html($p->get_name()).'</option>'; echo '</select><p class="description">Choose which provider the donation widget uses by default.</p></td></tr></table></section>';
     echo '<section id="payments-providers"><h2>'.esc_html__('Providers','plugin-ui-suite').'</h2><p>'.esc_html__('Enable payment providers, enter credentials, and review webhook and connection status. The selected provider controls the active checkout route.','plugin-ui-suite').'</p>';
     foreach($providers as $id=>$p){
       $enabled=!empty($s['provider_settings'][$id]['enabled']); $webhook=rest_url('plugin-payments/v1/'.$id.'-webhook');
-      echo '<div class="plugin-suite-card ssp-provider-card"><h3><label><input type="checkbox" class="ssp-provider-enabled" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).'][enabled]" value="1" '.checked($enabled, true, false).'/> '.esc_html($p->get_name()).'</label></h3><p><label><input type="radio" name="'.esc_attr($name).'[active_provider]" value="'.esc_attr($id).'" '.checked($s['active_provider'],$id,false).'/> '.esc_html__('Use as active checkout provider','plugin-ui-suite').'</label></p><div class="ssp-provider-fields" data-provider="'.esc_attr($id).'"><table class="form-table" role="presentation">';
+      echo '<div class="plugin-suite-card ssp-provider-card"><h3><label><input type="checkbox" class="ssp-provider-enabled" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).'][enabled]" value="1" '.checked($enabled, true, false).'/> '.esc_html($p->get_name()).'</label></h3><div class="ssp-provider-fields" data-provider="'.esc_attr($id).'"><table class="form-table" role="presentation">';
       echo '<tr><th>'.esc_html__('Webhook URL','plugin-ui-suite').'</th><td><code>'.esc_html($webhook).'</code></td></tr><tr><th>'.esc_html__('Webhook status','plugin-ui-suite').'</th><td>'.esc_html__('Waiting for verified webhook event','plugin-ui-suite').'</td></tr>';
       $status=$p->validate_configuration($s['provider_settings'][$id]??[]);
       echo '<tr><th>'.esc_html__('Connection status','plugin-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Connected':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
@@ -1099,7 +1128,7 @@ final class Plugin_Payments_Module {
     }
     echo '</section><section id="payments-widget"><h2>'.esc_html__('Donation Widget','plugin-ui-suite').'</h2><table class="form-table" role="presentation">';
     foreach(['enable_campaigns'=>'Enable campaigns'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="checkbox" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="1" '.checked($s['general'][$k],1,false).'/></td></tr>';
-    foreach(['title','subtitle','intro_text','currency','success_url','cancel_url','button_text','thank_you_message','learn_more_url'] as $k) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$k))).'</th><td><input class="regular-text" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="'.esc_attr($s['general'][$k]).'"/></td></tr>';
+    foreach(['title','subtitle','intro_text','success_url','cancel_url','button_text','thank_you_message','learn_more_url'] as $k) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$k))).'</th><td><input class="regular-text" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="'.esc_attr($s['general'][$k]).'"/></td></tr>';
     echo '<tr><th>'.esc_html__('Default selection','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[general][default_type]"><option value="one_off" '.selected($s['general']['default_type'],'one_off',false).'>One-off</option><option value="recurring" '.selected($s['general']['default_type'],'recurring',false).'>Monthly</option></select></td></tr></table><h3>'.esc_html__('Presets and amount limits','plugin-ui-suite').'</h3>';
     foreach(['one_off'=>'One-off Donations','recurring'=>'Recurring Donations'] as $section=>$label){
       echo '<h3>'.esc_html($label).'</h3><p><label><input type="checkbox" name="'.esc_attr($name).'['.esc_attr($section).'][enabled]" value="1" '.checked($s[$section]['enabled'],1,false).'/> Enabled</label> <label><input type="checkbox" name="'.esc_attr($name).'['.esc_attr($section).'][allow_custom]" value="1" '.checked($s[$section]['allow_custom'],1,false).'/> Allow custom amount</label></p>';
@@ -1113,10 +1142,11 @@ final class Plugin_Payments_Module {
     $campaign_rows = array_values($s['campaigns'] ?? []); $campaign_rows[] = [];
     foreach($campaign_rows as $i=>$campaign){
       echo '<details class="ssp-campaign" '.(!empty($campaign['slug'])?'open':'').'><summary>'.esc_html(!empty($campaign['slug']) ? $campaign['slug'] : __('New campaign','plugin-ui-suite')).'</summary><table class="form-table" role="presentation">';
-      foreach(['slug'=>'Slug','name'=>'Name','title'=>'Title','subtitle'=>'Subtitle','featured_image'=>'Image URL','end_date'=>'End Date','success_url'=>'Success page URL','thank_you_message'=>'Thank you message'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input class="regular-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.']['.esc_attr($k).']" value="'.esc_attr($campaign[$k]??'').'"/></td></tr>';
+      foreach(['slug'=>'Short name (used in shortcode)','name'=>'Campaign Name','featured_image'=>'Image','end_date'=>'End date'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input class="regular-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.']['.esc_attr($k).']" value="'.esc_attr($campaign[$k]??'').'"/></td></tr>';
       echo '<tr><th>'.esc_html__('Description','plugin-ui-suite').'</th><td><textarea class="large-text" rows="3" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][description]">'.esc_textarea($campaign['description']??'').'</textarea></td></tr>';
-      echo '<tr><th>'.esc_html__('Goal / Amount Raised','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][goal]" value="'.esc_attr($campaign['goal']??'').'"/> <input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][amount_raised]" value="'.esc_attr($campaign['amount_raised']??($campaign['progress']??'')).'"/></td></tr><tr><th>'.esc_html__('Status','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[campaigns]['.(int)$i.'][status]"><option value="active" '.selected($campaign['status']??'active','active',false).'>Active</option><option value="archived" '.selected($campaign['status']??'active','archived',false).'>Archived</option></select> <label><input type="checkbox" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][default_campaign]" value="1" '.checked($campaign['default_campaign']??0,1,false).'/> '.esc_html__('Default Campaign','plugin-ui-suite').'</label></td></tr>';
-      foreach(['primary'=>'Primary colour','background'=>'Background colour','text'=>'Text colour'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="color" name="'.esc_attr($name).'[campaigns]['.(int)$i.']['.esc_attr($k).']" value="'.esc_attr($campaign[$k]??'#ffffff').'"/></td></tr>';
+      echo '<tr><th>'.esc_html__('Goal','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][goal]" value="'.esc_attr($campaign['goal']??'').'"/><p class="description">Amount raised is calculated automatically from successful donations assigned to this campaign.</p></td></tr><tr><th>'.esc_html__('Status','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[campaigns]['.(int)$i.'][status]"><option value="active" '.selected($campaign['status']??'active','active',false).'>Active</option><option value="archived" '.selected($campaign['status']??'active','archived',false).'>Archived</option></select> <label><input type="checkbox" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][default_campaign]" value="1" '.checked($campaign['default_campaign']??0,1,false).'/> '.esc_html__('Default Campaign','plugin-ui-suite').'</label></td></tr>';
+      foreach(['primary'=>'Colour'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="color" name="'.esc_attr($name).'[campaigns]['.(int)$i.']['.esc_attr($k).']" value="'.esc_attr($campaign[$k]??'#ffffff').'"/></td></tr>';
+      $metrics = !empty($campaign['slug']) ? self::campaign_with_metrics($campaign, $s['general']['currency'])['_metrics'] : ['raised'=>0,'goal'=>(float)($campaign['goal']??0),'remaining'=>(float)($campaign['goal']??0),'percentage'=>0,'donor_count'=>0,'recurring_monthly'=>0,'recent'=>[]]; echo '<tr><th>'.esc_html__('Campaign totals','plugin-ui-suite').'</th><td><strong>'.esc_html(self::money($metrics['raised'],$s['general']['currency'])).'</strong> raised · '.esc_html(self::money($metrics['remaining'],$s['general']['currency'])).' remaining · '.esc_html(round($metrics['percentage'])).'% complete · '.esc_html($metrics['donor_count']).' donors · '.esc_html(self::money($metrics['recurring_monthly'],$s['general']['currency'])).' monthly</td></tr>';
       echo '<tr><th>'.esc_html__('One-off suggested amounts','plugin-ui-suite').'</th><td><textarea class="large-text" rows="4" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][one_off_presets]">'.esc_textarea(self::campaign_presets_text($campaign['one_off_presets']??[])).'</textarea></td></tr>';
       echo '<tr><th>'.esc_html__('Recurring suggested amounts','plugin-ui-suite').'</th><td><textarea class="large-text" rows="4" name="'.esc_attr($name).'[campaigns]['.(int)$i.'][recurring_presets]">'.esc_textarea(self::campaign_presets_text($campaign['recurring_presets']??[])).'</textarea></td></tr>';
       echo '</table></details>';
@@ -1134,6 +1164,7 @@ final class Plugin_Payments_Module {
     echo '</tbody></table>';
     submit_button('Save Payments Settings');
     echo '<h2>'.esc_html__('Diagnostics','plugin-ui-suite').'</h2><table class="widefat striped"><tbody><tr><th>Registered payment providers</th><td>'.esc_html(implode(', ', array_keys($providers))).'</td></tr><tr><th>Plugin version</th><td>'.esc_html(PLUGIN_SUITE_VERSION).'</td></tr><tr><th>REST endpoint status</th><td>'.esc_html(rest_url('plugin-payments/v1/')).'</td></tr><tr><th>Last payment</th><td>'.esc_html(wp_json_encode(array_slice((array)get_option(self::PAYMENT_EVENTS_KEY, []), -1))).'</td></tr><tr><th>Last webhook received</th><td>'.esc_html(wp_json_encode(array_slice((array)get_option(self::WEBHOOK_EVENTS_KEY, []), -1))).'</td></tr><tr><th>Debug log</th><td><pre>'.esc_html(wp_json_encode(array_slice((array)get_option(self::AUDIT_KEY, []), -10), JSON_PRETTY_PRINT)).'</pre></td></tr></tbody></table></section>';
+    echo '</section><section id="payments-help"><h2>'.esc_html__('Help','plugin-ui-suite').'</h2><p>'.esc_html__('Use General for payment behaviour, Providers for account connections, Donation Widget for public form text and amounts, Campaign Manager for campaign details, and Diagnostics for payment records and troubleshooting.','plugin-ui-suite').'</p></section>';
     echo '</form><hr/><h2>'.esc_html__('Preview','plugin-ui-suite').'</h2><p class="description">'.esc_html__('This preview renders the saved donation widget exactly as WordPress will render it from the shortcode.','plugin-ui-suite').'</p><div class="ssp-payments-preview">'.self::render_shortcode().'</div>';
     if (!$embedded) echo '</div>';
     echo '<script>document.querySelectorAll("input[name=\"'.esc_js($name).'[active_provider]\"]").forEach(function(r){function u(){var c=document.querySelector("input[name=\"'.esc_js($name).'[active_provider]\"]:checked");document.querySelectorAll(".ssp-provider-fields").forEach(function(e){var card=e.closest(".ssp-provider-card"),enabled=card&&card.querySelector(".ssp-provider-enabled")&&card.querySelector(".ssp-provider-enabled").checked;e.style.display=enabled?"block":"none"})}r.addEventListener("change",u);document.querySelectorAll(".ssp-provider-enabled").forEach(function(c){c.addEventListener("change",u);});u();});</script>';
