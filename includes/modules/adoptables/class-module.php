@@ -769,19 +769,14 @@ final class Plugin_Adoptables_UI_Shortcode {
       $apply_shortcode_tag = strtok($apply_shortcode_tag, ' ');
     }
     $apply_form_id = '';
-    $apply_form_account = 'plugin';
     if (class_exists('Plugin_UI_Suite_Plugin')) {
       $suite_forms = Plugin_UI_Suite_Plugin::get_forms();
       if (isset($suite_forms[$apply_shortcode_tag])) {
         $apply_form_id = preg_replace('/[^0-9]/', '', (string)$suite_forms[$apply_shortcode_tag]);
       }
-      $suite_settings = Plugin_UI_Suite_Plugin::get_settings();
-      if (!empty($suite_settings['forms']['account'])) {
-        $apply_form_account = sanitize_text_field($suite_settings['forms']['account']);
-      }
     }
     $apply_form_script_url = ($apply_form_id !== '')
-      ? 'https://service.sheltermanager.com/asmservice?account=' . rawurlencode($apply_form_account) . '&method=online_form_js&formid=' . rawurlencode($apply_form_id)
+      ? (function_exists('plugin_asm_online_form_url') ? plugin_asm_online_form_url($apply_form_id) : '')
       : '';
     $modal_contact_url = isset($o['modal_contact_url']) ? esc_url((string)$o['modal_contact_url']) : '';
 
