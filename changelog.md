@@ -1,3 +1,9 @@
+## 15.0.3-beta
+
+- Replaced the competing Plugin Update Checker path with one native WordPress update pipeline, keyed by the installed plugin basename.
+- Reject GitHub source archives and validate that every release ZIP has exactly the `rescue-plugin-suite/plugin-ui-suite.php` root expected by the upgrader.
+- Added persistent update lifecycle tracing and diagnostics for release selection, transients, package validation, upgrader callbacks, replacement and post-update metadata.
+
 ## 15.0.0-beta
 
 - Made the main plugin header the single authoritative suite version source, with runtime constants deriving from that header.
