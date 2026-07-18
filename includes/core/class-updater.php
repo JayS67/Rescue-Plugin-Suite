@@ -52,28 +52,79 @@ final class Plugin_UI_Suite_Updater {
     add_action('upgrader_process_complete', [__CLASS__, 'after_upgrade'], 10, 2);
   }
 
+  /** Evaluate every API candidate; selection is semantic-version based, never API order. */
+  public static function select_release_candidate(array $releases, $installed_version, $channel) {
+    $installed = self::normalize_version($installed_version);
+    $channel = $channel === 'stable' ? 'stable' : 'beta';
+    $selected = [];
+    $evaluations = [];
+
+    foreach ($releases as $candidate) {
+      if (!is_array($candidate)) continue;
+      $tag = (string)($candidate['tag_name'] ?? '');
+      $version = self::normalize_version($tag);
+      $draft = !empty($candidate['draft']);
+      $prerelease = !empty($candidate['prerelease']);
+      $expected = $version === '' ? '' : self::expected_asset_name($version);
+      $assets = [];
+      $package = [];
+      foreach ((array)($candidate['assets'] ?? []) as $asset) {
+        $name = (string)($asset['name'] ?? '');
+        if ($name !== '') $assets[] = $name;
+        if ($name === $expected && !empty($asset['browser_download_url'])) $package = $asset;
+      }
+      $channel_eligible = !$draft && ($channel !== 'stable' || !$prerelease);
+      $newer = $version !== '' && self::compare_versions($version, $installed, '>');
+      $reason = '';
+      if ($version === '') $reason = 'Invalid or missing release tag';
+      elseif ($draft) $reason = 'Draft release';
+      elseif ($channel === 'stable' && $prerelease) $reason = 'Prerelease excluded on stable channel';
+      elseif (!$package) $reason = 'Exact release package missing';
+      elseif (!$newer) $reason = 'Not newer than installed version';
+      elseif ($selected && !self::compare_versions($version, $selected['version'], '>')) $reason = 'A semantically newer eligible release is selected';
+
+      $evaluation = [
+        'tag'=>$tag, 'normalised_version'=>$version, 'draft'=>$draft, 'prerelease'=>$prerelease,
+        'expected_asset'=>$expected, 'assets'=>$assets, 'asset_present'=>(bool)$package,
+        'release_channel'=>$channel, 'channel_eligible'=>$channel_eligible,
+        'comparison'=>$version === '' ? '' : $version . ' ' . (self::compare_versions($version, $installed, '>') ? '>' : (self::compare_versions($version, $installed, '<') ? '<' : '=')) . ' ' . $installed,
+        'newer_than_installed'=>$newer, 'selected'=>false, 'rejection_reason'=>$reason,
+      ];
+      if ($reason === '') {
+        if ($selected) {
+          foreach ($evaluations as &$previous) if (!empty($previous['selected'])) { $previous['selected'] = false; $previous['rejection_reason'] = 'A semantically newer eligible release is selected'; }
+          unset($previous);
+        }
+        $selected = ['version'=>$version, 'date'=>(string)($candidate['published_at'] ?? ''), 'notes'=>wp_trim_words(wp_strip_all_tags((string)($candidate['body'] ?? '')),40), 'url'=>esc_url_raw($candidate['html_url'] ?? self::releases_url()), 'body'=>(string)($candidate['body'] ?? ''), 'asset'=>$expected, 'download_url'=>esc_url_raw($package['browser_download_url'])];
+        $evaluation['selected'] = true;
+      }
+      $evaluations[] = $evaluation;
+    }
+    return ['release'=>$selected, 'candidates'=>$evaluations];
+  }
+
   public static function latest_release($force=false) {
     if (!$force && ($cached = get_transient(self::RELEASE_TRANSIENT)) && is_array($cached)) return $cached;
-    $diag = ['repository'=>self::repository(),'repository_visibility'=>'public (browser_download_url; no token)','api_url'=>self::api_url(),'installed_version'=>PLUGIN_SUITE_VERSION,'plugin_basename'=>self::plugin_file(),'slug'=>self::SLUG,'zip_root_expectation'=>self::PACKAGE_DIRECTORY,'release_channel'=>self::release_channel(),'last_check_time'=>'','latest_eligible_release'=>'','github_tag'=>'','release_prerelease'=>'','expected_asset_filename'=>'','selected_asset_filename'=>'','selected_package_url'=>'','assets_returned'=>[],'last_error'=>''];
+    $diag = ['repository'=>self::repository(),'repository_visibility'=>'public (browser_download_url; no token)','api_url'=>self::api_url(),'installed_version'=>PLUGIN_SUITE_VERSION,'plugin_basename'=>self::plugin_file(),'slug'=>self::SLUG,'zip_root_expectation'=>self::PACKAGE_DIRECTORY,'release_channel'=>self::release_channel(),'last_check_time'=>'','api_response_status'=>'','latest_eligible_release'=>'','github_tag'=>'','release_prerelease'=>'','expected_asset_filename'=>'','selected_asset_filename'=>'','selected_package_url'=>'','assets_returned'=>[],'candidate_evaluations'=>[],'last_error'=>''];
     $response = wp_remote_get(self::api_url(), ['timeout'=>20,'headers'=>['Accept'=>'application/vnd.github+json','User-Agent'=>'Rescue-Plugin-Suite/'.PLUGIN_SUITE_VERSION]]);
     update_option(self::LAST_CHECK_KEY, current_time('mysql'), false); $diag['last_check_time']=current_time('mysql');
     if (is_wp_error($response)) { $diag['last_error']=$response->get_error_message(); self::diagnostics($diag); return []; }
-    $code=(int)wp_remote_retrieve_response_code($response);
+    $code=(int)wp_remote_retrieve_response_code($response); $diag['api_response_status'] = $code;
     if ($code < 200 || $code >= 300) { $diag['last_error']='GitHub returned HTTP '.$code; self::diagnostics($diag); return []; }
     $releases=json_decode((string)wp_remote_retrieve_body($response),true);
     if (!is_array($releases)) { $diag['last_error']='GitHub returned an invalid release response.'; self::diagnostics($diag); return []; }
-    foreach ($releases as $candidate) {
-      if (!is_array($candidate) || !empty($candidate['draft'])) continue;
-      if (self::release_channel()==='stable' && !empty($candidate['prerelease'])) continue;
-      $version=self::normalize_version($candidate['tag_name'] ?? ''); if ($version==='') continue;
-      $expected=self::expected_asset_name($version); $assets=[]; $selected=[];
-      foreach ((array)($candidate['assets'] ?? []) as $asset) { $name=(string)($asset['name'] ?? ''); if ($name!=='') $assets[]=$name; if ($name === $expected && !empty($asset['browser_download_url'])) $selected=$asset; }
-      $diag['latest_eligible_release']=$version; $diag['github_tag']=(string)($candidate['tag_name'] ?? ''); $diag['release_prerelease']=!empty($candidate['prerelease'])?'yes':'no'; $diag['expected_asset_filename']=$expected; $diag['assets_returned']=$assets;
-      if (!$selected) { $diag['last_error']='Release package unavailable: expected '.$expected.'. GitHub Source code archives are not valid WordPress update packages.'; self::diagnostics($diag); self::trace('release_package_unavailable',['expected_asset'=>$expected,'assets'=>$assets]); return []; }
-      $url=esc_url_raw($selected['browser_download_url']); $release=['version'=>$version,'date'=>(string)($candidate['published_at'] ?? ''),'notes'=>wp_trim_words(wp_strip_all_tags((string)($candidate['body'] ?? '')),40),'url'=>esc_url_raw($candidate['html_url'] ?? self::releases_url()),'body'=>(string)($candidate['body'] ?? ''),'asset'=>$expected,'download_url'=>$url];
-      $diag['selected_asset_filename']=$expected; $diag['selected_package_url']=$url; self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT,$release,6*HOUR_IN_SECONDS); self::trace('release_selected',['latest_version'=>$version,'asset'=>$expected,'package_url'=>$url]); return $release;
-    }
-    $diag['last_error']='No eligible published GitHub release was returned.'; self::diagnostics($diag); return [];
+    $result = self::select_release_candidate($releases, PLUGIN_SUITE_VERSION, self::release_channel());
+    $release = $result['release']; $diag['candidate_evaluations'] = $result['candidates'];
+    if (!$release) { $diag['last_error']='No installable eligible GitHub release newer than the installed version was returned.'; self::diagnostics($diag); return []; }
+    $diag['latest_eligible_release']=$release['version']; $diag['github_tag']='v'.$release['version']; $diag['expected_asset_filename']=$release['asset']; $diag['selected_asset_filename']=$release['asset']; $diag['selected_package_url']=$release['download_url'];
+    self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT,$release,6*HOUR_IN_SECONDS); self::trace('release_selected',['latest_version'=>$release['version'],'asset'=>$release['asset'],'package_url'=>$release['download_url'],'candidate_evaluations'=>$result['candidates']]); return $release;
+  }
+
+  private static function clear_update_caches() {
+    delete_transient(self::RELEASE_TRANSIENT);
+    delete_option(self::TRANSIENT_STATE_KEY);
+    delete_option(self::LAST_DIAGNOSTICS_KEY);
+    delete_site_transient('update_plugins');
   }
 
   private static function update_object($force=false) { $release=self::latest_release($force); if (empty($release['version']) || empty($release['download_url']) || self::compare_versions($release['version'], PLUGIN_SUITE_VERSION, '<=')) return null; $update=(object)['id'=>'github.com/'.self::repository(),'slug'=>self::SLUG,'plugin'=>self::plugin_file(),'new_version'=>$release['version'],'url'=>$release['url'] ?: self::releases_url(),'package'=>$release['download_url'],'tested'=>get_bloginfo('version'),'requires'=>'5.8','requires_php'=>'7.4']; self::trace('update_object_created', ['latest_version'=>$update->new_version,'package_url'=>$update->package]); return $update; }
@@ -110,7 +161,7 @@ final class Plugin_UI_Suite_Updater {
   public static function after_upgrade($upgrader,$hook_extra) { if (!self::is_our_upgrade((array)$hook_extra)) return; $plugin_data=function_exists('get_plugin_data') && is_readable(PLUGIN_SUITE_PATH.'plugin-ui-suite.php') ? get_plugin_data(PLUGIN_SUITE_PATH.'plugin-ui-suite.php', false, false) : []; self::trace('upgrader_process_complete', ['post_update_version'=>$plugin_data['Version'] ?? '', 'final_plugin_metadata'=>$plugin_data, 'active'=>function_exists('is_plugin_active') ? (bool)is_plugin_active(self::plugin_file()) : null]); self::record_removal('upgrader_process_complete'); delete_transient(self::RELEASE_TRANSIENT); delete_site_transient('update_plugins'); delete_option(self::IGNORE_KEY); }
 
   public static function handle_ignore() { if (empty($_GET['plugin_suite_ignore_update']) || !current_user_can('update_plugins')) return; check_admin_referer('plugin_suite_ignore_update'); update_option(self::IGNORE_KEY,sanitize_text_field(wp_unslash($_GET['plugin_suite_ignore_update'])),false); wp_safe_redirect(remove_query_arg(['plugin_suite_ignore_update','_wpnonce'])); exit; }
-  public static function handle_update_actions() { $updates=!empty($_GET['page']) && $_GET['page']==='plugin-ui-suite' && ($_GET['tab'] ?? '')==='updates'; if (!$updates || !current_user_can('update_plugins')) return; if (!empty($_POST['plugin_suite_check_updates'])) { check_admin_referer('plugin_suite_updates'); self::trace('manual_refresh_start'); delete_transient(self::RELEASE_TRANSIENT); delete_option(self::TRANSIENT_STATE_KEY); delete_site_transient('update_plugins'); self::record_removal('manual_refresh'); self::trace('native_transient_removed',['source'=>'manual_refresh']); self::latest_release(true); wp_update_plugins(); $entry=self::native_update_entry('manual_refresh_verified'); $args=['page'=>'plugin-ui-suite','tab'=>'updates','checked'=>'1']; if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '')!==self::plugin_file()) { set_transient(self::REFRESH_NOTICE_KEY,'Update metadata has not been registered with WordPress. Refresh update data.',MINUTE_IN_SECONDS); $args['metadata']='missing'; } wp_safe_redirect(add_query_arg($args,admin_url('options-general.php'))); exit; } if (!empty($_POST['plugin_suite_validate_release'])) { check_admin_referer('plugin_suite_updates'); self::validate_release_package(); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','validated'=>'1'],admin_url('options-general.php'))); exit; } if (isset($_POST['plugin_suite_auto_updates'])) { check_admin_referer('plugin_suite_updates'); update_option(self::AUTO_UPDATES_KEY,!empty($_POST['enabled'])?1:0,false); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','saved'=>'1'],admin_url('options-general.php'))); exit; } }
+  public static function handle_update_actions() { $updates=!empty($_GET['page']) && $_GET['page']==='plugin-ui-suite' && ($_GET['tab'] ?? '')==='updates'; if (!$updates || !current_user_can('update_plugins')) return; if (!empty($_POST['plugin_suite_check_updates'])) { check_admin_referer('plugin_suite_updates'); self::trace('manual_refresh_start'); self::clear_update_caches(); self::record_removal('manual_refresh'); self::trace('native_transient_removed',['source'=>'manual_refresh']); self::latest_release(true); wp_update_plugins(); $entry=self::native_update_entry('manual_refresh_verified'); $args=['page'=>'plugin-ui-suite','tab'=>'updates','checked'=>'1']; if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '')!==self::plugin_file()) { set_transient(self::REFRESH_NOTICE_KEY,'Update metadata has not been registered with WordPress. Refresh update data.',MINUTE_IN_SECONDS); $args['metadata']='missing'; } wp_safe_redirect(add_query_arg($args,admin_url('options-general.php'))); exit; } if (!empty($_POST['plugin_suite_validate_release'])) { check_admin_referer('plugin_suite_updates'); self::validate_release_package(); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','validated'=>'1'],admin_url('options-general.php'))); exit; } if (isset($_POST['plugin_suite_auto_updates'])) { check_admin_referer('plugin_suite_updates'); update_option(self::AUTO_UPDATES_KEY,!empty($_POST['enabled'])?1:0,false); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','saved'=>'1'],admin_url('options-general.php'))); exit; } }
   private static function validate_release_package() {
     $release=self::latest_release(true); $result=['download_success'=>'no','http_status'=>'','archive_opens'=>'no','top_level_directory'=>'','bootstrap_exists'=>'no','plugin_name'=>'','packaged_version'=>'','suitable_for_wordpress_installation'=>'no'];
     if (empty($release['download_url'])) { $result['error']='Release package unavailable.'; self::diagnostics(array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['release_package_validation'=>$result])); return; }
@@ -122,6 +173,13 @@ final class Plugin_UI_Suite_Updater {
   }
   public static function filter_auto_update($update,$item) { return (!empty($item->plugin) && $item->plugin===self::plugin_file()) ? (bool)get_option(self::AUTO_UPDATES_KEY,0) : $update; }
   public static function render_update_banner() { if (!current_user_can('update_plugins')) return; $entry=self::native_update_entry('before_update_now_url'); if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '')!==self::plugin_file() || !self::compare_versions($entry->new_version,PLUGIN_SUITE_VERSION,'>')) { $release=self::latest_release(false); if (!empty($release['version']) && self::compare_versions($release['version'],PLUGIN_SUITE_VERSION,'>')) echo '<div class="notice notice-error"><p>Update metadata has not been registered with WordPress. Refresh update data.</p></div>'; return; } if (get_option(self::IGNORE_KEY)===$entry->new_version) return; $url=wp_nonce_url(self_admin_url('update.php?action=upgrade-plugin&plugin='.rawurlencode(self::plugin_file())),'upgrade-plugin_'.self::plugin_file()); echo '<div class="notice notice-warning"><p><strong>Rescue Plugin Suite update available.</strong> Installed version: '.esc_html(PLUGIN_SUITE_VERSION).'. Latest version: '.esc_html($entry->new_version).'.</p><p><a class="button button-primary" href="'.esc_url($url).'">Update Now</a></p></div>'; }
-  public static function render_updates_panel($embedded=false) { if (!current_user_can('update_plugins')) return; $release=self::latest_release(!empty($_GET['checked'])); $native=self::native_update_entry('render_updates_tab'); $raw=get_site_option('_site_transient_update_plugins',false); $state=(array)get_option(self::TRANSIENT_STATE_KEY,[]); $diag=array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['active_plugin_basename'=>self::plugin_file(),'native_transient_exists'=>is_object($raw)?'yes':'no','native_response_key_exists'=>$native?'yes':'no','native_response_new_version'=>$native->new_version ?? '','native_response_package_url'=>$native->package ?? '','native_no_update_key_exists'=>is_object($raw) && isset($raw->no_update[self::plugin_file()])?'yes':'no','custom_selected_version'=>$release['version'] ?? '','custom_selected_package'=>$release['download_url'] ?? '','update_object_source'=>'Plugin_UI_Suite_Updater authoritative GitHub release cache','last_transient_write_time'=>$state['updated_at'] ?? '','last_transient_removal_source'=>$state['last_removal_source'] ?? '']); self::diagnostics($diag); $notice=get_transient(self::REFRESH_NOTICE_KEY); if ($notice) { delete_transient(self::REFRESH_NOTICE_KEY); echo '<div class="notice notice-error"><p>'.esc_html($notice).'</p></div>'; } if (!$embedded) echo '<div class="wrap"><h1>Rescue Plugin Suite Updates</h1>'; echo '<p>Installed: <code>'.esc_html(PLUGIN_SUITE_VERSION).'</code> &mdash; Latest: <code>'.esc_html($release['version'] ?? 'Unknown').'</code></p>'; if ($native) echo '<details><summary>Native update object</summary><pre>'.esc_html(wp_json_encode(self::safe_native_entry((object)['response'=>[self::plugin_file()=>$native]]),JSON_PRETTY_PRINT)).'</pre></details>'; echo '<form method="post">'; wp_nonce_field('plugin_suite_updates'); echo '<button class="button" name="plugin_suite_check_updates" value="1">Check for updates now</button> <button class="button" name="plugin_suite_validate_release" value="1">Validate release package</button></form><h2>Update diagnostics</h2><table class="widefat striped"><tbody>'; foreach ((array)$diag as $key=>$value) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$key))).'</th><td><code>'.esc_html(is_scalar($value)?(string)$value:wp_json_encode($value)).'</code></td></tr>'; echo '</tbody></table><h2>Update trace</h2><pre>'.esc_html(wp_json_encode(get_option(self::LOG_KEY,[]),JSON_PRETTY_PRINT)).'</pre>'; if (!$embedded) echo '</div>'; }
+  private static function render_candidate_evaluations($candidates) {
+    if (!is_array($candidates) || !$candidates) return;
+    echo '<h3>Release candidate evaluation</h3><table class="widefat striped"><thead><tr><th>Tag</th><th>Normalised version</th><th>Draft</th><th>Prerelease</th><th>Expected asset</th><th>Asset present</th><th>Channel eligible</th><th>Newer than installed</th><th>Selected</th><th>Rejection reason</th></tr></thead><tbody>';
+    foreach ($candidates as $candidate) { echo '<tr><td>'.esc_html($candidate['tag'] ?? '').'</td><td>'.esc_html($candidate['normalised_version'] ?? '').'</td><td>'.esc_html(!empty($candidate['draft'])?'true':'false').'</td><td>'.esc_html(!empty($candidate['prerelease'])?'true':'false').'</td><td>'.esc_html($candidate['expected_asset'] ?? '').'</td><td>'.esc_html(!empty($candidate['asset_present'])?'true':'false').'</td><td>'.esc_html(!empty($candidate['channel_eligible'])?'true':'false').'</td><td>'.esc_html(!empty($candidate['newer_than_installed'])?'true':'false').'</td><td>'.esc_html(!empty($candidate['selected'])?'true':'false').'</td><td>'.esc_html($candidate['rejection_reason'] ?? '').'</td></tr>'; }
+    echo '</tbody></table>';
+  }
+
+  public static function render_updates_panel($embedded=false) { if (!current_user_can('update_plugins')) return; $release=self::latest_release(!empty($_GET['checked'])); $native=self::native_update_entry('render_updates_tab'); $raw=get_site_option('_site_transient_update_plugins',false); $state=(array)get_option(self::TRANSIENT_STATE_KEY,[]); $diag=array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['active_plugin_basename'=>self::plugin_file(),'native_transient_exists'=>is_object($raw)?'yes':'no','native_response_key_exists'=>$native?'yes':'no','native_response_new_version'=>$native->new_version ?? '','native_response_package_url'=>$native->package ?? '','native_no_update_key_exists'=>is_object($raw) && isset($raw->no_update[self::plugin_file()])?'yes':'no','custom_selected_version'=>$release['version'] ?? '','custom_selected_package'=>$release['download_url'] ?? '','update_object_source'=>'Plugin_UI_Suite_Updater authoritative GitHub release cache','last_transient_write_time'=>$state['updated_at'] ?? '','last_transient_removal_source'=>$state['last_removal_source'] ?? '']); self::diagnostics($diag); $notice=get_transient(self::REFRESH_NOTICE_KEY); if ($notice) { delete_transient(self::REFRESH_NOTICE_KEY); echo '<div class="notice notice-error"><p>'.esc_html($notice).'</p></div>'; } if (!$embedded) echo '<div class="wrap"><h1>Rescue Plugin Suite Updates</h1>'; echo '<p>Installed: <code>'.esc_html(PLUGIN_SUITE_VERSION).'</code> &mdash; Latest: <code>'.esc_html($release['version'] ?? 'Unknown').'</code></p>'; if ($native) echo '<details><summary>Native update object</summary><pre>'.esc_html(wp_json_encode(self::safe_native_entry((object)['response'=>[self::plugin_file()=>$native]]),JSON_PRETTY_PRINT)).'</pre></details>'; echo '<form method="post">'; wp_nonce_field('plugin_suite_updates'); echo '<button class="button" name="plugin_suite_check_updates" value="1">Check for updates now</button> <button class="button" name="plugin_suite_validate_release" value="1">Validate release package</button></form><h2>Update diagnostics</h2><table class="widefat striped"><tbody>'; foreach ((array)$diag as $key=>$value) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$key))).'</th><td><code>'.esc_html(is_scalar($value)?(string)$value:wp_json_encode($value)).'</code></td></tr>'; echo '</tbody></table>'; self::render_candidate_evaluations($diag['candidate_evaluations'] ?? []); echo '<h2>Update trace</h2><pre>'.esc_html(wp_json_encode(get_option(self::LOG_KEY,[]),JSON_PRETTY_PRINT)).'</pre>'; if (!$embedded) echo '</div>'; }
   public static function render_updates_page() { self::render_updates_panel(false); }
 }
