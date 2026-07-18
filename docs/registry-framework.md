@@ -9,7 +9,6 @@ The registry framework is the architectural source of truth for new and migrated
 - `modules`
 - `settings`
 - `navigation`
-- `widgets`
 - `integrations`
 - `analytics`
 - `permissions`

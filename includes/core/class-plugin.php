@@ -45,6 +45,7 @@ final class Plugin_UI_Suite_Plugin {
     add_action('admin_post_plugin_ui_suite_test_enquiry_integration', [__CLASS__, 'handle_test_enquiry_integration']);
     add_action('admin_post_plugin_ui_suite_retry_webhooks', [__CLASS__, 'handle_retry_webhooks']);
     add_action('admin_post_plugin_ui_suite_download_diagnostics', [__CLASS__, 'handle_download_diagnostics']);
+    add_action('admin_post_plugin_ui_suite_copy_system_information', [__CLASS__, 'handle_copy_system_information']);
     add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_admin_assets']);
     add_action('enqueue_block_editor_assets', [__CLASS__, 'enqueue_block_editor_assets']);
     add_action(self::WEBHOOK_CRON_HOOK, [__CLASS__, 'process_webhook_retry_queue']);
@@ -52,7 +53,7 @@ final class Plugin_UI_Suite_Plugin {
     add_action('update_option_' . self::OPT_KEY, [__CLASS__, 'sync_legacy_options_from_db'], 10, 2);
     add_action('init', [__CLASS__, 'register_form_shortcodes'], 20);
     add_action('init', [__CLASS__, 'register_custom_ui_shortcodes'], 21);
-    add_action('init', [__CLASS__, 'register_widget_shortcodes'], 22);
+    add_action('init', [__CLASS__, 'register_featured_shortcodes'], 22);
     add_action('init', [__CLASS__, 'register_quiz_shortcode'], 23);
     add_action('init', [__CLASS__, 'register_blocks'], 24);
     add_action('wp_ajax_plugin_suite_track', [__CLASS__, 'handle_track_event']);
@@ -85,6 +86,9 @@ final class Plugin_UI_Suite_Plugin {
       $map = ['provider'=>'asm','endpoints'=>'custom-api','authentication'=>'custom-api','field-mapping'=>'custom-api','cache'=>'asm','connection-test'=>'asm'];
       if (isset($map[$legacy_subtab])) { wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>$map[$legacy_subtab]], admin_url('options-general.php'))); exit; }
     }
+    if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'widgets') {
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'featured','plugin_msg'=>'Widgets has been retired. Featured Animal is now its own module.'], admin_url('options-general.php'))); exit;
+    }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'layout') {
       wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'adoptables','subtab'=>'layout'], admin_url('options-general.php'))); exit;
     }
@@ -108,8 +112,10 @@ final class Plugin_UI_Suite_Plugin {
       'global'=>['name'=>'General','description'=>'Shared site-wide display, cache and housekeeping settings.','icon'=>'admin-generic'],
       'proxy'=>['name'=>'Developer Tools','description'=>'Developer-only proxy, registry and diagnostics tools.','icon'=>'admin-tools','flags'=>['hidden'=>!Plugin_UI_Suite_Registry::developer_mode_enabled()]],
       'adoptables'=>['name'=>'Adoptables','description'=>'Public adoptable animal widget and layout settings.','icon'=>'pets'],
-      'adopted'=>['name'=>'Adopted','description'=>'Happy endings widget and layout settings.','icon'=>'heart'],
-      'stats'=>['name'=>'Statistics','description'=>'Impact statistics widget settings.','icon'=>'chart-bar'],
+      'adopted'=>['name'=>'Adopted','description'=>'Adopted animal UI and layout settings.','icon'=>'heart'],
+      'featured'=>['name'=>'Featured Animal','description'=>'Single featured animal embed for homepages and campaign pages.','icon'=>'star-filled'],
+      'diagnostics'=>['name'=>'Diagnostics','description'=>'Plugin health centre, support information and environment checks.','icon'=>'sos'],
+      'stats'=>['name'=>'Statistics','description'=>'Impact statistics display settings.','icon'=>'chart-bar'],
       'forms'=>['name'=>'Forms','description'=>'Application and enquiry form routing.','icon'=>'feedback'],
       'payments'=>['name'=>'Payments','description'=>'Donation behaviour, widget, campaigns, Gift Aid and reporting.','icon'=>'money-alt'],
     ] as $id=>$module) Plugin_UI_Suite_Registry::register_module($id, $module);
@@ -125,7 +131,7 @@ final class Plugin_UI_Suite_Plugin {
         ]);
       }
     }
-    foreach (['Donation Widget','Adoptables','Adopted','Statistics','Forms','Match Quiz'] as $panel) Plugin_UI_Suite_Registry::register('analytics', sanitize_title($panel), ['title'=>$panel,'module'=>sanitize_title($panel)]);
+    foreach (['Donation Widget','Adoptables','Adopted','Featured Animal','Statistics','Forms','Diagnostics','Match Quiz'] as $panel) Plugin_UI_Suite_Registry::register('analytics', sanitize_title($panel), ['title'=>$panel,'module'=>sanitize_title($panel)]);
     foreach ([
       'Stripe'=>['url'=>'https://docs.stripe.com/keys','content'=>'Go to Stripe Dashboard → Developers → API keys. Copy the publishable key and secret key. Paste them into Integrations → Stripe, save, then use Diagnostics to confirm the connection. If a payment fails, check test mode and webhook signing secret first.'],
       'PayPal'=>['url'=>'https://developer.paypal.com/dashboard/applications/live','content'=>'Go to PayPal Developer Dashboard → Apps & Credentials. Create or open an app. Copy the Client ID and Secret. Paste them into Integrations → PayPal, save, then make a small sandbox test donation.'],
@@ -136,21 +142,21 @@ final class Plugin_UI_Suite_Plugin {
       'Other supported rescue systems'=>['url'=>'','content'=>'Choose the matching rescue platform under Integrations. Only fill in the fields shown for that platform. If your platform uses hosted application forms, paste the hosted form link rather than expecting the suite to collect answers directly.'],
     ] as $guide=>$data) Plugin_UI_Suite_Registry::register('help', sanitize_title($guide), ['title'=>$guide,'keywords'=>[$guide,'setup','test','troubleshoot'],'external_url'=>$data['url'],'content'=>$data['content']]);
     foreach ([
-      'organisation'=>'Tell the suite who you are and which rescue details appear in public widgets.',
-      'website'=>'Add the pages where visitors will adopt, donate, read stories and contact you.',
+      'organisation'=>'Tell the suite who you are and which rescue details appear in public displays.',
+      'website'=>'Add the pages where visitors will adopt, donate, view adopted animals and contact you.',
       'rescue-management'=>'Choose your animal management platform and keep credentials beside that platform.',
       'integrations'=>'Connect ASM, custom APIs or other supported systems in one place.',
       'payment-provider'=>'Connect Stripe, PayPal, Square, GoCardless or SumUp in Integrations, then choose the default donation provider in Payments.',
       'campaigns'=>'Create your first appeal so donations can be tracked clearly.',
       'donation-widget'=>'Set the public donation wording, amounts and thank-you path.',
       'forms'=>'Add application or enquiry forms and explain platform limitations.',
-      'widgets'=>'Choose which public widgets to show on your website.',
+      'featured-animal'=>'Choose a featured animal embed for your website.',
       'analytics'=>'Decide how visitor and donation analytics should be recorded.',
       'updates'=>'Check the installed version and choose whether automatic updates are enabled.',
       'finished'=>'Review the checklist and save your setup.',
     ] as $i=>$description) Plugin_UI_Suite_Registry::register('setup_steps', $i, ['module'=>'global','title'=>ucwords(str_replace('-',' ', $i)),'description'=>$description,'order'=>count(Plugin_UI_Suite_Registry::all('setup_steps'))+1]);
-    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Happy Endings','stats'=>'Statistics','widgets'=>'Widgets','payments'=>'Donations','quiz'=>'Match Quiz','forms'=>'Forms','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
-    if (Plugin_UI_Suite_Registry::developer_mode_enabled()) foreach (['proxy'=>'Developer Tools','diagnostics'=>'Advanced Diagnostics','registry'=>'Registry'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>'global','order'=>90 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','featured'=>'Featured Animal','stats'=>'Statistics','payments'=>'Donations','quiz'=>'Match Quiz','forms'=>'Forms','diagnostics'=>'Diagnostics','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    if (Plugin_UI_Suite_Registry::developer_mode_enabled()) foreach (['proxy'=>'Developer Tools','registry'=>'Registry'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>'global','order'=>90 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
     Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'order'=>10]);
   }
 
@@ -325,21 +331,15 @@ final class Plugin_UI_Suite_Plugin {
         'builder_card_order' => "brought\nadopted\nvaccinated\nneutered\nchipped\nin_care",
       ],
       'shortcodes' => ['adoptables' => 'adoptables', 'adopted' => 'adopted', 'statistics' => 'stats'],
-      'widgets' => [
-        'featured_shortcode' => 'featured_animal',
-        'featured_enabled' => 1,
-        'featured_mode' => 'random',
-        'featured_manual_id' => '',
-        'featured_title_text' => 'Featured animal',
-        'featured_subtitle_text' => 'Meet one of the animals looking for a home',
-        'featured_button_text' => 'View animal',
-        'stories_shortcode' => 'adoption_stories',
-        'stories_enabled' => 1,
-        'stories_title_text' => 'Adoption stories',
-        'stories_count' => 6,
-        'stories_year_mode' => 'current',
-        'featured_layout_order' => "image\ntitle\nmeta\nbutton",
-        'stories_layout_order' => "image\ntitle\nexcerpt\nbutton"
+      'featured' => [
+        'shortcode' => 'featured_animal',
+        'enabled' => 1,
+        'mode' => 'random',
+        'manual_id' => '',
+        'title_text' => 'Featured animal',
+        'subtitle_text' => 'Meet one of the animals looking for a home',
+        'button_text' => 'View animal',
+        'layout_order' => "image\ntitle\nmeta\nbutton",
       ],
       'quiz' => [
         'quiz_shortcode' => 'adoption_match_quiz',
@@ -462,7 +462,12 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function get_settings() {
-    return self::merge_with_defaults(self::default_settings(), self::load_saved_settings());
+    $settings = self::merge_with_defaults(self::default_settings(), self::load_saved_settings());
+    $saved = self::load_saved_settings();
+    if (isset($saved['widgets']) && is_array($saved['widgets'])) {
+      $settings['featured'] = self::featured_settings(['featured'=>$settings['featured'] ?? [], 'widgets'=>$saved['widgets']]);
+    }
+    return $settings;
   }
 
   private static function sanitize_shortcode_tag($value) {
@@ -515,7 +520,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!function_exists('register_block_type')) return;
     $blocks = [
       'asm-suite/adoptables' => ['title' => 'ASM Suite Adoptables', 'shortcode' => 'adoptables'],
-      'asm-suite/adopted' => ['title' => 'ASM Suite Happy Endings', 'shortcode' => 'adopted'],
+      'asm-suite/adopted' => ['title' => 'ASM Suite Adopted', 'shortcode' => 'adopted'],
       'asm-suite/statistics' => ['title' => 'ASM Suite Statistics', 'shortcode' => 'stats'],
       'asm-suite/featured-animal' => ['title' => 'ASM Suite Featured Animal', 'shortcode' => 'featured_animal'],
       'asm-suite/adoption-form' => ['title' => 'ASM Suite Adoption Form', 'shortcode' => 'adoption_form'],
@@ -576,12 +581,10 @@ final class Plugin_UI_Suite_Plugin {
     if ($c && $c !== 'stats') add_shortcode($c, function(){ return do_shortcode('[stats]'); });
   }
 
-  public static function register_widget_shortcodes() {
+  public static function register_featured_shortcodes() {
     $settings = self::get_settings();
-    $featured = self::sanitize_shortcode_tag($settings['widgets']['featured_shortcode'] ?? 'featured_animal');
-    $stories = self::sanitize_shortcode_tag($settings['widgets']['stories_shortcode'] ?? 'adoption_stories');
+    $featured = self::sanitize_shortcode_tag($settings['featured']['shortcode'] ?? ($settings['widgets']['featured_shortcode'] ?? 'featured_animal'));
     if ($featured) add_shortcode($featured, [__CLASS__, 'render_featured_shortcode']);
-    if ($stories) add_shortcode($stories, [__CLASS__, 'render_stories_shortcode']);
   }
 
   public static function register_quiz_shortcode() {
@@ -681,13 +684,13 @@ final class Plugin_UI_Suite_Plugin {
 
   public static function render_featured_shortcode($atts = []) {
     $settings = self::get_settings();
-    $w = $settings['widgets'] ?? [];
-    if (empty($w['featured_enabled'])) return '';
-    $mode = $w['featured_mode'] ?? 'random';
-    $manual = preg_replace('/\D+/', '', (string)($w['featured_manual_id'] ?? ''));
-    $title = $w['featured_title_text'] ?? 'Featured animal';
-    $subtitle = $w['featured_subtitle_text'] ?? 'Meet one of the animals looking for a home';
-    $button = $w['featured_button_text'] ?? 'View animal';
+    $w = self::featured_settings($settings);
+    if (empty($w['enabled'])) return '';
+    $mode = $w['mode'] ?? 'random';
+    $manual = preg_replace('/\D+/', '', (string)($w['manual_id'] ?? ''));
+    $title = $w['title_text'] ?? 'Featured animal';
+    $subtitle = $w['subtitle_text'] ?? 'Meet one of the animals looking for a home';
+    $button = $w['button_text'] ?? 'View animal';
     $adoptables_page_url = esc_url_raw($settings['global']['adoptables_page_url'] ?? '');
     ob_start(); ?>
     <section class="asm-featured-animal-widget" aria-labelledby="asm-featured-title" style="--asm-featured-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-featured-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-featured-bg); border:2px solid var(--asm-featured-brand); border-radius:24px; padding:20px;">
@@ -736,56 +739,11 @@ final class Plugin_UI_Suite_Plugin {
     <?php return ob_get_clean();
   }
 
-  public static function render_stories_shortcode($atts = []) {
-    $settings = self::get_settings();
-    $w = $settings['widgets'] ?? [];
-    if (empty($w['stories_enabled'])) return '';
-    $title = $w['stories_title_text'] ?? 'Adoption stories';
-    $count = max(1, min(12, (int)($w['stories_count'] ?? 6)));
-    $yearMode = $w['stories_year_mode'] ?? 'current';
-    $year = $yearMode === 'current' ? date('Y') : '';
-    $brand = $settings['adopted']['brand_color'] ?? '#401268';
-    $bg = $settings['adopted']['background_color'] ?? '#fcf5fd';
-    $text = $settings['adopted']['text_primary_color'] ?? '#374151';
-    $muted = $settings['adopted']['text_muted_color'] ?? '#6b7280';
-    $adopted_page_url = esc_url_raw($settings['global']['adopted_page_url'] ?? '');
-    ob_start(); ?>
-    <section class="asm-adoption-stories-widget" aria-labelledby="asm-stories-title" style="--asm-stories-brand:<?php echo esc_attr($brand); ?>; --asm-stories-bg:<?php echo esc_attr($bg); ?>; --asm-stories-text:<?php echo esc_attr($text); ?>; --asm-stories-muted:<?php echo esc_attr($muted); ?>; background:var(--asm-stories-bg); border-radius:24px; padding:20px;">
-      <h2 id="asm-stories-title" style="margin:0 0 1rem;color:var(--asm-stories-brand);font-size:2rem;line-height:1.15;"><?php echo esc_html($title); ?></h2>
-      <div id="asm-stories-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;"></div>
-    </section>
-    <script>(function(){
-      const root=document.currentScript.previousElementSibling; if(!root) return;
-      const endpoint=<?php echo wp_json_encode(rest_url('plugin/v1/adoptions')); ?> + '?speciesid=2' + (<?php echo wp_json_encode($year); ?> ? '&year=' + <?php echo wp_json_encode($year); ?> : '');
-      const imageBase=<?php echo wp_json_encode(rest_url('plugin/v1/animal-image')); ?>;
-      const profileBase=<?php echo wp_json_encode(home_url('/happy-endings/')); ?>;
-      const adoptedPageUrl=<?php echo wp_json_encode($adopted_page_url); ?>;
-      function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-      function escAttr(s){ return escHtml(s).replace(/"/g,String.fromCharCode(38,113,117,111,116,59)).replace(/'/g,String.fromCharCode(38,35,48,51,57,59)); }
-      function slugifyPart(value){ return String(value || '').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').replace(/-{2,}/g,'-'); }
-      function adoptedModalSlug(animal,id){ const name=slugifyPart(animal.ANIMALNAME ?? animal.AnimalName ?? ''); const code=slugifyPart(animal.CODE ?? animal.SHELTERCODE ?? animal.ShelterCode ?? ''); return [name, code].filter(Boolean).join('-') || id; }
-      function adoptedStoryUrl(animal,id,name){ if(!adoptedPageUrl) return profileBase + encodeURIComponent(id + '-' + slugifyPart(name)) + '/'; try { const url=new URL(adoptedPageUrl, window.location.origin); url.searchParams.set('adopted', adoptedModalSlug(animal,id)); return url.toString(); } catch(e) { const sep=String(adoptedPageUrl).includes('?') ? '&' : '?'; return String(adoptedPageUrl) + sep + 'adopted=' + encodeURIComponent(adoptedModalSlug(animal,id)); } }
-      fetch(endpoint,{credentials:'same-origin'}).then(r=>r.json()).then(data=>{
-        if(!Array.isArray(data)||!data.length) throw new Error('No stories');
-        data.sort((a,b)=>new Date(String(b.MOVEMENTDATE ?? b.MovementDate ?? 0)) - new Date(String(a.MOVEMENTDATE ?? a.MovementDate ?? 0)));
-        const slice=data.slice(0, <?php echo (int)$count; ?>);
-        const grid=root.querySelector('#asm-stories-grid');
-        try { const body=new URLSearchParams(); body.set('action','plugin_suite_track'); body.set('event','stories_widget_load'); body.set('nonce',<?php echo wp_json_encode(wp_create_nonce('plugin_suite_track')); ?>); fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:body.toString()}); } catch (e) {}
-        grid.innerHTML=slice.map(a=>{ const id=String(a.ANIMALID ?? a.AnimalID ?? a.ID ?? '').replace(/\D+/g,''); const name=String(a.ANIMALNAME ?? a.AnimalName ?? 'Animal'); const age=String(a.ANIMALAGE ?? a.AnimalAge ?? '').trim(); const breed=String(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1 ?? '').trim(); const sexRaw=String(a.SEXNAME ?? a.SexName ?? a.SEX ?? '').trim(); const sex=/^f/i.test(sexRaw) || sexRaw==='0' ? 'Female' : (/^m/i.test(sexRaw) || sexRaw==='1' ? 'Male' : sexRaw); const story=String(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? '').replace(/\s+/g,' ').trim(); const snippet=story.length > 220 ? story.slice(0,217).trim() + '…' : story; const meta=[sex, age, breed].filter(Boolean).map(escHtml).join(' • '); const img=id ? imageBase + '?animalid=' + encodeURIComponent(id) + '&seq=1&_=' + Date.now() : ''; const url=adoptedStoryUrl(a,id,name); return `<article style="display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr);gap:18px;align-items:start;background:#fff;border:2px solid var(--asm-stories-brand);border-radius:24px;padding:16px;box-shadow:0 10px 24px rgba(15,23,42,.06);"><div style="border-radius:18px;overflow:hidden;background:#f3f4f6;line-height:0;aspect-ratio:1/1;">${id ? `<img src="${escAttr(img)}" alt="${escAttr(name)}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="eager" decoding="async" />` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px;color:#9ca3af;line-height:1;">🐾</div>`}</div><div style="min-width:0;"><div style="font-weight:800;color:var(--asm-stories-text);font-size:1.08rem;line-height:1.25;"><a href="${escAttr(url)}" style="color:inherit;">${escHtml(name)}</a></div>${meta ? `<div style="margin-top:.45rem;color:var(--asm-stories-muted);line-height:1.55;">${meta}</div>` : ``}${snippet ? `<p style="margin:.85rem 0 0;color:var(--asm-stories-text);line-height:1.65;">${escHtml(snippet)}</p>` : `<p style="margin:.85rem 0 0;color:var(--asm-stories-muted);line-height:1.65;">Happy ending shared through our adopted cats updates.</p>`}</div></article>`; }).join('');
-        if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
-          grid.querySelectorAll('article').forEach(card => { card.style.gridTemplateColumns = '1fr'; });
-        }
-      }).catch(err=>{ const grid=root.querySelector('#asm-stories-grid'); grid.innerHTML='<p style="color:#6b7280;">No adoption stories available right now.</p>'; });
-    })();</script>
-    <?php return ob_get_clean();
-  }
-
   public static function all_suite_shortcodes() {
     $settings = self::get_settings();
     $tags = [self::sanitize_shortcode_tag($settings['shortcodes']['adoptables'] ?? 'adoptables'), self::sanitize_shortcode_tag($settings['shortcodes']['adopted'] ?? 'adopted'), self::sanitize_shortcode_tag($settings['shortcodes']['statistics'] ?? 'stats')];
     foreach (self::get_forms() as $tag => $id) $tags[] = $tag;
-    $tags[] = self::sanitize_shortcode_tag($settings['widgets']['featured_shortcode'] ?? 'featured_animal');
-    $tags[] = self::sanitize_shortcode_tag($settings['widgets']['stories_shortcode'] ?? 'adoption_stories');
+    $tags[] = self::sanitize_shortcode_tag($settings['featured']['shortcode'] ?? ($settings['widgets']['featured_shortcode'] ?? 'featured_animal'));
     $tags[] = self::sanitize_shortcode_tag($settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz');
     return array_values(array_unique(array_filter($tags)));
   }
@@ -1007,21 +965,16 @@ final class Plugin_UI_Suite_Plugin {
       $clean['global']['supported_species'] = self::sanitise_textarea_csv($g['supported_species'] ?? ($clean['global']['supported_species'] ?? 'cats,dogs,rabbits,birds,horses,small_animals,reptiles,other'));
     } elseif (in_array($active_tab, ['adoptables','adopted','stats'], true)) {
       $clean[$active_tab] = self::sanitize_section($active_tab, $input[$active_tab] ?? [], $clean[$active_tab] ?? []);
+      if (!empty($input['shortcodes']) && is_array($input['shortcodes'])) { $sc=$input['shortcodes']; foreach (['adoptables','adopted','statistics'] as $k) if (isset($sc[$k])) $clean['shortcodes'][$k] = self::sanitize_shortcode_tag($sc[$k]) ?: ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k]); }
       if ($active_tab === 'stats' && !empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
-    } elseif ($active_tab === 'widgets') {
-      $wi = $input['widgets'] ?? [];
-      $clean['widgets']['featured_shortcode'] = self::sanitize_shortcode_tag($wi['featured_shortcode'] ?? ($clean['widgets']['featured_shortcode'] ?? $defaults['widgets']['featured_shortcode'])) ?: ($clean['widgets']['featured_shortcode'] ?? $defaults['widgets']['featured_shortcode']);
-      $clean['widgets']['featured_enabled'] = !empty($wi['featured_enabled']) ? 1 : 0;
-      $clean['widgets']['featured_mode'] = in_array(($wi['featured_mode'] ?? 'random'), ['random','newest','manual'], true) ? $wi['featured_mode'] : 'random';
-      $clean['widgets']['featured_manual_id'] = preg_replace('/\D+/', '', (string)($wi['featured_manual_id'] ?? ''));
-      foreach (['featured_title_text','featured_subtitle_text','featured_button_text'] as $k) $clean['widgets'][$k] = self::sanitise_text($wi[$k] ?? '', $defaults['widgets'][$k]);
-      $clean['widgets']['stories_shortcode'] = self::sanitize_shortcode_tag($wi['stories_shortcode'] ?? ($clean['widgets']['stories_shortcode'] ?? $defaults['widgets']['stories_shortcode'])) ?: ($clean['widgets']['stories_shortcode'] ?? $defaults['widgets']['stories_shortcode']);
-      $clean['widgets']['stories_enabled'] = !empty($wi['stories_enabled']) ? 1 : 0;
-      $clean['widgets']['stories_title_text'] = self::sanitise_text($wi['stories_title_text'] ?? '', $defaults['widgets']['stories_title_text']);
-      $clean['widgets']['stories_count'] = self::sanitise_int($wi['stories_count'] ?? '', $clean['widgets']['stories_count'] ?? $defaults['widgets']['stories_count'], 1, 12);
-      $clean['widgets']['stories_year_mode'] = in_array(($wi['stories_year_mode'] ?? 'current'), ['current','all'], true) ? $wi['stories_year_mode'] : 'current';
-      $clean['widgets']['featured_layout_order'] = sanitize_textarea_field($wi['featured_layout_order'] ?? ($clean['widgets']['featured_layout_order'] ?? $defaults['widgets']['featured_layout_order']));
-      $clean['widgets']['stories_layout_order'] = sanitize_textarea_field($wi['stories_layout_order'] ?? ($clean['widgets']['stories_layout_order'] ?? $defaults['widgets']['stories_layout_order']));
+    } elseif ($active_tab === 'featured') {
+      $fi = $input['featured'] ?? [];
+      $clean['featured']['shortcode'] = self::sanitize_shortcode_tag($fi['shortcode'] ?? ($clean['featured']['shortcode'] ?? ($clean['widgets']['featured_shortcode'] ?? $defaults['featured']['shortcode']))) ?: ($clean['featured']['shortcode'] ?? $defaults['featured']['shortcode']);
+      $clean['featured']['enabled'] = !empty($fi['enabled']) ? 1 : 0;
+      $clean['featured']['mode'] = in_array(($fi['mode'] ?? 'random'), ['random','newest','manual'], true) ? $fi['mode'] : 'random';
+      $clean['featured']['manual_id'] = preg_replace('/\D+/', '', (string)($fi['manual_id'] ?? ''));
+      foreach (['title_text','subtitle_text','button_text'] as $k) $clean['featured'][$k] = self::sanitise_text($fi[$k] ?? '', $defaults['featured'][$k]);
+      $clean['featured']['layout_order'] = sanitize_textarea_field($fi['layout_order'] ?? ($clean['featured']['layout_order'] ?? $defaults['featured']['layout_order']));
     } elseif ($active_tab === 'quiz') {
       $q = $input['quiz'] ?? [];
       $clean['quiz']['quiz_shortcode'] = self::sanitize_shortcode_tag($q['quiz_shortcode'] ?? ($clean['quiz']['quiz_shortcode'] ?? $defaults['quiz']['quiz_shortcode'])) ?: ($clean['quiz']['quiz_shortcode'] ?? $defaults['quiz']['quiz_shortcode']);
@@ -1031,8 +984,6 @@ final class Plugin_UI_Suite_Plugin {
       $clean['quiz']['question_order'] = sanitize_textarea_field($q['question_order'] ?? ($clean['quiz']['question_order'] ?? $defaults['quiz']['question_order']));
       $clean['quiz']['answer_mappings'] = sanitize_textarea_field($q['answer_mappings'] ?? ($clean['quiz']['answer_mappings'] ?? $defaults['quiz']['answer_mappings']));
     } elseif ($active_tab === 'forms') {
-      $sc = $input['shortcodes'] ?? [];
-      foreach (['adoptables','adopted','statistics'] as $k) $clean['shortcodes'][$k] = self::sanitize_shortcode_tag($sc[$k] ?? ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k])) ?: ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k]);
       $fo = $input['forms'] ?? [];
       $clean['forms']['account'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($fo['account'] ?? ($clean['forms']['account'] ?? $defaults['forms']['account'])));
       $clean['forms']['items'] = [];
@@ -1057,9 +1008,8 @@ final class Plugin_UI_Suite_Plugin {
         if (!empty($input[$section_key]) && is_array($input[$section_key])) $clean[$section_key] = self::sanitize_section($section_key, $input[$section_key], $clean[$section_key] ?? []);
       }
       if (!empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
-      $wi = $input['widgets'] ?? [];
-      if (isset($wi['featured_layout_order'])) $clean['widgets']['featured_layout_order'] = sanitize_textarea_field($wi['featured_layout_order']);
-      if (isset($wi['stories_layout_order'])) $clean['widgets']['stories_layout_order'] = sanitize_textarea_field($wi['stories_layout_order']);
+      $fi = $input['featured'] ?? [];
+      if (isset($fi['layout_order'])) $clean['featured']['layout_order'] = sanitize_textarea_field($fi['layout_order']);
       $fo = $input['forms'] ?? [];
       if (isset($fo['layout_order'])) $clean['forms']['layout_order'] = sanitize_textarea_field($fo['layout_order']);
       if (isset($fo['platform_support_notes'])) $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes']);
@@ -1230,13 +1180,13 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     $ui = sanitize_key($_GET['ui'] ?? 'adoptables');
     $device = sanitize_key($_GET['device'] ?? 'desktop');
-    if (!in_array($ui,['adoptables','adopted','stats','widgets_featured','widgets_stories','quiz'],true)) $ui='adoptables';
+    if (!in_array($ui,['adoptables','adopted','stats','featured','quiz'],true)) $ui='adoptables';
     if (!in_array($device,['mobile','tablet','desktop'],true)) $device='desktop';
     check_admin_referer('plugin_ui_suite_preview_'.$ui.'_'.$device);
     self::sync_legacy_options(self::get_settings());
     $widths=['mobile'=>430,'tablet'=>900,'desktop'=>1280]; $width=$widths[$device];
     $settings = self::get_settings();
-    $shortcodes=['adoptables'=>self::sanitize_shortcode_tag($settings['shortcodes']['adoptables'] ?? 'adoptables'),'adopted'=>self::sanitize_shortcode_tag($settings['shortcodes']['adopted'] ?? 'adopted'),'stats'=>self::sanitize_shortcode_tag($settings['shortcodes']['statistics'] ?? 'stats'),'widgets_featured'=>self::sanitize_shortcode_tag($settings['widgets']['featured_shortcode'] ?? 'featured_animal'),'widgets_stories'=>self::sanitize_shortcode_tag($settings['widgets']['stories_shortcode'] ?? 'adoption_stories'),'quiz'=>self::sanitize_shortcode_tag($settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz')];
+    $shortcodes=['adoptables'=>self::sanitize_shortcode_tag($settings['shortcodes']['adoptables'] ?? 'adoptables'),'adopted'=>self::sanitize_shortcode_tag($settings['shortcodes']['adopted'] ?? 'adopted'),'stats'=>self::sanitize_shortcode_tag($settings['shortcodes']['statistics'] ?? 'stats'),'featured'=>self::sanitize_shortcode_tag($settings['featured']['shortcode'] ?? ($settings['widgets']['featured_shortcode'] ?? 'featured_animal')),'quiz'=>self::sanitize_shortcode_tag($settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz')];
     $tag = $shortcodes[$ui] ?? 'adoptables';
     $html=do_shortcode('['.$tag.']');
     status_header(200); nocache_headers(); ?>
@@ -1272,9 +1222,9 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) return;
     $settings = self::get_settings();
     $tab = sanitize_key($_GET['tab'] ?? 'global');
-    if (in_array($tab, ['registry','proxy','diagnostics'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
-    if (!in_array($tab,['global','data-source','adoptables','adopted','stats','widgets','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
-    echo '<div class="wrap"><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue widgets, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p>';
+    if (in_array($tab, ['registry','proxy'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
+    if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
+    echo '<div class="wrap"><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
     self::start_wrap();
@@ -1285,7 +1235,7 @@ final class Plugin_UI_Suite_Plugin {
     elseif ($tab === 'adoptables') self::render_adoptables_tab($settings['adoptables'], $settings['global']);
     elseif ($tab === 'adopted') self::render_adopted_tab($settings['adopted'], $settings['global']);
     elseif ($tab === 'stats') self::render_stats_tab($settings['stats'], $settings['global']);
-    elseif ($tab === 'widgets') self::render_widgets_tab($settings);
+    elseif ($tab === 'featured') self::render_featured_tab($settings);
     elseif ($tab === 'payments' && class_exists('Plugin_Payments_Module')) Plugin_Payments_Module::render_admin_page(true);
     elseif ($tab === 'quiz') self::render_quiz_tab($settings);
     elseif ($tab === 'forms') self::render_forms_tab($settings);
@@ -1310,7 +1260,7 @@ final class Plugin_UI_Suite_Plugin {
     ob_start(); self::checkbox_input('global','bypass_plugin_cache',$s['global']['bypass_plugin_cache'] ?? 0,'Bypass suite transients and request fresh API data'); self::row('Cache bypass', ob_get_clean() . '<p class="description">When enabled, adoptables, adopted animals, statistics and SEO profile feeds skip the plugin cache. This may increase requests to your configured API.</p>');
     ob_start(); self::checkbox_input('global','delete_data_on_uninstall',$s['global']['delete_data_on_uninstall'] ?? 0,'Delete all Rescue Plugin Suite data when uninstalling'); self::row('Uninstall data removal', ob_get_clean() . '<p class="description">Leave disabled to preserve settings, API keys, payment configuration, campaigns and user preferences during updates or uninstall/reinstall workflows.</p>');
     self::row('Adoptables UI page URL', '<input type="url" name="suite[global][adoptables_page_url]" value="' . esc_attr($s['global']['adoptables_page_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/adopt/')) . '" /><p class="description">Used by the featured animal widget and adoptable modal share links. Set this to the page containing the Adoptables UI shortcode.</p>');
-    self::row('Adopted UI page URL', '<input type="url" name="suite[global][adopted_page_url]" value="' . esc_attr($s['global']['adopted_page_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/happy-endings/')) . '" /><p class="description">Used by adopted modal share links and adoption story widgets. Set this to the page containing the Adopted UI shortcode.</p>');
+    self::row('Adopted UI page URL', '<input type="url" name="suite[global][adopted_page_url]" value="' . esc_attr($s['global']['adopted_page_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/happy-endings/')) . '" /><p class="description">Used by adopted modal share links and adopted animal links. Set this to the page containing the Adopted UI shortcode.</p>');
     ob_start(); self::select_input('global','adoptables_style_source',$s['global']['adoptables_style_source'],['auto'=>'Auto','global'=>'Always use global','custom'=>'Always use custom']); self::row('Adoptables style source', ob_get_clean());
     ob_start(); self::select_input('global','adopted_style_source',$s['global']['adopted_style_source'],['auto'=>'Auto','global'=>'Always use global','custom'=>'Always use custom']); self::row('Adopted style source', ob_get_clean());
     ob_start(); self::select_input('global','stats_style_source',$s['global']['stats_style_source'],['auto'=>'Auto','global'=>'Always use global','custom'=>'Always use custom']); self::row('Statistics style source', ob_get_clean());
@@ -1319,7 +1269,7 @@ final class Plugin_UI_Suite_Plugin {
     echo '</div>';
 
     self::form_start('global');
-    echo '<div class="plugin-suite-card"><h2>Shared styling</h2><p class="description">These styles can be reused by Adoptables, Adopted and Statistics so public widgets feel consistent.</p><table class="form-table">';
+    echo '<div class="plugin-suite-card"><h2>Shared styling</h2><p class="description">These styles can be reused by Adoptables, Adopted and Statistics so public displays feel consistent.</p><table class="form-table">';
     foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','modal_divider_color'=>'Modal divider colour','text_primary_color'=>'Primary text colour','text_muted_color'=>'Muted text colour'] as $k=>$label){ ob_start(); self::colour_input('global',$k,$s['global'][$k]); self::row($label, ob_get_clean()); }
     ob_start(); self::number_input('global','paw_opacity',$s['global']['paw_opacity'],0,0.25,0.01); self::row('Paw print opacity', ob_get_clean());
     ob_start(); self::number_input('global','paw_count',$s['global']['paw_count'],0,80); self::row('Paw print count', ob_get_clean());
@@ -1370,7 +1320,7 @@ final class Plugin_UI_Suite_Plugin {
     }
     ob_start(); self::select_input('global','provider_profile',$s['global']['provider_profile'] ?? '', array_map(function($v){ return $v['label']; }, self::provider_profile_templates())); self::row('Field mapping template', ob_get_clean());
     self::row('Field mapping', '<textarea name="suite[global][field_map]" rows="6" class="large-text code">' . esc_textarea($s['global']['field_map'] ?: (self::provider_profile_templates()[$s['global']['provider_profile'] ?? '']['map'] ?? '')) . '</textarea>');
-    self::row('Provider cache', '<p class="description">Animal and statistics feed cache times are plugin-wide so widgets stay consistent. Change them in General → General settings. Provider cache can be bypassed from there when testing.</p>');
+    self::row('Provider cache', '<p class="description">Animal and statistics feed cache times are plugin-wide so public displays stay consistent. Change them in General → General settings. Provider cache can be bypassed from there when testing.</p>');
     self::row('Status and health', '<strong>'.esc_html(($s['global']['data_source'] ?? 'asm') === str_replace('-', '_', $sub) ? 'Selected as live source' : 'Configured but not selected').'</strong><p class="description">Use Advanced Diagnostics in developer mode for raw endpoint payloads.</p>');
     echo '</table></div></div>'; self::form_end();
   }
@@ -1408,6 +1358,7 @@ final class Plugin_UI_Suite_Plugin {
       'sharing'=>'Sharing & apply',
       'filters'=>'Filters & extras',
       'layout'=>'Layout builder',
+      'embed'=>'Embed',
     ];
     $sub = self::subtab_nav('adoptables', $items);
     echo '<div class="plugin-suite-grid">';
@@ -1463,7 +1414,7 @@ final class Plugin_UI_Suite_Plugin {
     ob_start(); self::select_input('adoptables','favourite_button_position',$o['favourite_button_position'] ?? 'top_left',['top_left'=>'Top left','top_right'=>'Top right','bottom_left'=>'Bottom left','bottom_right'=>'Bottom right','hidden'=>'Hidden']); self::row('Favourite button position', ob_get_clean());
     echo '</table></div>';
 
-    echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='layout'?'active':'').'" data-subtab="layout"><h2>Adoptables card layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name and meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button']); echo '<h2>Adoptables modal layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_modal_order'), preg_split('/\R+/', (string)($o['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','badges'=>'Badges','info_cards'=>'Info cards','tips'=>'Tips','description'=>'Description','global_text'=>'Global text','contact_footer'=>'Contact footer','custom_buttons'=>'Custom buttons']); echo '<h2>Header actions</h2>'; self::sortable_list(self::field_name('adoptables','builder_header_actions'), preg_split('/\R+/', (string)($o['builder_header_actions'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['apply'=>'Apply','favourite'=>'Favourite','share'=>'Share','close'=>'Close']); echo '</div>';
+    if ($sub === 'embed') { self::render_embed_card('adoptables','Adoptables', self::sanitize_shortcode_tag(self::get_settings()['shortcodes']['adoptables'] ?? 'adoptables'), 'Place your available animals on adoption pages.'); self::preview_frame('adoptables'); } else { echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='layout'?'active':'').'" data-subtab="layout"><h2>Adoptables card layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name and meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button']); echo '<h2>Adoptables modal layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_modal_order'), preg_split('/\R+/', (string)($o['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','badges'=>'Badges','info_cards'=>'Info cards','tips'=>'Tips','description'=>'Description','global_text'=>'Global text','contact_footer'=>'Contact footer','custom_buttons'=>'Custom buttons']); echo '<h2>Header actions</h2>'; self::sortable_list(self::field_name('adoptables','builder_header_actions'), preg_split('/\R+/', (string)($o['builder_header_actions'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['apply'=>'Apply','favourite'=>'Favourite','share'=>'Share','close'=>'Close']); echo '</div>'; }
 
     echo '</div>';
     self::form_end();
@@ -1471,7 +1422,7 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_adopted_tab($o, $g) {
     self::form_start('adopted');
-    $sub = self::subtab_nav('adopted', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','modal'=>'Modal','layout'=>'Layout builder']);
+    $sub = self::subtab_nav('adopted', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','modal'=>'Modal','layout'=>'Layout builder','embed'=>'Embed']);
     echo '<div class="plugin-suite-grid">';
 
     if($sub==='design') {
@@ -1510,6 +1461,8 @@ final class Plugin_UI_Suite_Plugin {
       ob_start(); self::select_input('adopted','date_label_halign',$o['date_label_halign'],['left'=>'Left','right'=>'Right']); self::row('Date label horizontal alignment', ob_get_clean());
       ob_start(); self::select_input('adopted','date_label_valign',$o['date_label_valign'],['top'=>'Top','bottom'=>'Bottom']); self::row('Date label vertical alignment', ob_get_clean());
       echo '</table></div>';
+    } elseif ($sub==='embed') {
+      self::render_embed_card('adopted','Adopted', self::sanitize_shortcode_tag(self::get_settings()['shortcodes']['adopted'] ?? 'adopted'), 'Place adopted animals and success stories on your adopted page.'); self::preview_frame('adopted');
     } else {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Adopted card layout</h2>'; self::sortable_list(self::field_name('adopted','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','date_badge'=>'Adoption date badge','name_meta'=>'Name and meta','story_excerpt'=>'Story excerpt','share_button'=>'Share button']); echo '<h2>Adopted modal layout</h2>'; self::sortable_list(self::field_name('adopted','builder_modal_order'), preg_split('/\R+/', (string)($o['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','name_meta'=>'Name and meta','adoption_date'=>'Adoption date','story'=>'Story','global_text'=>'Global text','share_button'=>'Share button']); echo '</div>';
     }
@@ -1520,7 +1473,7 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_stats_tab($o, $g) {
     self::form_start('stats');
-    $sub = self::subtab_nav('stats', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','cards'=>'Cards','layout'=>'Layout builder']);
+    $sub = self::subtab_nav('stats', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','cards'=>'Cards','layout'=>'Layout builder','embed'=>'Embed']);
     echo '<div class="plugin-suite-grid">';
 
     if($sub==='design') {
@@ -1547,6 +1500,8 @@ final class Plugin_UI_Suite_Plugin {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Cards</h2><table class="form-table">'; ob_start(); self::textarea_input('stats','card_order',$o['card_order'],7); self::row('Card order', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>Card</th><th>Heading</th><th>Caption</th><th>Icon</th></tr></thead><tbody>';
       foreach (['brought','adopted','vaccinated','neutered','chipped','in_care'] as $card){ echo '<tr><td><code>'.esc_html($card).'</code></td><td>'; self::text_input('stats','label_'.$card,$o['label_'.$card]); echo '</td><td>'; self::text_input('stats','caption_'.$card,$o['caption_'.$card]); echo '</td><td>'; self::select_input('stats','icon_'.$card,$o['icon_'.$card], self::icon_options()); echo '</td></tr>'; }
       echo '</tbody></table></div>';
+    } elseif ($sub==='embed') {
+      self::render_embed_card('stats','Statistics', self::sanitize_shortcode_tag(self::get_settings()['shortcodes']['statistics'] ?? 'stats'), 'Place rescue impact statistics on your website.'); self::preview_frame('stats');
     } else {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Statistics card order</h2>'; self::sortable_list(self::field_name('stats','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? $o['card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['brought'=>'Brought In','adopted'=>'Adopted','vaccinated'=>'Vaccinated','neutered'=>'Neutered','chipped'=>'Microchipped','in_care'=>'In Our Care']); echo '</div>';
     }
@@ -1555,33 +1510,44 @@ final class Plugin_UI_Suite_Plugin {
     self::form_end();
   }
 
-  private static function render_widgets_tab($settings) {
-    $w = $settings['widgets'];
-    self::form_start('widgets');
-    $sub = self::subtab_nav('widgets', ['featured'=>'Featured animal','stories'=>'Adoption stories','design'=>'Design','responsive'=>'Responsive']);
-    echo '<div class="plugin-suite-grid">';
-    if($sub==='featured') {
-      echo '<div class="plugin-suite-card"><h2>Featured animal</h2><table class="form-table">';
-      ob_start(); self::checkbox_input('widgets','featured_enabled',$w['featured_enabled'],'Enable featured animal shortcode'); self::row('Enable', ob_get_clean());
-      foreach (['featured_shortcode'=>'Shortcode','featured_title_text'=>'Title text','featured_subtitle_text'=>'Subtitle text','featured_button_text'=>'Button text','featured_manual_id'=>'Manual animal ID'] as $k=>$label){ ob_start(); self::text_input('widgets',$k,$w[$k]); self::row($label, ob_get_clean()); }
-      ob_start(); self::select_input('widgets','featured_mode',$w['featured_mode'],['random'=>'Random','newest'=>'Newest intake','manual'=>'Manual ID']); self::row('Featured mode', ob_get_clean());
-      echo '</table></div>';
-    } elseif($sub==='stories') {
-      echo '<div class="plugin-suite-card"><h2>Adoption stories</h2><table class="form-table">';
-      ob_start(); self::checkbox_input('widgets','stories_enabled',$w['stories_enabled'],'Enable adoption stories shortcode'); self::row('Enable', ob_get_clean());
-      foreach (['stories_shortcode'=>'Shortcode','stories_title_text'=>'Title text'] as $k=>$label){ ob_start(); self::text_input('widgets',$k,$w[$k]); self::row($label, ob_get_clean()); }
-      ob_start(); self::number_input('widgets','stories_count',$w['stories_count'],1,12); self::row('Story count', ob_get_clean());
-      ob_start(); self::select_input('widgets','stories_year_mode',$w['stories_year_mode'],['current'=>'Current year only','all'=>'All years']); self::row('Date range', ob_get_clean());
-      echo '</table></div>';
-    } elseif($sub==='design') {
-      echo '<div class="plugin-suite-card"><h2>Widget design</h2><p class="description">Widgets now inherit the same card, text and responsive framework as the main UIs. A fuller widget builder can be added next.</p></div>';
-    } elseif($sub==='responsive') {
-      echo '<div class="plugin-suite-card"><h2>Widget responsive settings</h2><p class="description">Featured animal and adoption stories previews below use the same renderer path as live embeds.</p></div>';
-    } else {
-      echo '<div class="plugin-suite-card"><h2>Widget previews removed</h2><p class="description">Live previews have been removed because they were not reliably matching the embedded site output. Use staging pages to verify widgets.</p></div>';
+
+  private static function featured_settings($settings) {
+    $defaults = self::default_settings()['featured'];
+    $legacy = isset($settings['widgets']) && is_array($settings['widgets']) ? $settings['widgets'] : [];
+    $featured = isset($settings['featured']) && is_array($settings['featured']) ? $settings['featured'] : [];
+    $mapped = [];
+    foreach (['shortcode'=>'featured_shortcode','enabled'=>'featured_enabled','mode'=>'featured_mode','manual_id'=>'featured_manual_id','title_text'=>'featured_title_text','subtitle_text'=>'featured_subtitle_text','button_text'=>'featured_button_text','layout_order'=>'featured_layout_order'] as $new => $old) {
+      if (array_key_exists($old, $legacy) && !array_key_exists($new, $featured)) $mapped[$new] = $legacy[$old];
     }
-    echo '</div>';
-    self::form_end();
+    return array_merge($defaults, $mapped, $featured);
+  }
+
+  private static function render_embed_card($module, $label, $tag, $description) {
+    $name = in_array($module, ['adoptables','adopted','stats'], true) ? 'suite[shortcodes][' . ($module === 'stats' ? 'statistics' : $module) . ']' : self::field_name($module, 'shortcode');
+    echo '<div class="plugin-suite-card"><h2>Embed</h2><p class="description">'.esc_html($description).'</p><table class="form-table"><tr><th>Shortcode</th><td><input type="text" name="'.esc_attr($name).'" class="regular-text code" value="'.esc_attr($tag).'" /> <button type="button" class="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'['.esc_js($tag).']\')">Copy shortcode</button><p class="description">Use <code>['.esc_html($tag).']</code> on a page, post or page-builder shortcode block.</p></td></tr></table><h3>Parameters</h3><ul><li><code>source</code> — future page-builder source override.</li><li><code>layout</code> — future layout preset.</li><li><code>style</code> — future style preset.</li></ul><p class="description">Page builders can insert this shortcode today. Block and page-builder-specific controls can read the same module registry metadata later without another migration.</p></div>';
+  }
+
+  private static function render_featured_tab($settings) {
+    $f = self::featured_settings($settings);
+    self::form_start('featured');
+    $sub = self::subtab_nav('featured', ['dashboard'=>'Dashboard','layouts'=>'Layouts','appearance'=>'Appearance','filters'=>'Filters','embed'=>'Embed','analytics'=>'Analytics','help'=>'Help']);
+    echo '<div class="plugin-suite-grid">';
+    if ($sub === 'layouts') {
+      echo '<div class="plugin-suite-card"><h2>Featured Animal layout</h2>'; self::sortable_list(self::field_name('featured','layout_order'), preg_split('/\R+/', (string)($f['layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','meta'=>'Animal details','button'=>'View button']); echo '</div>'; self::preview_frame_custom('featured','Featured Animal preview');
+    } elseif ($sub === 'appearance') {
+      echo '<div class="plugin-suite-card"><h2>Appearance</h2><p class="description">Featured Animal inherits Adoptables colours and button styling so website displays stay consistent.</p></div>'; self::preview_frame_custom('featured','Featured Animal preview');
+    } elseif ($sub === 'filters') {
+      echo '<div class="plugin-suite-card"><h2>Animal selection</h2><table class="form-table">'; ob_start(); self::select_input('featured','mode',$f['mode'],['random'=>'Random available animal','newest'=>'Newest intake','manual'=>'Specific animal ID']); self::row('Selection method', ob_get_clean()); ob_start(); self::text_input('featured','manual_id',$f['manual_id']); self::row('Animal ID', ob_get_clean()); echo '</table></div>';
+    } elseif ($sub === 'embed') {
+      self::render_embed_card('featured','Featured Animal', self::sanitize_shortcode_tag($f['shortcode'] ?? 'featured_animal'), 'Place a single highlighted adoptable animal on a homepage, sidebar or campaign page.'); self::preview_frame_custom('featured','Featured Animal live preview');
+    } elseif ($sub === 'analytics') {
+      $analytics = self::get_analytics(); echo '<div class="plugin-suite-card"><h2>Featured Animal analytics</h2><p>Tracked clicks: <strong>'.esc_html((string)($analytics['featured_widget_click'] ?? 0)).'</strong></p></div>';
+    } elseif ($sub === 'help') {
+      echo '<div class="plugin-suite-card"><h2>Featured Animal help</h2><p>Use Featured Animal when you want one adoptable animal to receive extra attention. Choose random for freshness, newest intake for urgency, or manual ID for a campaign.</p></div>';
+    } else {
+      echo '<div class="plugin-suite-card"><h2>Featured Animal</h2><table class="form-table">'; ob_start(); self::checkbox_input('featured','enabled',$f['enabled'],'Enable Featured Animal shortcode'); self::row('Enable', ob_get_clean()); foreach (['shortcode'=>'Shortcode','title_text'=>'Title','subtitle_text'=>'Subtitle','button_text'=>'Button text'] as $k=>$label){ ob_start(); self::text_input('featured',$k,$f[$k]); self::row($label, ob_get_clean()); } echo '</table></div>'; self::preview_frame_custom('featured','Featured Animal preview');
+    }
+    echo '</div>'; self::form_end();
   }
 
   private static function render_quiz_tab($settings) {
@@ -1615,10 +1581,8 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function render_forms_tab($settings) {
-    self::form_start('forms'); $sc=$settings['shortcodes']; $items=$settings['forms']['items'];
-    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>UI shortcodes</h2><table class="form-table">';
-    foreach (['adoptables'=>'Adoptables UI shortcode','adopted'=>'Adopted UI shortcode','statistics'=>'Statistics UI shortcode'] as $k=>$label){ ob_start(); self::text_input('shortcodes',$k,$sc[$k]); echo '<p class="description">Use as <code>['.esc_html($sc[$k]).']</code></p>'; self::row($label, ob_get_clean()); }
-    echo '</table></div><div class="plugin-suite-card" style="grid-column:span 2;"><h2>Forms</h2><table class="form-table">'; ob_start(); self::text_input('forms','account',$settings['forms']['account']); self::row('Shelter Manager account', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>#</th><th>Shortcode</th><th>Form ID</th><th>Use</th></tr></thead><tbody>';
+    self::form_start('forms'); $items=$settings['forms']['items'];
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card" style="grid-column:span 2;"><h2>Forms</h2><table class="form-table">'; ob_start(); self::text_input('forms','account',$settings['forms']['account']); self::row('Shelter Manager account', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>#</th><th>Shortcode</th><th>Form ID</th><th>Use</th></tr></thead><tbody>';
     for($i=0;$i<10;$i++){ $row=$items[$i] ?? ['shortcode'=>'','form_id'=>'']; $tag=self::sanitize_shortcode_tag($row['shortcode'] ?? ''); echo '<tr><td>'.($i+1).'</td><td><input type="text" name="suite[forms][items]['.$i.'][shortcode]" value="'.esc_attr($row['shortcode'] ?? '').'" class="regular-text" /></td><td><input type="text" name="suite[forms][items]['.$i.'][form_id]" value="'.esc_attr($row['form_id'] ?? '').'" class="small-text" /></td><td>'.($tag?'<code>['.esc_html($tag).']</code>':'').'</td></tr>'; }
     echo '</tbody></table></div>';
     echo '<div class="plugin-suite-card" style="grid-column:span 2;"><h2>Platform limitations</h2><textarea class="large-text code" rows="6" name="'.esc_attr(self::field_name('forms','platform_support_notes')).'">'.esc_textarea($settings['forms']['platform_support_notes'] ?? '').'</textarea><p class="description">Format: platform|plain-English support or limitation note. These notes keep platform-specific behaviour explicit for administrators.</p></div>';
@@ -1637,7 +1601,7 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_layout_tab($settings) {
     self::form_start('layout');
-    $sub = self::subtab_nav('layout', ['adoptables'=>'Adoptables','adopted'=>'Adopted','statistics'=>'Statistics','donation'=>'Donation Widget','forms'=>'Forms','quiz'=>'Match Quiz','widgets'=>'Other widgets','species'=>'Species']);
+    $sub = self::subtab_nav('layout', ['adoptables'=>'Adoptables','adopted'=>'Adopted','statistics'=>'Statistics','donation'=>'Donation Widget','forms'=>'Forms','quiz'=>'Match Quiz','featured'=>'Featured Animal','species'=>'Species']);
     echo '<div class="plugin-suite-grid">';
     if ($sub === 'adoptables') {
       echo '<div class="plugin-suite-card"><h2>Adoptables card layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name and meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button']); echo '</div>';
@@ -1659,7 +1623,7 @@ final class Plugin_UI_Suite_Plugin {
     } elseif ($sub === 'species') {
       echo '<div class="plugin-suite-card"><h2>Species support</h2><table class="form-table">'; self::row('Available species','<textarea class="large-text code" rows="4" name="'.esc_attr(self::field_name('global','supported_species')).'">'.esc_textarea($settings['global']['supported_species'] ?? '').'</textarea>'); self::row('Enabled species','<textarea class="large-text code" rows="4" name="'.esc_attr(self::field_name('global','enabled_species')).'">'.esc_textarea($settings['global']['enabled_species'] ?? '').'</textarea><p class="description">Use slugs such as cats, dogs, rabbits, birds, horses, small_animals, reptiles and other.</p>'); echo '</table></div>';
     } else {
-      echo '<div class="plugin-suite-card"><h2>Featured widget layout</h2>'; self::sortable_list(self::field_name('widgets','featured_layout_order'), preg_split('/\R+/', (string)($settings['widgets']['featured_layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','meta'=>'Meta','button'=>'Button']); echo '</div><div class="plugin-suite-card"><h2>Stories widget layout</h2>'; self::sortable_list(self::field_name('widgets','stories_layout_order'), preg_split('/\R+/', (string)($settings['widgets']['stories_layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','excerpt'=>'Excerpt','button'=>'Button']); echo '</div>';
+      echo '<div class="plugin-suite-card"><h2>Featured Animal layout</h2>'; self::sortable_list(self::field_name('featured','layout_order'), preg_split('/\R+/', (string)(self::featured_settings($settings)['layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','meta'=>'Animal details','button'=>'View button']); echo '</div>'; self::preview_frame_custom('featured','Featured Animal preview');
     }
     echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Builder tools</h2><p class="description">Drag items to reorder. Save changes to persist. Clear a layout field and save to reset to defaults.</p></div></div>';
     self::form_end();
@@ -2020,7 +1984,7 @@ final class Plugin_UI_Suite_Plugin {
     $diag = get_transient('plugin_ui_suite_provider_diagnostics');
     if (!is_array($diag) || empty($diag['results']) || !is_array($diag['results'])) return;
     echo '<h3>Last provider diagnostics</h3>';
-    echo '<p class="description">Generated ' . esc_html($diag['time'] ?? '') . '. Counts and keys help confirm that your selected source can feed the widgets without custom reports.</p>';
+    echo '<p class="description">Generated ' . esc_html($diag['time'] ?? '') . '. Counts and keys help confirm that your selected source can feed the public displays without custom reports.</p>';
     echo '<table class="widefat striped"><thead><tr><th>Check</th><th>Status</th><th>Items</th><th>Sample keys</th><th>Message</th></tr></thead><tbody>';
     foreach ($diag['results'] as $row) {
       echo '<tr>';
@@ -2229,7 +2193,6 @@ final class Plugin_UI_Suite_Plugin {
       'adopted_modal_open' => 0,
       'favourite_toggle' => 0,
       'featured_widget_click' => 0,
-      'stories_widget_load' => 0,
     ];
   }
 
@@ -2313,7 +2276,7 @@ final class Plugin_UI_Suite_Plugin {
           'Password saved' => !empty($p['password']) ? 'Yes' : 'No',
           'REST routes' => implode(' | ', [rest_url('plugin/v1/adoptables'), rest_url('plugin/v1/adoptions'), rest_url('plugin/v1/report'), rest_url('plugin/v1/in-care-count'), rest_url('plugin/v1/animal-image')]),
         ],
-        'contract' => 'ASM is the native live connector. The suite normalises ASM records into the standard rescue animal shape before the widgets render.',
+        'contract' => 'ASM is the native live connector. The suite normalises ASM records into the standard rescue animal shape before the public displays render.',
       ];
     }
     if ($source === 'custom_api') {
@@ -2553,7 +2516,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled()) { echo '<p>Registry tools are available only when Developer Mode or WP_DEBUG is enabled.</p>'; return; }
     if (!class_exists('Plugin_UI_Suite_Registry')) { echo '<p>Registry framework is unavailable.</p>'; return; }
     $query = sanitize_text_field($_GET['settings_search'] ?? '');
-    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>Plugin-wide settings search</h2><form method="get"><input type="hidden" name="page" value="plugin-ui-suite"><input type="hidden" name="tab" value="registry"><p><input class="regular-text" name="settings_search" value="'.esc_attr($query).'" placeholder="PayPal, Gift Aid, Adoptables, Widget, Statistics"> <button class="button button-primary">Search</button></p></form>';
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>Plugin-wide settings search</h2><form method="get"><input type="hidden" name="page" value="plugin-ui-suite"><input type="hidden" name="tab" value="registry"><p><input class="regular-text" name="settings_search" value="'.esc_attr($query).'" placeholder="PayPal, Gift Aid, Adoptables, Featured Animal, Statistics"> <button class="button button-primary">Search</button></p></form>';
     if ($query !== '') { $results = Plugin_UI_Suite_Registry::search_settings($query); echo '<h3>Results</h3><table class="widefat striped"><thead><tr><th>Setting</th><th>Module</th><th>Page</th><th>Field</th></tr></thead><tbody>'; if (!$results) echo '<tr><td colspan="4">No matching settings found.</td></tr>'; foreach ($results as $id=>$setting) echo '<tr><td>'.esc_html($setting['label'] ?? $id).'</td><td>'.esc_html($setting['module'] ?? '').'</td><td>'.esc_html($setting['page'] ?? '').'</td><td><code>'.esc_html($setting['field_id'] ?? '').'</code></td></tr>'; echo '</tbody></table>'; }
     echo '</div><div class="plugin-suite-card"><h2>Registry import / export</h2><p class="description">Exports use the Settings Registry. Sensitive fields are excluded unless explicitly requested.</p><div class="plugin-suite-actions"><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_export'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_export"><label><input type="checkbox" name="include_sensitive" value="1"> Include sensitive values</label> '; submit_button('Export registry settings','secondary','submit',false); echo '</form><form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_import'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_import"><input type="file" name="import_file" accept="application/json"> '; submit_button('Import registry settings','secondary','submit',false); echo '</form></div></div>';
     echo '<div class="plugin-suite-card"><h2>Feature flags</h2><table class="widefat striped"><thead><tr><th>Module</th><th>Flags</th><th>Reset</th></tr></thead><tbody>'; foreach (Plugin_UI_Suite_Registry::all('modules') as $id=>$module) { $flags = wp_parse_args($module['flags'] ?? [], ['installed'=>true,'enabled'=>true,'hidden'=>false,'experimental'=>false,'beta'=>false,'deprecated'=>false,'future_premium'=>false]); echo '<tr><td>'.esc_html($module['name'] ?? $id).'</td><td><code>'.esc_html(wp_json_encode($flags)).'</code></td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_reset'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_reset"><input type="hidden" name="module" value="'.esc_attr($id).'">'; submit_button('Reset module','small','submit',false); echo '</form></td></tr>'; } echo '</tbody></table></div>';
@@ -2563,16 +2526,21 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function render_help_tab($settings) {
-    if (class_exists('Plugin_UI_Suite_Registry')) {
-      echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('These guides are registered by installed modules, so hidden or disabled modules do not add help content.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a></p></div>';
-      foreach (Plugin_UI_Suite_Registry::help_items() as $guide) {
-        echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title'] ?? '').'</h2><p>'.wp_kses_post($guide['content'] ?? '').'</p>';
-        if (!empty($guide['external_url'])) echo '<p><a class="button" href="'.esc_url($guide['external_url']).'" target="_blank" rel="noopener">'.esc_html__('Open official documentation','plugin-ui-suite').'</a></p>';
-        echo '</div>';
-      }
-      echo '</div>'; return;
-    }
-    echo '<p>'.esc_html__('Help registry is unavailable.', 'plugin-ui-suite').'</p>';
+    $sections = [
+      'Documentation' => 'Start with the setup wizard, then use Integrations for services, each UI module for embeds and Forms only for application or enquiry forms.',
+      'FAQs' => 'Most display questions are answered in the relevant module\'s Embed or Appearance page. Provider questions live in Integrations and Diagnostics.',
+      'Troubleshooting' => 'Run Diagnostics, copy system information, confirm REST API health, then check cache, cron and integration status before opening support.',
+      'Known Issues' => 'Review open GitHub issues before reporting a bug so duplicate reports can be consolidated.',
+      'Report a Bug' => 'Attach copied system information, reproduction steps, screenshots and expected versus actual behaviour.',
+      'Feature Requests' => 'Describe the rescue workflow, who needs it, and how often it is used.',
+      'Release Notes' => 'Check the latest release before updating production sites.',
+      'Support workflow' => '1) Run Diagnostics. 2) Copy System Information. 3) Search Known Issues. 4) Open a focused GitHub issue.'
+    ];
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('Contextual help is available for each major module, with a dedicated support workflow for production rescue websites.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a> <a class="button" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_copy_system_information'), 'plugin_ui_suite_copy_system_information')) . '">'.esc_html__('Copy System Information','plugin-ui-suite').'</a></p></div>';
+    foreach ($sections as $title=>$content) echo '<div class="plugin-suite-card"><h2>'.esc_html($title).'</h2><p>'.esc_html($content).'</p></div>';
+    echo '<div class="plugin-suite-card" style="grid-column:1/-1"><h2>GitHub support</h2><div class="plugin-suite-actions"><a class="button" href="'.esc_url(self::github_url('issues/new')).'" target="_blank" rel="noopener">Report a Bug</a><a class="button" href="'.esc_url(self::github_url('issues')).'" target="_blank" rel="noopener">Known Issues</a><a class="button" href="'.esc_url(self::github_url('issues/new?labels=enhancement')).'" target="_blank" rel="noopener">Feature Requests</a><a class="button" href="'.esc_url(self::github_url('releases/latest')).'" target="_blank" rel="noopener">Latest Releases</a><a class="button" href="'.esc_url(self::github_url()).'" target="_blank" rel="noopener">Repository</a></div></div>';
+    if (class_exists('Plugin_UI_Suite_Registry')) foreach (Plugin_UI_Suite_Registry::help_items() as $guide) { echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title'] ?? '').'</h2><p>'.wp_kses_post($guide['content'] ?? '').'</p>'; if (!empty($guide['external_url'])) echo '<p><a class="button" href="'.esc_url($guide['external_url']).'" target="_blank" rel="noopener">'.esc_html__('Open official documentation','plugin-ui-suite').'</a></p>'; echo '</div>'; }
+    echo '</div>';
   }
 
   private static function render_proxy_tab($settings) {
@@ -2645,6 +2613,55 @@ final class Plugin_UI_Suite_Plugin {
     return $settings;
   }
 
+
+  private static function github_url($path = '') {
+    $base = apply_filters('plugin_ui_suite_github_repository_url', 'https://github.com/WebstaxStudio/Rescue-Plugin-Suite');
+    return rtrim($base, '/') . ($path ? '/' . ltrim($path, '/') : '');
+  }
+
+  private static function system_information($settings = null) {
+    if (!is_array($settings)) $settings = self::get_settings();
+    $active_plugins = function_exists('get_plugins') ? get_plugins() : [];
+    $active = function_exists('get_option') ? (array)get_option('active_plugins', []) : [];
+    $theme = function_exists('wp_get_theme') ? wp_get_theme() : null;
+    $status = self::proxy_status();
+    $payments = class_exists('Plugin_UI_Suite_Payments') && method_exists('Plugin_UI_Suite_Payments','get_settings') ? Plugin_UI_Suite_Payments::get_settings() : [];
+    return [
+      'Plugin Version' => defined('PLUGIN_SUITE_VERSION') ? PLUGIN_SUITE_VERSION : '',
+      'WordPress Version' => get_bloginfo('version'),
+      'PHP Version' => PHP_VERSION,
+      'Database Version' => $GLOBALS['wpdb']->db_version(),
+      'Theme' => $theme ? $theme->get('Name') . ' ' . $theme->get('Version') : '',
+      'Active Plugins' => array_values(array_map(function($file) use ($active_plugins){ return ($active_plugins[$file]['Name'] ?? $file) . (!empty($active_plugins[$file]['Version']) ? ' ' . $active_plugins[$file]['Version'] : ''); }, $active)),
+      'Active Integrations' => $settings['global']['data_source'] ?? 'asm',
+      'Active Payment Providers' => implode(', ', array_filter(array_keys((array)($payments['providers'] ?? [])), function($p) use ($payments){ return !empty($payments['providers'][$p]['enabled']); })),
+      'REST API Status' => rest_url('plugin/v1/adoptables'),
+      'Cron Status' => function_exists('wp_next_scheduled') && wp_next_scheduled(self::WEBHOOK_CRON_HOOK) ? 'Scheduled' : 'Not scheduled',
+      'Debug Mode' => defined('WP_DEBUG') && WP_DEBUG ? 'Enabled' : 'Disabled',
+      'Memory Limit' => ini_get('memory_limit'),
+      'Upload Max Filesize' => ini_get('upload_max_filesize'),
+      'Post Max Size' => ini_get('post_max_size'),
+      'Site Health Summary' => 'Source: ' . ($status['data_source']['label'] ?? 'Unknown') . '; last success: ' . ($status['last_success'] ?: 'none') . '; last error: ' . ($status['last_error'] ?: 'none'),
+      'Relevant Diagnostics' => ['webhook_queue_count'=>count((array)get_option(self::webhook_queue_key(), [])), 'image_cache_bytes'=>self::image_cache_storage_bytes(), 'schema_version'=>get_option(self::SCHEMA_VERSION_KEY, '')],
+    ];
+  }
+
+  private static function format_system_information($settings = null) {
+    $info = self::system_information($settings);
+    $lines = ["### Rescue Plugin Suite System Information"];
+    foreach ($info as $key => $value) {
+      if (is_array($value)) $value = wp_json_encode($value, JSON_PRETTY_PRINT);
+      $lines[] = '- ' . $key . ': ' . (string)$value;
+    }
+    return implode("\n", $lines);
+  }
+
+  public static function handle_copy_system_information() {
+    if (!current_user_can('manage_options')) wp_die('Permission denied.');
+    check_admin_referer('plugin_ui_suite_copy_system_information');
+    nocache_headers(); header('Content-Type: text/plain; charset=' . get_bloginfo('charset')); header('Content-Disposition: attachment; filename=rescue-suite-system-information.txt'); echo esc_html(self::format_system_information()); exit;
+  }
+
   public static function handle_download_diagnostics() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_download_diagnostics');
@@ -2677,7 +2694,7 @@ final class Plugin_UI_Suite_Plugin {
       echo '</tbody></table></div>';
       $last_good = self::last_good_feed_summary();
       if (!empty($last_good)) { echo '<div class="plugin-suite-card"><h2>Last-known-good feeds</h2><table class="plugin-suite-table"><tbody>'; foreach ($last_good as $label=>$meta) echo '<tr><th>' . esc_html($label) . '</th><td>' . esc_html(($meta['time'] ?? 'None') . ' · items: ' . ($meta['count'] ?? 0)) . '</td></tr>'; echo '</tbody></table></div>'; }
-      echo '<div class="plugin-suite-card"><h2>Support diagnostics</h2><p>Download a redacted support bundle with settings, REST route health, cache status and environment checks.</p><p><a class="button button-secondary" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_download_diagnostics'), 'plugin_ui_suite_download_diagnostics')) . '">Download diagnostics bundle</a></p></div>';
+      echo '<div class="plugin-suite-card"><h2>Support diagnostics</h2><p>Download a redacted support bundle with settings, REST route health, cache status and environment checks.</p><p><a class="button button-secondary" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_download_diagnostics'), 'plugin_ui_suite_download_diagnostics')) . '">Download diagnostics bundle</a> <a class="button button-secondary" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_copy_system_information'), 'plugin_ui_suite_copy_system_information')) . '">Copy System Information</a></p></div>';
 
     } elseif($sub==='health') {
       self::render_provider_health_dashboard($settings);

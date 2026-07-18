@@ -39,13 +39,11 @@
 
 14.0.16
 - Added Global settings for Adoptables UI page URL and Adopted UI page URL.
-- Routed featured animal and adoption story widget links to the configured UI pages with modal deep links.
 - Added adopted animal modal deep links, sharing, direct URL opening and SEO/sitemap URL support.
 - Fixed modal application form loading so the ASM script runs beside its form target and blank loads show an error.
 - Fixed duplicate/missing gallery photos caused by image proxy sequence fallback.
 
 14.0.15
-- Fixed Adoptables and Adopted widgets appearing as blank space on pages where inline script entities were decoded before execution.
 
 14.0.14
 - Added a Global cache bypass toggle for immediate ASM/Custom API refreshes.
