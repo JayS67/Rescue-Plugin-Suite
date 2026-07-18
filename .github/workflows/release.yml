@@ -24,6 +24,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          PACKAGE_NAME="rescue-plugin-suite-${GITHUB_REF_NAME}.zip"
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> "$GITHUB_ENV"
           php tools-release-version.php "${GITHUB_REF_NAME}"
           VERSION="${GITHUB_REF_NAME#[vV]}"
           HEADER="$(sed -nE 's/^[[:space:]*#@\/]*Version:[[:space:]]*([^[:space:]*]+).*/\1/p' plugin-ui-suite.php | head -n1)"
@@ -31,41 +33,41 @@ jobs:
           test "$(grep -c 'Plugin Name: Rescue Plugin Suite' plugin-ui-suite.php)" = "1"
           echo "Normalized version: $VERSION"
           echo "Plugin header version: $HEADER"
+          echo "Canonical release package: $PACKAGE_NAME"
       - name: Lint production PHP
         run: find includes -name '*.php' -print0 | xargs -0 -n1 php -l && php -l plugin-ui-suite.php && php -l uninstall.php
       - name: Build explicit production package
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          ZIP="rescue-plugin-suite-${TAG}.zip"
           ROOT="${RUNNER_TEMP}/rescue-plugin-suite"
-          rm -rf "$ROOT" "${RUNNER_TEMP:?}/$ZIP"
+          PACKAGE_PATH="${RUNNER_TEMP}/${PACKAGE_NAME}"
+          rm -rf "$ROOT" "$PACKAGE_PATH"
           mkdir -p "$ROOT"
           cp plugin-ui-suite.php readme.txt changelog.md uninstall.php "$ROOT/"
           cp -a includes assets "$ROOT/"
           if [ -d languages ]; then cp -a languages "$ROOT/"; fi
-          (cd "$RUNNER_TEMP" && zip -qr "$ZIP" rescue-plugin-suite)
-          mv "${RUNNER_TEMP}/$ZIP" "build-$ZIP"
-          echo "ZIP filename: $ZIP"
+          (cd "$RUNNER_TEMP" && zip -qr "$PACKAGE_NAME" rescue-plugin-suite)
+          echo "ZIP filename: $PACKAGE_NAME"
           echo "ZIP root: rescue-plugin-suite/"
-          sha256sum "build-$ZIP"
-          unzip -Z1 "build-$ZIP" | sort
+          sha256sum "$PACKAGE_PATH"
+          unzip -Z1 "$PACKAGE_PATH" | sort
       - name: Validate production package
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"; VERSION="${TAG#[vV]}"; ZIP="build-rescue-plugin-suite-${TAG}.zip"
-          test -f "$ZIP"
-          mapfile -t ENTRIES < <(unzip -Z1 "$ZIP")
+          VERSION="${GITHUB_REF_NAME#[vV]}"
+          PACKAGE_PATH="${RUNNER_TEMP}/${PACKAGE_NAME}"
+          test -f "$PACKAGE_PATH"
+          mapfile -t ENTRIES < <(unzip -Z1 "$PACKAGE_PATH")
           test "$(printf '%s\n' "${ENTRIES[@]}" | awk -F/ 'NF {print $1}' | sort -u | wc -l)" = 1
           test "$(printf '%s\n' "${ENTRIES[@]}" | awk -F/ 'NF {print $1}' | sort -u)" = rescue-plugin-suite
           printf '%s\n' "${ENTRIES[@]}" | grep -qx 'rescue-plugin-suite/plugin-ui-suite.php'
           for required in rescue-plugin-suite/includes/ rescue-plugin-suite/assets/ rescue-plugin-suite/readme.txt rescue-plugin-suite/changelog.md rescue-plugin-suite/uninstall.php; do printf '%s\n' "${ENTRIES[@]}" | grep -q "^$required"; done
           ! printf '%s\n' "${ENTRIES[@]}" | grep -Eq '(^|/)\.git(hub)?/|(^|/)tests/|(^|/)build/|(^|/)docs/|tools-release-version\.php$|(^|/)rescue-plugin-suite/rescue-plugin-suite/'
-          test "$(unzip -p "$ZIP" rescue-plugin-suite/plugin-ui-suite.php | grep -c 'Plugin Name: Rescue Plugin Suite')" = 1
-          test "$(unzip -p "$ZIP" rescue-plugin-suite/plugin-ui-suite.php | sed -nE 's/^[[:space:]*#@\/]*Version:[[:space:]]*([^[:space:]*]+).*/\1/p' | head -n1)" = "$VERSION"
-          rm -rf "${RUNNER_TEMP}/package-check"; unzip -q "$ZIP" -d "${RUNNER_TEMP}/package-check"
+          test "$(unzip -p "$PACKAGE_PATH" rescue-plugin-suite/plugin-ui-suite.php | grep -c 'Plugin Name: Rescue Plugin Suite')" = 1
+          test "$(unzip -p "$PACKAGE_PATH" rescue-plugin-suite/plugin-ui-suite.php | sed -nE 's/^[[:space:]*#@\/]*Version:[[:space:]]*([^[:space:]*]+).*/\1/p' | head -n1)" = "$VERSION"
+          rm -rf "${RUNNER_TEMP}/package-check"; unzip -q "$PACKAGE_PATH" -d "${RUNNER_TEMP}/package-check"
           find "${RUNNER_TEMP}/package-check/rescue-plugin-suite" -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Publish immutable release asset
         env:
@@ -73,10 +75,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ASSET="build-rescue-plugin-suite-${GITHUB_REF_NAME}.zip"
-          NAME="$(basename "$ASSET")"
-          if gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$NAME"; then
-            echo "Release package $NAME already exists for ${GITHUB_REF_NAME}; publish a new version instead." >&2
+          PACKAGE_PATH="${RUNNER_TEMP}/${PACKAGE_NAME}"
+          if gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$PACKAGE_NAME"; then
+            echo "Release package $PACKAGE_NAME already exists for ${GITHUB_REF_NAME}; publish a new version instead." >&2
             exit 1
           fi
-          gh release create "${GITHUB_REF_NAME}" "$ASSET" --verify-tag --generate-notes --title "${GITHUB_REF_NAME}" 2>/dev/null || gh release upload "${GITHUB_REF_NAME}" "$ASSET"
+          gh release create "${GITHUB_REF_NAME}" "${PACKAGE_PATH}#${PACKAGE_NAME}" --verify-tag --generate-notes --title "${GITHUB_REF_NAME}" 2>/dev/null || gh release upload "${GITHUB_REF_NAME}" "${PACKAGE_PATH}#${PACKAGE_NAME}"
+      - name: Verify public release asset list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t ASSETS < <(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name')
+          printf 'Public release assets for %s:\n' "${GITHUB_REF_NAME}"
+          printf ' - %s\n' "${ASSETS[@]}"
+          test "$(printf '%s\n' "${ASSETS[@]}" | grep -Fxc "$PACKAGE_NAME")" = 1
+          ! printf '%s\n' "${ASSETS[@]}" | grep -Eq '^build-rescue-plugin-suite-.*\.zip$'
+          test "$(printf '%s\n' "${ASSETS[@]}" | grep -Ec '^rescue-plugin-suite-.*\.zip$')" = 1
+          echo "Verified public WordPress package: $PACKAGE_NAME"
