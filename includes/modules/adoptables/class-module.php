@@ -3,7 +3,7 @@
  * Plugin Name: Rescue Plugin Suite Adoptables
  * Description: Provides [adoptables] shortcode for the adoptable/adopted widget with scoped styling and settings.
  * Version: 1.1.12
- * Author: Jordan Sutton
+ * Author: Jordan Sutton | Webstax
  */
 
 if (!defined('ABSPATH')) exit;

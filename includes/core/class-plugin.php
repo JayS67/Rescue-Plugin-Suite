@@ -11,7 +11,7 @@ final class Plugin_UI_Suite_Plugin {
   const WEBHOOK_AUDIT_KEY = 'plugin_suite_webhook_audit_v1';
   const WEBHOOK_CRON_HOOK = 'plugin_suite_retry_webhooks_cron';
   const SCHEMA_VERSION_KEY = 'plugin_ui_suite_schema_version';
-  const SCHEMA_VERSION = '1.2.0';
+  const SCHEMA_VERSION = PLUGIN_SUITE_SCHEMA_VERSION;
 
   public static function init() {
     self::include_modules();
@@ -30,6 +30,9 @@ final class Plugin_UI_Suite_Plugin {
     add_action('admin_post_plugin_ui_suite_save_pack', [__CLASS__, 'handle_save_pack']);
     add_action('admin_post_plugin_ui_suite_load_pack', [__CLASS__, 'handle_load_pack']);
     add_action('admin_post_plugin_ui_suite_reset_defaults', [__CLASS__, 'handle_reset_defaults']);
+    add_action('admin_post_plugin_ui_suite_registry_export', [__CLASS__, 'handle_registry_export']);
+    add_action('admin_post_plugin_ui_suite_registry_import', [__CLASS__, 'handle_registry_import']);
+    add_action('admin_post_plugin_ui_suite_registry_reset', [__CLASS__, 'handle_registry_reset']);
     add_action('admin_post_plugin_ui_suite_save_current_defaults', [__CLASS__, 'handle_save_current_defaults']);
     add_action('admin_post_plugin_ui_suite_restore_snapshot', [__CLASS__, 'handle_restore_snapshot']);
     add_action('admin_post_plugin_ui_suite_delete_snapshot', [__CLASS__, 'handle_delete_snapshot']);
@@ -55,6 +58,7 @@ final class Plugin_UI_Suite_Plugin {
     add_action('wp_ajax_nopriv_plugin_suite_track', [__CLASS__, 'handle_track_event']);
     self::ensure_webhook_retry_schedule();
     self::maybe_run_migrations();
+    self::register_core_framework_metadata();
   }
 
   public static function activate() {
@@ -66,6 +70,58 @@ final class Plugin_UI_Suite_Plugin {
     self::ensure_webhook_retry_schedule();
     if (class_exists('Plugin_UI_Suite_SEO')) Plugin_UI_Suite_SEO::rewrite_rules();
     flush_rewrite_rules(false);
+  }
+
+
+  private static function register_core_framework_metadata() {
+    if (!class_exists('Plugin_UI_Suite_Registry')) return;
+    foreach ([
+      'global'=>['name'=>'Global','description'=>'Shared site-wide display, cache and housekeeping settings.','icon'=>'admin-generic'],
+      'proxy'=>['name'=>'Proxy / Integrations','description'=>'Rescue management systems, data source and API connection settings.','icon'=>'admin-site-alt3'],
+      'adoptables'=>['name'=>'Adoptables','description'=>'Public adoptable animal widget and layout settings.','icon'=>'pets'],
+      'adopted'=>['name'=>'Adopted','description'=>'Happy endings widget and layout settings.','icon'=>'heart'],
+      'stats'=>['name'=>'Statistics','description'=>'Impact statistics widget settings.','icon'=>'chart-bar'],
+      'forms'=>['name'=>'Forms','description'=>'Application and enquiry form routing.','icon'=>'feedback'],
+      'payments'=>['name'=>'Payments','description'=>'Donation providers, widget, campaigns, Gift Aid and reporting.','icon'=>'money-alt'],
+    ] as $id=>$module) Plugin_UI_Suite_Registry::register_module($id, $module);
+    foreach (self::default_settings() as $module=>$fields) {
+      if (!is_array($fields)) continue;
+      foreach ($fields as $field=>$default) {
+        if (is_array($default)) continue;
+        Plugin_UI_Suite_Registry::register_setting($module.'_'.$field, [
+          'module'=>$module,'page'=>$module,'section'=>'general','field_id'=>$field,
+          'label'=>ucwords(str_replace('_',' ',(string)$field)),'default'=>$default,
+          'search_keywords'=>[$module, str_replace('_',' ',(string)$field)],
+          'sensitive'=>preg_match('/(password|secret|token|api_key|key)$/', (string)$field) === 1,
+        ]);
+      }
+    }
+    foreach (['Donation Widget','Adoptables','Adopted','Statistics','Forms','Match Quiz'] as $panel) Plugin_UI_Suite_Registry::register('analytics', sanitize_title($panel), ['title'=>$panel,'module'=>sanitize_title($panel)]);
+    foreach ([
+      'Stripe'=>['url'=>'https://docs.stripe.com/keys','content'=>'Go to Stripe Dashboard → Developers → API keys. Copy the publishable key and secret key. Paste them into Payments → Providers → Stripe, save, then use Diagnostics to confirm the connection. If a payment fails, check test mode and webhook signing secret first.'],
+      'PayPal'=>['url'=>'https://developer.paypal.com/dashboard/applications/live','content'=>'Go to PayPal Developer Dashboard → Apps & Credentials. Create or open an app. Copy the Client ID and Secret. Paste them into Payments → Providers → PayPal, save, then make a small sandbox test donation.'],
+      'Square'=>['url'=>'https://developer.squareup.com/apps','content'=>'Go to Square Developer → Applications. Copy the Application ID, Access Token and Location ID. Paste them into Payments → Providers → Square. Use sandbox mode until your checkout has been tested.'],
+      'GoCardless'=>['url'=>'https://manage.gocardless.com/developers/access-tokens','content'=>'Go to GoCardless Dashboard → Developers → Access tokens. Create an access token, paste it into Payments → Providers → GoCardless, then test a Direct Debit flow before enabling live donations.'],
+      'SumUp'=>['url'=>'https://developer.sumup.com/','content'=>'Go to SumUp developer settings and copy the merchant/API details supplied for your account. Paste them into Payments → Providers → SumUp and test with a small payment link before launch.'],
+      'ASM'=>['url'=>'https://sheltermanager.com/site/en_asm3_help.html','content'=>'Use Proxy / Integrations for Animal Shelter Manager. Enter the ASM service URL, account, username and password together. Save, then click Test connection. If animals do not load, confirm the account name and user permissions in ASM.'],
+      'Other supported rescue systems'=>['url'=>'','content'=>'Choose the matching rescue platform under Proxy / Integrations. Only fill in the fields shown for that platform. If your platform uses hosted application forms, paste the hosted form link rather than expecting the suite to collect answers directly.'],
+    ] as $guide=>$data) Plugin_UI_Suite_Registry::register('help', sanitize_title($guide), ['title'=>$guide,'keywords'=>[$guide,'setup','test','troubleshoot'],'external_url'=>$data['url'],'content'=>$data['content']]);
+    foreach ([
+      'organisation'=>'Tell the suite who you are and which rescue details appear in public widgets.',
+      'website'=>'Add the pages where visitors will adopt, donate, read stories and contact you.',
+      'rescue-management'=>'Choose your animal management platform and keep credentials beside that platform.',
+      'integrations'=>'Connect ASM, custom APIs or other supported systems in one place.',
+      'payment-provider'=>'Choose Stripe, PayPal, Square, GoCardless or SumUp and test before going live.',
+      'campaigns'=>'Create your first appeal so donations can be tracked clearly.',
+      'donation-widget'=>'Set the public donation wording, amounts and thank-you path.',
+      'forms'=>'Add application or enquiry forms and explain platform limitations.',
+      'widgets'=>'Choose which public widgets to show on your website.',
+      'analytics'=>'Decide how visitor and donation analytics should be recorded.',
+      'updates'=>'Check the installed version and choose whether automatic updates are enabled.',
+      'finished'=>'Review the checklist and save your setup.',
+    ] as $i=>$description) Plugin_UI_Suite_Registry::register('setup_steps', $i, ['module'=>'global','title'=>ucwords(str_replace('-',' ', $i)),'description'=>$description,'order'=>count(Plugin_UI_Suite_Registry::all('setup_steps'))+1]);
+    foreach (['global'=>'Global','adoptables'=>'Adoptables','layout'=>'Layout builder','adopted'=>'Adopted','stats'=>'Statistics','widgets'=>'Widgets','payments'=>'Payments','quiz'=>'Match quiz','forms'=>'Forms','proxy'=>'Proxy','diagnostics'=>'Diagnostics','registry'=>'Registry','help'=>'Help / Guide'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>$i === 'registry' ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'order'=>10]);
   }
 
   private static function include_modules() {
@@ -143,6 +199,8 @@ final class Plugin_UI_Suite_Plugin {
         'petpoint_species_id' => '2',
         'petpoint_statuses' => 'available,foster',
         'petpoint_adopted_report_id' => '',
+        'supported_species' => 'cats,dogs,rabbits,birds,horses,small_animals,reptiles,other',
+        'enabled_species' => 'cats',
       ],
       'adoptables' => [
         'brand_color' => '#401268', 'background_color' => '#fcf5fd', 'paw_opacity' => '0.15', 'paw_count' => 50,
@@ -214,6 +272,8 @@ final class Plugin_UI_Suite_Plugin {
         'adoptables_cta_text' => 'Looking for your next best friend?',
         'adoptables_cta_button_text' => 'View animals for adoption',
         'adoptables_cta_url' => '',
+        'builder_card_order' => "image\ndate_badge\nname_meta\nstory_excerpt\nshare_button",
+        'builder_modal_order' => "gallery\nname_meta\nadoption_date\nstory\nglobal_text\nshare_button",
       ],
       'stats' => [
         'brand_color' => '#401268', 'background_color' => '#fcf5fd', 'min_year' => 2026, 'paw_opacity' => '0.15', 'paw_count' => 50,
@@ -232,6 +292,7 @@ final class Plugin_UI_Suite_Plugin {
         'label_chipped' => 'Microchipped', 'caption_chipped' => 'Always traceable', 'icon_chipped' => 'map_pin',
         'label_in_care' => 'In Our Care', 'caption_in_care' => 'Currently safe with us', 'icon_in_care' => 'shield',
         'card_order' => "brought\nadopted\nvaccinated\nneutered\nchipped\nin_care",
+        'builder_card_order' => "brought\nadopted\nvaccinated\nneutered\nchipped\nin_care",
       ],
       'shortcodes' => ['adoptables' => 'adoptables', 'adopted' => 'adopted', 'statistics' => 'stats'],
       'widgets' => [
@@ -246,7 +307,9 @@ final class Plugin_UI_Suite_Plugin {
         'stories_enabled' => 1,
         'stories_title_text' => 'Adoption stories',
         'stories_count' => 6,
-        'stories_year_mode' => 'current'
+        'stories_year_mode' => 'current',
+        'featured_layout_order' => "image\ntitle\nmeta\nbutton",
+        'stories_layout_order' => "image\ntitle\nexcerpt\nbutton"
       ],
       'quiz' => [
         'quiz_shortcode' => 'adoption_match_quiz',
@@ -268,7 +331,9 @@ final class Plugin_UI_Suite_Plugin {
         'q3_hide' => 0,
         'results_title_text' => 'Suggested matches',
         'results_empty_text' => 'No exact matches were found. Please browse all adoptables instead.',
-        'age_categories' => "Under 1 year|0|1\n1 to 3 years|1|3\n3 to 5 years|3|5\n5+ years|5|"
+        'age_categories' => "Under 1 year|0|1\n1 to 3 years|1|3\n3 to 5 years|3|5\n5+ years|5|",
+        'question_order' => "age\nsex\nindoor\nbonded\ngood_cats\ngood_dogs\ngood_children",
+        'answer_mappings' => "age|ANIMALAGE|10\nsex|SEXNAME|8\nindoor|ANIMALCOMMENTS|6\nbonded|ANIMALCOMMENTS|4\ngood_cats|GOODWITHCATS|5\ngood_dogs|GOODWITHDOGS|5\ngood_children|GOODWITHCHILDREN|5"
       ],
       'forms' => [
         'account' => 'plugin',
@@ -278,6 +343,8 @@ final class Plugin_UI_Suite_Plugin {
           ['shortcode' => 'waiting_list_form', 'form_id' => '106'],
           ['shortcode' => 'lost_cat_form', 'form_id' => '51'],
         ],
+        'layout_order' => "intro\nform_embed\nprivacy_note\nsubmit_guidance",
+        'platform_support_notes' => "asm|Embedded ASM forms are supported. The suite tracks application intent only.\ncustom_api|Custom API form submission requires a compatible endpoint.\nshelterluv|Use hosted Shelterluv application links where available.\npetpoint|Use hosted PetPoint application links where available.",
       ],
       'proxy' => [
         'base_url' => 'https://service.sheltermanager.com/asmservice',
@@ -708,9 +775,15 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function admin_menu() {
-    add_options_page('Rescue Plugin Suite','Rescue Plugin Suite','manage_options','plugin-ui-suite',[__CLASS__,'render_settings_page']);
+    if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::add_admin_menus();
+    else add_options_page('Rescue Plugin Suite','Rescue Plugin Suite','manage_options','plugin-ui-suite',[__CLASS__,'render_settings_page']);
     add_submenu_page(null,'Rescue Plugin Suite Setup','Rescue Plugin Suite Setup','manage_options','plugin-ui-suite-setup',[__CLASS__,'render_setup_wizard']);
     add_submenu_page('options-general.php','Rescue Plugin Suite Updates','Suite Updates','update_plugins','plugin-ui-suite-updates',['Plugin_UI_Suite_Updater','render_updates_page']);
+    if (class_exists('Plugin_Payments_Module')) {
+      foreach (['dashboard'=>'Dashboard','general'=>'General','providers'=>'Providers','widget'=>'Donation Widget','campaigns'=>'Campaigns','gift-aid'=>'Gift Aid','fees'=>'Cover Fees','appearance'=>'Appearance','transactions'=>'Transactions','reports'=>'Reports','diagnostics'=>'Diagnostics','help'=>'Help'] as $section=>$label) {
+        add_submenu_page('options-general.php','Payments: '.$label,'Payments: '.$label,'manage_options','plugin-ui-suite-payments-'.$section,function() use ($section) { $_GET['payments_section']=$section; Plugin_Payments_Module::render_admin_page(false); });
+      }
+    }
   }
 
   public static function remove_legacy_admin_pages() {
@@ -790,7 +863,7 @@ final class Plugin_UI_Suite_Plugin {
     return $section === 'adoptables' ? ['cats_only','show_top_navigation','show_reservation_label','show_pending_reservation_label','show_other_reservation_label','enable_deep_links','enable_apply_button','card_border_enabled','enable_filters','enable_filter_age','enable_filter_sex','enable_filter_breed','enable_exclude_pending_filter','detect_bonded_from_description','detect_indoor_only_from_description','enable_modal_slideshow_controls','enable_favourites','enable_compare_tool','enable_modals','enable_adoptables_modals'] : (($section === 'adopted') ? ['show_top_navigation','card_border_enabled','enable_modals','enable_deep_links','adoptables_cta_enabled'] : (($section === 'stats') ? ['card_border_enabled'] : []));
   }
   private static function textarea_keys($section) {
-    $map = ['adoptables' => ['footer_text','modal_global_text','fallback_description'], 'adopted' => ['footer_text','modal_global_text'], 'stats' => ['footer_text','card_order']];
+    $map = ['adoptables' => ['footer_text','modal_global_text','fallback_description'], 'adopted' => ['footer_text','modal_global_text','builder_card_order','builder_modal_order'], 'stats' => ['footer_text','card_order','builder_card_order']];
     return $map[$section] ?? [];
   }
   private static function select_keys($section) {
@@ -905,8 +978,11 @@ final class Plugin_UI_Suite_Plugin {
       $clean['global']['petpoint_species_id'] = preg_replace('/[^0-9,]/', '', (string)($g['petpoint_species_id'] ?? ($clean['global']['petpoint_species_id'] ?? '2')));
       $clean['global']['petpoint_statuses'] = self::sanitise_textarea_csv($g['petpoint_statuses'] ?? ($clean['global']['petpoint_statuses'] ?? 'available,foster'));
       $clean['global']['petpoint_adopted_report_id'] = self::sanitise_text($g['petpoint_adopted_report_id'] ?? '', $clean['global']['petpoint_adopted_report_id'] ?? '');
+      $clean['global']['enabled_species'] = self::sanitise_textarea_csv($g['enabled_species'] ?? ($clean['global']['enabled_species'] ?? 'cats'));
+      $clean['global']['supported_species'] = self::sanitise_textarea_csv($g['supported_species'] ?? ($clean['global']['supported_species'] ?? 'cats,dogs,rabbits,birds,horses,small_animals,reptiles,other'));
     } elseif (in_array($active_tab, ['adoptables','adopted','stats'], true)) {
       $clean[$active_tab] = self::sanitize_section($active_tab, $input[$active_tab] ?? [], $clean[$active_tab] ?? []);
+      if ($active_tab === 'stats' && !empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
     } elseif ($active_tab === 'widgets') {
       $wi = $input['widgets'] ?? [];
       $clean['widgets']['featured_shortcode'] = self::sanitize_shortcode_tag($wi['featured_shortcode'] ?? ($clean['widgets']['featured_shortcode'] ?? $defaults['widgets']['featured_shortcode'])) ?: ($clean['widgets']['featured_shortcode'] ?? $defaults['widgets']['featured_shortcode']);
@@ -919,12 +995,16 @@ final class Plugin_UI_Suite_Plugin {
       $clean['widgets']['stories_title_text'] = self::sanitise_text($wi['stories_title_text'] ?? '', $defaults['widgets']['stories_title_text']);
       $clean['widgets']['stories_count'] = self::sanitise_int($wi['stories_count'] ?? '', $clean['widgets']['stories_count'] ?? $defaults['widgets']['stories_count'], 1, 12);
       $clean['widgets']['stories_year_mode'] = in_array(($wi['stories_year_mode'] ?? 'current'), ['current','all'], true) ? $wi['stories_year_mode'] : 'current';
+      $clean['widgets']['featured_layout_order'] = sanitize_textarea_field($wi['featured_layout_order'] ?? ($clean['widgets']['featured_layout_order'] ?? $defaults['widgets']['featured_layout_order']));
+      $clean['widgets']['stories_layout_order'] = sanitize_textarea_field($wi['stories_layout_order'] ?? ($clean['widgets']['stories_layout_order'] ?? $defaults['widgets']['stories_layout_order']));
     } elseif ($active_tab === 'quiz') {
       $q = $input['quiz'] ?? [];
       $clean['quiz']['quiz_shortcode'] = self::sanitize_shortcode_tag($q['quiz_shortcode'] ?? ($clean['quiz']['quiz_shortcode'] ?? $defaults['quiz']['quiz_shortcode'])) ?: ($clean['quiz']['quiz_shortcode'] ?? $defaults['quiz']['quiz_shortcode']);
       $clean['quiz']['quiz_enabled'] = !empty($q['quiz_enabled']) ? 1 : 0;
       foreach (['quiz_title_text','quiz_intro_text','q1_text','q1_kitten_label','q1_adult_label','q1_senior_label','q1_either_label','q2_text','q2_female_label','q2_male_label','q2_either_label','q3_text','q3_yes_label','q3_no_label','results_title_text','results_empty_text','age_categories'] as $k) $clean['quiz'][$k] = self::sanitise_text($q[$k] ?? '', $defaults['quiz'][$k]);
       $clean['quiz']['q3_hide'] = !empty($q['q3_hide']) ? 1 : 0;
+      $clean['quiz']['question_order'] = sanitize_textarea_field($q['question_order'] ?? ($clean['quiz']['question_order'] ?? $defaults['quiz']['question_order']));
+      $clean['quiz']['answer_mappings'] = sanitize_textarea_field($q['answer_mappings'] ?? ($clean['quiz']['answer_mappings'] ?? $defaults['quiz']['answer_mappings']));
     } elseif ($active_tab === 'forms') {
       $sc = $input['shortcodes'] ?? [];
       foreach (['adoptables','adopted','statistics'] as $k) $clean['shortcodes'][$k] = self::sanitize_shortcode_tag($sc[$k] ?? ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k])) ?: ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k]);
@@ -936,6 +1016,25 @@ final class Plugin_UI_Suite_Plugin {
         $row = isset($items[$i]) && is_array($items[$i]) ? $items[$i] : [];
         $clean['forms']['items'][] = ['shortcode' => self::sanitize_shortcode_tag($row['shortcode'] ?? ''), 'form_id' => preg_replace('/[^0-9]/', '', (string)($row['form_id'] ?? ''))];
       }
+      $clean['forms']['layout_order'] = sanitize_textarea_field($fo['layout_order'] ?? ($clean['forms']['layout_order'] ?? $defaults['forms']['layout_order']));
+      $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes'] ?? ($clean['forms']['platform_support_notes'] ?? $defaults['forms']['platform_support_notes']));
+    } elseif ($active_tab === 'layout') {
+      foreach (['adoptables','adopted','stats'] as $section_key) {
+        if (!empty($input[$section_key]) && is_array($input[$section_key])) $clean[$section_key] = self::sanitize_section($section_key, $input[$section_key], $clean[$section_key] ?? []);
+      }
+      if (!empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
+      $wi = $input['widgets'] ?? [];
+      if (isset($wi['featured_layout_order'])) $clean['widgets']['featured_layout_order'] = sanitize_textarea_field($wi['featured_layout_order']);
+      if (isset($wi['stories_layout_order'])) $clean['widgets']['stories_layout_order'] = sanitize_textarea_field($wi['stories_layout_order']);
+      $fo = $input['forms'] ?? [];
+      if (isset($fo['layout_order'])) $clean['forms']['layout_order'] = sanitize_textarea_field($fo['layout_order']);
+      if (isset($fo['platform_support_notes'])) $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes']);
+      $q = $input['quiz'] ?? [];
+      if (isset($q['question_order'])) $clean['quiz']['question_order'] = sanitize_textarea_field($q['question_order']);
+      if (isset($q['answer_mappings'])) $clean['quiz']['answer_mappings'] = sanitize_textarea_field($q['answer_mappings']);
+      $g = $input['global'] ?? [];
+      if (isset($g['enabled_species'])) $clean['global']['enabled_species'] = self::sanitise_textarea_csv($g['enabled_species']);
+      if (isset($g['supported_species'])) $clean['global']['supported_species'] = self::sanitise_textarea_csv($g['supported_species']);
     } elseif ($active_tab === 'proxy') {
       $pr = $input['proxy'] ?? [];
       $clean['proxy']['base_url'] = esc_url_raw($pr['base_url'] ?? ($clean['proxy']['base_url'] ?? $defaults['proxy']['base_url']));
@@ -948,6 +1047,9 @@ final class Plugin_UI_Suite_Plugin {
       $clean['proxy']['cache_reports_seconds'] = self::sanitise_int($pr['cache_reports_seconds'] ?? '', $clean['proxy']['cache_reports_seconds'] ?? $defaults['proxy']['cache_reports_seconds'], 0, 600);
       $clean['proxy']['cache_incare_seconds'] = self::sanitise_int($pr['cache_incare_seconds'] ?? '', $clean['proxy']['cache_incare_seconds'] ?? $defaults['proxy']['cache_incare_seconds'], 0, 600);
       $clean['proxy']['cache_adoptions_seconds'] = self::sanitise_int($pr['cache_adoptions_seconds'] ?? '', $clean['proxy']['cache_adoptions_seconds'] ?? $defaults['proxy']['cache_adoptions_seconds'], 0, 3600);
+    }
+    if (class_exists('Plugin_UI_Suite_Registry')) {
+      $clean = Plugin_UI_Suite_Registry::sanitize_registered_values($active_tab, $input, $clean);
     }
 
     self::create_snapshot('save');
@@ -986,6 +1088,34 @@ final class Plugin_UI_Suite_Plugin {
     if (class_exists('Plugin_Adoptables_UI_Shortcode')) update_option(Plugin_Adoptables_UI_Shortcode::OPT_KEY, self::resolve_section_style('adoptables', array_merge(Plugin_Adoptables_UI_Shortcode::default_options(), $settings['adoptables']), $settings));
     if (class_exists('Plugin_Adopted_UI_Shortcode')) update_option(Plugin_Adopted_UI_Shortcode::OPT_KEY, self::resolve_section_style('adopted', array_merge(Plugin_Adopted_UI_Shortcode::default_options(), $settings['adopted']), $settings));
     if (function_exists('plugin_stats_ui_default_options')) update_option('plugin_stats_ui_options', self::resolve_section_style('stats', array_merge(plugin_stats_ui_default_options(), $settings['stats']), $settings));
+  }
+
+
+  public static function handle_registry_export() {
+    if (!current_user_can('manage_options')) wp_die('Permission denied.');
+    check_admin_referer('plugin_ui_suite_registry_export');
+    $include_sensitive = !empty($_POST['include_sensitive']);
+    $settings = class_exists('Plugin_UI_Suite_Registry') ? Plugin_UI_Suite_Registry::export_settings(self::get_settings(), $include_sensitive) : self::get_settings();
+    nocache_headers(); header('Content-Type: application/json; charset=utf-8'); header('Content-Disposition: attachment; filename=rescue-plugin-suite-registry-settings.json');
+    echo wp_json_encode(['version'=>PLUGIN_SUITE_VERSION,'schema'=>self::SCHEMA_VERSION,'sensitive_included'=>$include_sensitive,'settings'=>$settings], JSON_PRETTY_PRINT); exit;
+  }
+
+  public static function handle_registry_import() {
+    if (!current_user_can('manage_options')) wp_die('Permission denied.');
+    check_admin_referer('plugin_ui_suite_registry_import');
+    if (empty($_FILES['import_file']['tmp_name'])) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'No import file selected'], admin_url('options-general.php')));
+    $json = file_get_contents($_FILES['import_file']['tmp_name']); $payload = json_decode($json, true);
+    if (!is_array($payload) || !is_array($payload['settings'] ?? null)) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'Registry import was not valid JSON'], admin_url('options-general.php')));
+    $current = self::get_settings(); $merged = self::merge_with_defaults($current, $payload['settings']); update_option(self::OPT_KEY, $merged, false); self::sync_legacy_options($merged);
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'imported','plugin_msg'=>'Registry settings imported'], admin_url('options-general.php'))); exit;
+  }
+
+  public static function handle_registry_reset() {
+    if (!current_user_can('manage_options')) wp_die('Permission denied.');
+    check_admin_referer('plugin_ui_suite_registry_reset');
+    $module = sanitize_key($_POST['module'] ?? ''); $settings = self::get_settings(); $defaults = self::default_settings();
+    if ($module && isset($defaults[$module])) { $settings[$module] = $defaults[$module]; update_option(self::OPT_KEY, $settings, false); self::sync_legacy_options($settings); }
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'reset','plugin_msg'=>'Registry module settings reset'], admin_url('options-general.php'))); exit;
   }
 
   public static function handle_export() {
@@ -1053,8 +1183,8 @@ final class Plugin_UI_Suite_Plugin {
     if (!is_array($values)) $values=[];
     foreach ($values as $v){ $v=sanitize_key((string)$v); if($v!=='' && isset($labels[$v]) && !in_array($v,$current,true)) $current[]=$v; }
     foreach (array_keys($labels) as $v){ if(!in_array($v,$current,true)) $current[]=$v; }
-    echo '<ul class="plugin-sortable">';
-    foreach ($current as $v){ echo '<li draggable="true" data-value="'.esc_attr($v).'"><span>'.esc_html($labels[$v]).'</span><span class="dashicons dashicons-move"></span></li>'; }
+    echo '<ul class="plugin-sortable" role="listbox" aria-label="Drag or use arrow keys to reorder layout items">';
+    foreach ($current as $v){ echo '<li draggable="true" tabindex="0" role="option" aria-grabbed="false" data-value="'.esc_attr($v).'"><span>'.esc_html($labels[$v]).'</span><span class="dashicons dashicons-move" aria-hidden="true"></span></li>'; }
     echo '</ul>';
     printf('<textarea class="plugin-sortable-input" name="%s" rows="6" style="display:none;">%s</textarea>', esc_attr($name), esc_textarea(implode("
 ",$current)));
@@ -1098,7 +1228,7 @@ final class Plugin_UI_Suite_Plugin {
   private static function row($label,$html){ echo '<tr><th>'.$label.'</th><td>'.$html.'</td></tr>'; }
   private static function start_wrap(){ ?>
     <style>
-      .plugin-suite-tabs{display:flex;gap:8px;margin:18px 0 22px;flex-wrap:wrap}.plugin-suite-tab{padding:10px 14px;border:1px solid #ccd0d4;border-bottom:none;background:#f6f7f7;text-decoration:none;color:#1d2327;border-radius:6px 6px 0 0}.plugin-suite-tab.active{background:#fff;font-weight:600}.plugin-suite-panel{background:#fff;border:1px solid #ccd0d4;padding:22px;max-width:1450px}.plugin-suite-panel .form-table tr{display:table-row}.plugin-suite-panel .form-table th,.plugin-suite-panel .form-table td{padding:10px 8px;vertical-align:top}.plugin-suite-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}.plugin-suite-card{border:1px solid #e2e4e7;border-radius:10px;padding:16px;background:#fcfcfc;min-width:0}.plugin-suite-card h2,.plugin-suite-card h3{margin-top:0}.plugin-suite-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.plugin-suite-table{width:100%;border-collapse:collapse}.plugin-suite-table th,.plugin-suite-table td{padding:10px 8px;border-top:1px solid #e2e4e7;vertical-align:top;text-align:left}.plugin-suite-card .form-table{width:100%;table-layout:fixed}.plugin-suite-card .form-table th{width:210px;max-width:210px;white-space:normal;word-break:break-word}.plugin-suite-card .form-table td{overflow-wrap:anywhere}.plugin-suite-card input[type=text],.plugin-suite-card textarea,.plugin-suite-card select,.plugin-suite-card .regular-text,.plugin-suite-card .large-text{width:100%;max-width:100%}.plugin-suite-card input.small-text{width:72px;max-width:100%}.plugin-suite-card input[type=color]{width:48px;min-width:48px;padding:0}.plugin-suite-save{margin-top:20px}.plugin-suite-preview-header{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:12px}.plugin-suite-preview-switch{display:flex;gap:8px;flex-wrap:wrap}.plugin-suite-preview-frame{width:100%;height:880px;border:1px solid #d0d7de;border-radius:12px;background:#fff}.plugin-suite-note{padding:12px 14px;background:#f6f7f7;border:1px solid #e2e4e7;border-radius:8px}.plugin-subgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.plugin-triplet{display:grid;grid-template-columns:150px 1fr 1fr 1fr 1fr;gap:8px;align-items:center}.plugin-triplet>div{min-width:0}.plugin-suite-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.plugin-sortable{list-style:none;margin:0;padding:0;border:1px solid #d0d7de;border-radius:10px;background:#fff}.plugin-sortable li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-top:1px solid #eef2f6;cursor:move}.plugin-sortable li:first-child{border-top:none}.plugin-sortable li.dragging{opacity:.45}.plugin-sortable .dashicons{color:#6b7280}.plugin-suite-subnav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.plugin-suite-subnav a{display:inline-block;padding:8px 12px;border:1px solid #d0d7de;border-radius:8px;background:#f6f7f7;text-decoration:none;color:#1d2327}.plugin-suite-subnav a.active{background:#401268;color:#fff;border-color:#401268}.plugin-suite-subsection{display:none}.plugin-suite-subsection.active{display:block}
+      .plugin-suite-tabs{display:flex;gap:8px;margin:18px 0 22px;flex-wrap:wrap}.plugin-suite-tab{padding:10px 14px;border:1px solid #ccd0d4;border-bottom:none;background:#f6f7f7;text-decoration:none;color:#1d2327;border-radius:6px 6px 0 0}.plugin-suite-tab.active{background:#fff;font-weight:600}.plugin-suite-panel{background:#fff;border:1px solid #ccd0d4;padding:22px;max-width:1450px}.plugin-suite-panel .form-table tr{display:table-row}.plugin-suite-panel .form-table th,.plugin-suite-panel .form-table td{padding:10px 8px;vertical-align:top}.plugin-suite-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}.plugin-suite-card{border:1px solid #e2e4e7;border-radius:10px;padding:16px;background:#fcfcfc;min-width:0}.plugin-suite-card h2,.plugin-suite-card h3{margin-top:0}.plugin-suite-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.plugin-suite-table{width:100%;border-collapse:collapse}.plugin-suite-table th,.plugin-suite-table td{padding:10px 8px;border-top:1px solid #e2e4e7;vertical-align:top;text-align:left}.plugin-suite-card .form-table{width:100%;table-layout:fixed}.plugin-suite-card .form-table th{width:210px;max-width:210px;white-space:normal;word-break:break-word}.plugin-suite-card .form-table td{overflow-wrap:anywhere}.plugin-suite-card input[type=text],.plugin-suite-card textarea,.plugin-suite-card select,.plugin-suite-card .regular-text,.plugin-suite-card .large-text{width:100%;max-width:100%}.plugin-suite-card input.small-text{width:72px;max-width:100%}.plugin-suite-card input[type=color]{width:48px;min-width:48px;padding:0}.plugin-suite-save{margin-top:20px}.plugin-suite-preview-header{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:12px}.plugin-suite-preview-switch{display:flex;gap:8px;flex-wrap:wrap}.plugin-suite-preview-frame{width:100%;height:880px;border:1px solid #d0d7de;border-radius:12px;background:#fff}.plugin-suite-note{padding:12px 14px;background:#f6f7f7;border:1px solid #e2e4e7;border-radius:8px}.plugin-subgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.plugin-triplet{display:grid;grid-template-columns:150px 1fr 1fr 1fr 1fr;gap:8px;align-items:center}.plugin-triplet>div{min-width:0}.plugin-suite-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.plugin-sortable{list-style:none;margin:0;padding:0;border:1px solid #d0d7de;border-radius:10px;background:#fff}.plugin-sortable li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-top:1px solid #eef2f6;cursor:move}.plugin-sortable li:first-child{border-top:none}.plugin-sortable li.dragging{opacity:.45;transform:scale(.99)}.plugin-sortable li:focus-visible,.plugin-suite-tab:focus-visible,.plugin-suite-subnav a:focus-visible,.plugin-suite-card .button:focus-visible{outline:3px solid #7c3aed;outline-offset:2px}.plugin-sortable li:hover{background:#f8fafc}.plugin-suite-card{transition:box-shadow .18s ease,border-color .18s ease}.plugin-suite-card:hover{border-color:#c4b5fd;box-shadow:0 8px 24px rgba(64,18,104,.07)}@media (prefers-reduced-motion: reduce){.plugin-suite-card,.plugin-sortable li{transition:none!important;transform:none!important}}.plugin-sortable .dashicons{color:#6b7280}.plugin-suite-subnav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.plugin-suite-subnav a{display:inline-block;padding:8px 12px;border:1px solid #d0d7de;border-radius:8px;background:#f6f7f7;text-decoration:none;color:#1d2327}.plugin-suite-subnav a.active{background:#401268;color:#fff;border-color:#401268}.plugin-suite-subsection{display:none}.plugin-suite-subsection.active{display:block}
       @media (max-width: 1200px){.plugin-suite-grid,.plugin-subgrid{grid-template-columns:1fr}.plugin-triplet{grid-template-columns:1fr}}
     </style>
   <?php }
@@ -1107,17 +1237,13 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) return;
     $settings = self::get_settings();
     $tab = sanitize_key($_GET['tab'] ?? 'global');
-    if (!in_array($tab,['global','adoptables','layout','adopted','stats','widgets','payments','quiz','forms','proxy','diagnostics','help'], true)) $tab='global';
+    if (!in_array($tab,['global','adoptables','layout','adopted','stats','widgets','payments','quiz','forms','proxy','diagnostics','registry','help'], true)) $tab='global';
     echo '<div class="wrap"><h1>Rescue Plugin Suite</h1><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
     self::start_wrap();
-    echo '<div class="plugin-suite-tabs">';
-    foreach (['global'=>'Global','adoptables'=>'Adoptables','layout'=>'Layout builder','adopted'=>'Adopted','stats'=>'Statistics','widgets'=>'Widgets','payments'=>'Payments','quiz'=>'Match quiz','forms'=>'Forms','proxy'=>'Proxy','diagnostics'=>'Diagnostics','help'=>'Help / Guide'] as $key=>$label) {
-      $href = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$key], admin_url('options-general.php'));
-      printf('<a class="plugin-suite-tab %s" href="%s">%s</a>', $tab===$key?'active':'', esc_url($href), esc_html($label));
-    }
-    echo '</div><div class="plugin-suite-panel">';
+    if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::render_tabs($tab);
+    echo '<div class="plugin-suite-panel">';
     if ($tab === 'global') self::render_global_tab($settings);
     elseif ($tab === 'adoptables') self::render_adoptables_tab($settings['adoptables'], $settings['global']);
     elseif ($tab === 'layout') self::render_layout_tab($settings);
@@ -1129,8 +1255,9 @@ final class Plugin_UI_Suite_Plugin {
     elseif ($tab === 'forms') self::render_forms_tab($settings);
     elseif ($tab === 'proxy') self::render_proxy_tab($settings);
     elseif ($tab === 'diagnostics') self::render_diagnostics_tab($settings);
+    elseif ($tab === 'registry') self::render_registry_tab($settings);
     else self::render_help_tab($settings);
-    echo "</div><script>(function(){document.addEventListener('click',function(e){const btn=e.target.closest('.plugin-preview-btn');if(!btn)return;const frame=document.getElementById('plugin-preview-'+btn.dataset.ui);if(frame&&btn.dataset.src)frame.src=btn.dataset.src;});document.querySelectorAll('.plugin-sortable').forEach(function(list){if(!list||list.dataset.bound==='1')return;list.dataset.bound='1';let dragged=null;const sync=function(){const input=list.nextElementSibling;if(!input||!input.classList.contains('plugin-sortable-input'))return;input.value=Array.from(list.querySelectorAll('li[data-value]')).map(function(li){return li.dataset.value||'';}).filter(Boolean).join('\n');};list.querySelectorAll('li').forEach(function(item){item.addEventListener('dragstart',function(){dragged=item;item.classList.add('dragging');});item.addEventListener('dragend',function(){item.classList.remove('dragging');dragged=null;sync();});});list.addEventListener('dragover',function(e){e.preventDefault();if(!dragged)return;const items=Array.from(list.querySelectorAll('li:not(.dragging)'));const after=items.find(function(el){const r=el.getBoundingClientRect();return e.clientY<r.top+r.height/2;});if(!after)list.appendChild(dragged);else list.insertBefore(dragged,after);});sync();});})();</script></div>";
+    echo "</div><script>(function(){document.addEventListener('click',function(e){const btn=e.target.closest('.plugin-preview-btn');if(!btn)return;const frame=document.getElementById('plugin-preview-'+btn.dataset.ui);if(frame&&btn.dataset.src)frame.src=btn.dataset.src;});document.querySelectorAll('.plugin-sortable').forEach(function(list){if(!list||list.dataset.bound==='1')return;list.dataset.bound='1';let dragged=null;const sync=function(){const input=list.nextElementSibling;if(!input||!input.classList.contains('plugin-sortable-input'))return;input.value=Array.from(list.querySelectorAll('li[data-value]')).map(function(li){return li.dataset.value||'';}).filter(Boolean).join('\n');};list.querySelectorAll('li').forEach(function(item){item.addEventListener('dragstart',function(){dragged=item;item.classList.add('dragging');item.setAttribute('aria-grabbed','true');});item.addEventListener('dragend',function(){item.classList.remove('dragging');item.setAttribute('aria-grabbed','false');dragged=null;sync();});item.addEventListener('keydown',function(e){if(e.key!=='ArrowUp'&&e.key!=='ArrowDown')return;e.preventDefault();const prev=item.previousElementSibling,next=item.nextElementSibling;if(e.key==='ArrowUp'&&prev){list.insertBefore(item,prev);item.focus();sync();}if(e.key==='ArrowDown'&&next){list.insertBefore(next,item);item.focus();sync();}});});list.addEventListener('dragover',function(e){e.preventDefault();if(!dragged)return;const items=Array.from(list.querySelectorAll('li:not(.dragging)'));const after=items.find(function(el){const r=el.getBoundingClientRect();return e.clientY<r.top+r.height/2;});if(!after)list.appendChild(dragged);else list.insertBefore(dragged,after);});sync();});})();</script></div>";
   }
 
   private static function form_start($tab){ $subtab=sanitize_key($_GET['subtab'] ?? ''); echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_save'); echo '<input type="hidden" name="action" value="plugin_ui_suite_save" /><input type="hidden" name="active_tab" value="'.esc_attr($tab).'" /><input type="hidden" name="active_subtab" value="'.esc_attr($subtab).'" />'; }
@@ -1412,7 +1539,7 @@ final class Plugin_UI_Suite_Plugin {
   private static function render_quiz_tab($settings) {
     $q = $settings['quiz'];
     self::form_start('quiz');
-    $sub = self::subtab_nav('quiz', ['settings'=>'Settings','questions'=>'Questions','ai'=>'AI scoring']);
+    $sub = self::subtab_nav('quiz', ['settings'=>'Settings','questions'=>'Questions','mapping'=>'Answer mapping','preview'=>'Preview scoring']);
     echo '<div class="plugin-suite-grid">';
     if($sub==='settings') {
       echo '<div class="plugin-suite-card"><h2>Quiz settings</h2><table class="form-table">';
@@ -1427,10 +1554,13 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['q2_female_label'=>'Female label','q2_male_label'=>'Male label','q2_either_label'=>'Question 2 no preference label','q3_yes_label'=>'Indoor only yes label','q3_no_label'=>'Question 3 no preference label'] as $k=>$label){ ob_start(); self::text_input('quiz',$k,$q[$k]); self::row($label, ob_get_clean()); }
       ob_start(); self::checkbox_input('quiz','q3_hide',$q['q3_hide'],'Hide indoor-only question'); self::row('Question 3 visibility', ob_get_clean());
       echo '</table></div>';
-    } elseif($sub==='ai') {
-      echo '<div class="plugin-suite-card"><h2>AI adoption scoring</h2><p class="description">AI match scoring is live. Quiz results now use weighted relevance across age, sex, indoor-only preference, bonded-pair preference, and good-with answers.</p></div>';
+    } elseif($sub==='mapping') {
+      echo '<div class="plugin-suite-card"><h2>Visual answer mapping</h2><p class="description">Map each answer key to a rescue management field and weight. Format: answer_key|field|weight.</p><textarea class="large-text code" rows="8" name="'.esc_attr(self::field_name('quiz','answer_mappings')).'">'.esc_textarea($q['answer_mappings'] ?? '').'</textarea></div>';
+      echo '<div class="plugin-suite-card"><h2>Question order</h2>'; self::sortable_list(self::field_name('quiz','question_order'), preg_split('/\R+/', (string)($q['question_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['age'=>'Age preference','sex'=>'Sex preference','indoor'=>'Indoor-only','bonded'=>'Bonded pair','good_cats'=>'Good with cats','good_dogs'=>'Good with dogs','good_children'=>'Good with children']); echo '</div>';
+    } elseif($sub==='preview') {
+      echo '<div class="plugin-suite-card"><h2>Scoring preview</h2><p class="description">The preview below uses the saved shortcode renderer so administrators can test question order and answer mappings before publishing.</p></div>'; self::preview_frame_custom('quiz','Match Quiz preview');
     } else {
-      echo '<div class="plugin-suite-card"><h2>Quiz previews removed</h2><p class="description">Live previews have been removed because they were not reliably matching the embedded site output. Test the quiz on a staging page instead.</p></div>';
+      echo '<div class="plugin-suite-card"><h2>Quiz builder</h2><p class="description">Use Questions to edit wording, Mapping to connect answers to rescue-management fields, and Preview scoring to test the quiz.</p></div>';
     }
     echo '</div>';
     self::form_end();
@@ -1443,6 +1573,7 @@ final class Plugin_UI_Suite_Plugin {
     echo '</table></div><div class="plugin-suite-card" style="grid-column:span 2;"><h2>Forms</h2><table class="form-table">'; ob_start(); self::text_input('forms','account',$settings['forms']['account']); self::row('Shelter Manager account', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>#</th><th>Shortcode</th><th>Form ID</th><th>Use</th></tr></thead><tbody>';
     for($i=0;$i<10;$i++){ $row=$items[$i] ?? ['shortcode'=>'','form_id'=>'']; $tag=self::sanitize_shortcode_tag($row['shortcode'] ?? ''); echo '<tr><td>'.($i+1).'</td><td><input type="text" name="suite[forms][items]['.$i.'][shortcode]" value="'.esc_attr($row['shortcode'] ?? '').'" class="regular-text" /></td><td><input type="text" name="suite[forms][items]['.$i.'][form_id]" value="'.esc_attr($row['form_id'] ?? '').'" class="small-text" /></td><td>'.($tag?'<code>['.esc_html($tag).']</code>':'').'</td></tr>'; }
     echo '</tbody></table></div>';
+    echo '<div class="plugin-suite-card" style="grid-column:span 2;"><h2>Platform limitations</h2><textarea class="large-text code" rows="6" name="'.esc_attr(self::field_name('forms','platform_support_notes')).'">'.esc_textarea($settings['forms']['platform_support_notes'] ?? '').'</textarea><p class="description">Format: platform|plain-English support or limitation note. These notes keep platform-specific behaviour explicit for administrators.</p></div>';
     $global = $settings['global'] ?? [];
     echo '<div class="plugin-suite-card" style="grid-column:span 2;"><h2>Application / enquiry integrations</h2><p class="description">Embedded ASM or third-party forms submit inside their own systems. The suite does not capture applicant answers; it records privacy-safe application intent events when visitors open the application flow.</p><table class="form-table">';
     ob_start(); self::checkbox_input('global','enquiry_log_enabled',$global['enquiry_log_enabled'] ?? 1,'Log application intent events'); self::row('Enquiry event log', ob_get_clean());
@@ -1458,30 +1589,31 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_layout_tab($settings) {
     self::form_start('layout');
-    $sub = self::subtab_nav('layout', ['adoptables'=>'Adoptables','adopted'=>'Adopted','widgets'=>'Widgets']);
+    $sub = self::subtab_nav('layout', ['adoptables'=>'Adoptables','adopted'=>'Adopted','statistics'=>'Statistics','donation'=>'Donation Widget','forms'=>'Forms','quiz'=>'Match Quiz','widgets'=>'Other widgets','species'=>'Species']);
     echo '<div class="plugin-suite-grid">';
-    if ($sub==='adoptables') {
-      echo '<div class="plugin-suite-card"><h2>Adoptables card order</h2>';
-      self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), [
-        'image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name & meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button'
-      ]);
-      echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Adoptables modal order</h2>';
-      self::sortable_list(self::field_name('adoptables','builder_modal_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), [
-        'gallery'=>'Gallery','badges'=>'Badges','info_cards'=>'Info cards','tips'=>'Tips','description'=>'Description','global_text'=>'Global text','contact_footer'=>'Contact footer','custom_buttons'=>'Custom buttons'
-      ]);
-      echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Adoptables header actions</h2>';
-      self::sortable_list(self::field_name('adoptables','builder_header_actions'), preg_split('/\R+/', (string)($settings['adoptables']['builder_header_actions'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), [
-        'apply'=>'Apply','favourite'=>'Favourite','share'=>'Share','close'=>'Close'
-      ]);
-      echo '</div>';
-    } elseif ($sub==='adopted') {
-      echo '<div class="plugin-suite-card"><h2>Adopted layout</h2><p class="description">Adopted layout builder groundwork is in place. More drag and drop areas can be added next.</p></div>';
+    if ($sub === 'adoptables') {
+      echo '<div class="plugin-suite-card"><h2>Adoptables card layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name and meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button']); echo '</div>';
+      echo '<div class="plugin-suite-card"><h2>Adoptables modal layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_modal_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','badges'=>'Badges','info_cards'=>'Info cards','tips'=>'Tips','description'=>'Description','global_text'=>'Global text','contact_footer'=>'Contact footer','custom_buttons'=>'Custom buttons']); echo '</div>';
+      echo '<div class="plugin-suite-card"><h2>Adoptables header actions</h2>'; self::sortable_list(self::field_name('adoptables','builder_header_actions'), preg_split('/\R+/', (string)($settings['adoptables']['builder_header_actions'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['apply'=>'Apply','favourite'=>'Favourite','share'=>'Share','close'=>'Close']); echo '</div>'; self::preview_frame('adoptables');
+    } elseif ($sub === 'adopted') {
+      echo '<div class="plugin-suite-card"><h2>Adopted card layout</h2>'; self::sortable_list(self::field_name('adopted','builder_card_order'), preg_split('/\R+/', (string)($settings['adopted']['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','date_badge'=>'Adoption date badge','name_meta'=>'Name and meta','story_excerpt'=>'Story excerpt','share_button'=>'Share button']); echo '</div>';
+      echo '<div class="plugin-suite-card"><h2>Adopted modal layout</h2>'; self::sortable_list(self::field_name('adopted','builder_modal_order'), preg_split('/\R+/', (string)($settings['adopted']['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','name_meta'=>'Name and meta','adoption_date'=>'Adoption date','story'=>'Story','global_text'=>'Global text','share_button'=>'Share button']); echo '</div>'; self::preview_frame('adopted');
+    } elseif ($sub === 'statistics') {
+      echo '<div class="plugin-suite-card"><h2>Statistics card order</h2>'; self::sortable_list(self::field_name('stats','builder_card_order'), preg_split('/\R+/', (string)($settings['stats']['builder_card_order'] ?? $settings['stats']['card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['brought'=>'Brought In','adopted'=>'Adopted','vaccinated'=>'Vaccinated','neutered'=>'Neutered','chipped'=>'Microchipped','in_care'=>'In Our Care']); echo '</div>'; self::preview_frame('stats');
+    } elseif ($sub === 'donation') {
+      echo '<div class="plugin-suite-card"><h2>Donation widget builder</h2><p class="description">Donation Widget layout is controlled by registry-driven Payments pages.</p><p><a class="button" href="'.esc_url(add_query_arg(['page'=>'plugin-ui-suite-payments-widget'], admin_url('options-general.php'))).'">Open Donation Widget page</a></p></div>';
+    } elseif ($sub === 'forms') {
+      echo '<div class="plugin-suite-card"><h2>Forms layout</h2>'; self::sortable_list(self::field_name('forms','layout_order'), preg_split('/\R+/', (string)($settings['forms']['layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['intro'=>'Intro text','form_embed'=>'Form embed','privacy_note'=>'Privacy note','submit_guidance'=>'Submission guidance']); echo '</div>';
+      echo '<div class="plugin-suite-card"><h2>Platform support notes</h2><textarea class="large-text code" rows="6" name="'.esc_attr(self::field_name('forms','platform_support_notes')).'">'.esc_textarea($settings['forms']['platform_support_notes'] ?? '').'</textarea><p class="description">Format: platform|plain-English limitation or support note.</p></div>';
+    } elseif ($sub === 'quiz') {
+      echo '<div class="plugin-suite-card"><h2>Match Quiz question order</h2>'; self::sortable_list(self::field_name('quiz','question_order'), preg_split('/\R+/', (string)($settings['quiz']['question_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['age'=>'Age preference','sex'=>'Sex preference','indoor'=>'Indoor-only','bonded'=>'Bonded pair','good_cats'=>'Good with cats','good_dogs'=>'Good with dogs','good_children'=>'Good with children']); echo '</div>';
+      echo '<div class="plugin-suite-card"><h2>Answer mapping</h2><textarea class="large-text code" rows="8" name="'.esc_attr(self::field_name('quiz','answer_mappings')).'">'.esc_textarea($settings['quiz']['answer_mappings'] ?? '').'</textarea><p class="description">Format: answer_key|rescue management field|weight.</p></div>'; self::preview_frame_custom('quiz','Quiz preview');
+    } elseif ($sub === 'species') {
+      echo '<div class="plugin-suite-card"><h2>Species support</h2><table class="form-table">'; self::row('Available species','<textarea class="large-text code" rows="4" name="'.esc_attr(self::field_name('global','supported_species')).'">'.esc_textarea($settings['global']['supported_species'] ?? '').'</textarea>'); self::row('Enabled species','<textarea class="large-text code" rows="4" name="'.esc_attr(self::field_name('global','enabled_species')).'">'.esc_textarea($settings['global']['enabled_species'] ?? '').'</textarea><p class="description">Use slugs such as cats, dogs, rabbits, birds, horses, small_animals, reptiles and other.</p>'); echo '</table></div>';
     } else {
-      echo '<div class="plugin-suite-card"><h2>Widgets layout</h2><p class="description">Widgets layout builder groundwork is in place. Featured and stories widget ordering can be expanded next.</p></div>';
+      echo '<div class="plugin-suite-card"><h2>Featured widget layout</h2>'; self::sortable_list(self::field_name('widgets','featured_layout_order'), preg_split('/\R+/', (string)($settings['widgets']['featured_layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','meta'=>'Meta','button'=>'Button']); echo '</div><div class="plugin-suite-card"><h2>Stories widget layout</h2>'; self::sortable_list(self::field_name('widgets','stories_layout_order'), preg_split('/\R+/', (string)($settings['widgets']['stories_layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','excerpt'=>'Excerpt','button'=>'Button']); echo '</div>';
     }
-    echo '</div>';
+    echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Builder tools</h2><p class="description">Drag items to reorder. Save changes to persist. Clear a layout field and save to reset to defaults.</p></div></div>';
     self::form_end();
   }
 
@@ -2315,12 +2447,17 @@ final class Plugin_UI_Suite_Plugin {
     wp_nonce_field('plugin_ui_suite_setup_save');
     echo '<input type="hidden" name="action" value="plugin_ui_suite_setup_save" />';
     echo '<div class="plugin-wizard-progress">';
-    foreach ([1=>['Welcome','What this wizard will set up'],2=>['Organisation details','Save your rescue identity'],3=>['Payment provider','Choose how donations are taken'],4=>['Campaign creation','Create your first appeal'],5=>['Donation widget','Set public wording and amounts'],6=>['Rescue Management','Connect ASM or another source'],7=>['Website integration','Copy shortcodes and block guidance'],8=>['Finished','Review and save']] as $step=>$meta) {
-      echo '<div class="plugin-step"><strong>Step ' . (int)$step . '</strong>' . esc_html($meta[0]) . '<br><span class="description">' . esc_html($meta[1]) . '</span></div>';
+    $wizard_steps = class_exists('Plugin_UI_Suite_Registry') ? Plugin_UI_Suite_Registry::setup_steps() : [];
+    if (empty($wizard_steps)) $wizard_steps = ['welcome'=>['title'=>'Welcome','description'=>'What this wizard will set up'], 'finished'=>['title'=>'Finished','description'=>'Review and save']];
+    $step_number = 0;
+    foreach ($wizard_steps as $step) {
+      $step_number++;
+      echo '<div class="plugin-step"><strong>Step ' . (int)$step_number . '</strong>' . esc_html($step['title'] ?? '') . '<br><span class="description">' . esc_html($step['description'] ?? (($step_number < 5) ? 'Required to launch' : 'Can be refined later')) . '</span></div>';
     }
     echo '</div>';
     echo '<div class="plugin-suite-subnav">';
-    foreach ([1=>'Welcome',2=>'Organisation',3=>'Payment provider',4=>'Campaign',5=>'Donation widget',6=>'Rescue Management',7=>'Website integration',8=>'Finished'] as $step=>$label) echo '<button type="button" class="button plugin-wizard-step-btn" data-step="'.(int)$step.'">'.esc_html($label).'</button> ';
+    $step_number = 0;
+    foreach ($wizard_steps as $step) { $step_number++; echo '<button type="button" class="button plugin-wizard-step-btn" data-step="'.(int)$step_number.'">'.esc_html($step['title'] ?? '').'</button> '; }
     echo '</div>';
 
     echo '<div class="plugin-suite-subsection active" data-step="1"><h2>Step 1 · ASM connection</h2><p class="description">This quick setup configures the native ASM connection. Custom API is also available as a live source from the Global tab after setup.</p><div class="plugin-source-grid">';
@@ -2363,11 +2500,30 @@ final class Plugin_UI_Suite_Plugin {
   }
 
 
+
+  private static function render_registry_tab($settings) {
+    if (!class_exists('Plugin_UI_Suite_Registry')) { echo '<p>Registry framework is unavailable.</p>'; return; }
+    $query = sanitize_text_field($_GET['settings_search'] ?? '');
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>Plugin-wide settings search</h2><form method="get"><input type="hidden" name="page" value="plugin-ui-suite"><input type="hidden" name="tab" value="registry"><p><input class="regular-text" name="settings_search" value="'.esc_attr($query).'" placeholder="PayPal, Gift Aid, Adoptables, Widget, Statistics"> <button class="button button-primary">Search</button></p></form>';
+    if ($query !== '') { $results = Plugin_UI_Suite_Registry::search_settings($query); echo '<h3>Results</h3><table class="widefat striped"><thead><tr><th>Setting</th><th>Module</th><th>Page</th><th>Field</th></tr></thead><tbody>'; if (!$results) echo '<tr><td colspan="4">No matching settings found.</td></tr>'; foreach ($results as $id=>$setting) echo '<tr><td>'.esc_html($setting['label'] ?? $id).'</td><td>'.esc_html($setting['module'] ?? '').'</td><td>'.esc_html($setting['page'] ?? '').'</td><td><code>'.esc_html($setting['field_id'] ?? '').'</code></td></tr>'; echo '</tbody></table>'; }
+    echo '</div><div class="plugin-suite-card"><h2>Registry import / export</h2><p class="description">Exports use the Settings Registry. Sensitive fields are excluded unless explicitly requested.</p><div class="plugin-suite-actions"><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_export'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_export"><label><input type="checkbox" name="include_sensitive" value="1"> Include sensitive values</label> '; submit_button('Export registry settings','secondary','submit',false); echo '</form><form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_import'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_import"><input type="file" name="import_file" accept="application/json"> '; submit_button('Import registry settings','secondary','submit',false); echo '</form></div></div>';
+    echo '<div class="plugin-suite-card"><h2>Feature flags</h2><table class="widefat striped"><thead><tr><th>Module</th><th>Flags</th><th>Reset</th></tr></thead><tbody>'; foreach (Plugin_UI_Suite_Registry::all('modules') as $id=>$module) { $flags = wp_parse_args($module['flags'] ?? [], ['installed'=>true,'enabled'=>true,'hidden'=>false,'experimental'=>false,'beta'=>false,'deprecated'=>false,'future_premium'=>false]); echo '<tr><td>'.esc_html($module['name'] ?? $id).'</td><td><code>'.esc_html(wp_json_encode($flags)).'</code></td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_reset'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_reset"><input type="hidden" name="module" value="'.esc_attr($id).'">'; submit_button('Reset module','small','submit',false); echo '</form></td></tr>'; } echo '</tbody></table></div>';
+    echo '<div class="plugin-suite-card"><h2>Registry-driven help</h2>'; foreach (Plugin_UI_Suite_Registry::all('help') as $guide) echo '<details><summary>'.esc_html($guide['title'] ?? '').'</summary><p>'.esc_html($guide['content'] ?? '').'</p></details>'; echo '</div>';
+    echo '<div class="plugin-suite-card"><h2>Analytics panels</h2><ul>'; foreach (Plugin_UI_Suite_Registry::all('analytics') as $panel) echo '<li>'.esc_html($panel['title'] ?? '').'</li>'; echo '</ul></div>';
+    echo '<div class="plugin-suite-card"><h2>Setup wizard steps</h2><ol>'; $steps = Plugin_UI_Suite_Registry::all('setup_steps'); uasort($steps, function($a,$b){ return ($a['order'] ?? 100) <=> ($b['order'] ?? 100); }); foreach ($steps as $step) echo '<li>'.esc_html($step['title'] ?? '').'</li>'; echo '</ol></div></div>';
+  }
+
   private static function render_help_tab($settings) {
-    $guides = ['Getting Started'=>'Open the setup wizard, choose your rescue management connection, then add the main shortcodes to pages.', 'Connecting Stripe'=>'Stripe is a card payment service. Copy the publishable key and secret key from Stripe into Payments → Providers; a key is a password-like code that lets the plugin talk to Stripe.', 'Connecting PayPal'=>'Create a PayPal app, then paste the client ID and secret into Payments → Providers. Treat the secret like a password.', 'Connecting Square'=>'Paste your Square application ID, access token and location ID. An access token is a private code that authorises payments.', 'Connecting GoCardless'=>'Paste your GoCardless access token. GoCardless is best for Direct Debit and monthly giving.', 'Connecting SumUp'=>'Use the Providers page when the SumUp adapter is installed; add the private connection details supplied by SumUp.', 'Creating a campaign'=>'Go to Payments → Campaign Manager, add a name, goal, description, image, colour, end date and status. Raised totals calculate automatically.', 'Creating a donation widget'=>'Go to Payments → Donation Widget, write the public title and button text, then set one-off and monthly suggested amounts.', 'Embedding using Shortcodes'=>'Add <code>[donation_widget]</code>, <code>[adoptables]</code>, <code>[adopted]</code> or <code>[stats]</code> to a page.', 'Embedding using Gutenberg'=>'Add the Rescue Plugin Suite blocks from the block inserter, then preview the page.', 'Embedding using Elementor'=>'Use Elementor’s Shortcode widget and paste the shortcode.', 'Embedding using Divi'=>'Use a Divi Code or Text module and paste the shortcode.', 'Connecting to the Rescue Management System'=>'Use the Proxy tab for ASM details or Global for another source. Credentials are private connection details and are stored server-side.', 'Gift Aid'=>'Enable Gift Aid only if your organisation can claim it. The widget will show a plain consent statement.', 'Processing Fees'=>'Enable fee recovery to let donors optionally increase their donation to cover card processing costs.', 'Troubleshooting'=>'Use Diagnostics to check connection health, caches, recent events and downloadable support information.', 'Frequently Asked Questions'=>'If nothing displays, check your source connection, shortcode spelling, provider status and browser cache first.'];
-    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>Setup Centre</h2><p>Use these plain-English guides to launch the suite without needing technical background. Technical words are explained next to the step that uses them.</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">Open setup wizard</a></p></div>';
-    foreach ($guides as $title=>$body) echo '<div class="plugin-suite-card"><h2>' . esc_html($title) . '</h2><p>' . wp_kses_post($body) . '</p></div>';
-    echo '</div>';
+    if (class_exists('Plugin_UI_Suite_Registry')) {
+      echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('These guides are registered by installed modules, so hidden or disabled modules do not add help content.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a></p></div>';
+      foreach (Plugin_UI_Suite_Registry::help_items() as $guide) {
+        echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title'] ?? '').'</h2><p>'.wp_kses_post($guide['content'] ?? '').'</p>';
+        if (!empty($guide['external_url'])) echo '<p><a class="button" href="'.esc_url($guide['external_url']).'" target="_blank" rel="noopener">'.esc_html__('Open official documentation','plugin-ui-suite').'</a></p>';
+        echo '</div>';
+      }
+      echo '</div>'; return;
+    }
+    echo '<p>'.esc_html__('Help registry is unavailable.', 'plugin-ui-suite').'</p>';
   }
 
   private static function render_proxy_tab($settings) {
