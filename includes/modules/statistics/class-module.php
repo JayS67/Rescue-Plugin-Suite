@@ -3,7 +3,7 @@
  * Plugin Name: Rescue Plugin Suite Statistics
  * Description: Adds the statistics UI via shortcode [stats] with settings.
  * Version: 12
- * Author: Jordan Sutton
+ * Author: Jordan Sutton | Webstax
  */
 
 if (!defined('ABSPATH')) exit;

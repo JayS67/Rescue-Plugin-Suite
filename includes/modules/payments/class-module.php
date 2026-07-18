@@ -413,9 +413,36 @@ final class Plugin_Payments_Module {
      */
     return apply_filters('plugin_payments_payment_types', $types);
   }
-  public static function init() { add_action('admin_init',[__CLASS__,'register_settings']); add_action('rest_api_init',[__CLASS__,'register_rest_routes']); add_action('admin_enqueue_scripts',[__CLASS__,'enqueue_admin_assets']); add_action('wp_ajax_plugin_payments_checkout',[__CLASS__,'handle_checkout']); add_action('wp_ajax_nopriv_plugin_payments_checkout',[__CLASS__,'handle_checkout']); add_action('admin_post_plugin_payments_export_gift_aid',[__CLASS__,'export_gift_aid']); add_shortcode('donation_widget',[__CLASS__,'render_shortcode']); add_action('init',[__CLASS__,'register_block']); add_action('wp_enqueue_scripts',[__CLASS__,'enqueue_frontend_assets']); }
+
+  public static function register_registry_metadata() {
+    if (!class_exists('Plugin_UI_Suite_Registry')) return;
+    Plugin_UI_Suite_Registry::register_module('payments', ['name'=>'Payments','description'=>'Donation providers, campaigns, Gift Aid, fee recovery, transactions and reports.','icon'=>'money-alt','flags'=>['installed'=>true,'enabled'=>true,'hidden'=>false,'experimental'=>false,'beta'=>false,'deprecated'=>false,'future_premium'=>false]]);
+    foreach (self::gateway_manager()->all() as $id=>$provider) {
+      Plugin_UI_Suite_Registry::register('integrations', 'payment_'.$id, ['module'=>'payments','type'=>'payment_provider','name'=>$provider->get_name(),'configuration_fields'=>$provider->get_configuration_fields(),'capabilities'=>$provider->get_capabilities(),'supported_features'=>array_keys(array_filter($provider->get_capabilities())),'conditional_settings'=>['active_provider'=>$id]]);
+    }
+    $defaults = self::defaults();
+    $settings = [
+      'active_provider'=>['label'=>'Active payment provider','field_type'=>'select','options'=>array_map(function($p){ return $p->get_name(); }, self::gateway_manager()->all()),'page'=>'providers','section'=>'providers','search_keywords'=>['Stripe','PayPal','Square','GoCardless','SumUp','provider']],
+      'general_enabled'=>['label'=>'Enable payments','field_type'=>'checkbox','page'=>'general','section'=>'general','field_id'=>'enabled','default'=>$defaults['general']['enabled'],'description'=>'Allow donation checkout from public widgets.'],
+      'general_currency'=>['label'=>'Currency','field_type'=>'text','page'=>'general','section'=>'general','field_id'=>'currency','default'=>$defaults['general']['currency'],'search_keywords'=>['currency','GBP','USD','EUR']],
+      'general_title'=>['label'=>'Widget title','field_type'=>'text','page'=>'widget','section'=>'content','field_id'=>'title','default'=>$defaults['general']['title'],'search_keywords'=>['widget','donation']],
+      'general_subtitle'=>['label'=>'Widget subtitle','field_type'=>'text','page'=>'widget','section'=>'content','field_id'=>'subtitle','default'=>$defaults['general']['subtitle'],'search_keywords'=>['widget','donation']],
+      'gift_aid_enabled'=>['label'=>'Enable Gift Aid','field_type'=>'checkbox','page'=>'gift-aid','section'=>'gift_aid','field_id'=>'enabled','default'=>$defaults['gift_aid']['enabled'],'search_keywords'=>['Gift Aid']],
+      'gift_aid_wording'=>['label'=>'Gift Aid wording','field_type'=>'text','page'=>'gift-aid','section'=>'gift_aid','field_id'=>'wording','default'=>$defaults['gift_aid']['wording'],'search_keywords'=>['Gift Aid']],
+      'fee_recovery_enabled'=>['label'=>'Enable fee recovery','field_type'=>'checkbox','page'=>'fees','section'=>'fee_recovery','field_id'=>'enabled','default'=>$defaults['fee_recovery']['enabled'],'search_keywords'=>['fees','cover fees']],
+      'fee_recovery_payer'=>['label'=>'Who covers fees?','field_type'=>'select','page'=>'fees','section'=>'fee_recovery','field_id'=>'payer','default'=>$defaults['fee_recovery']['payer'],'options'=>['rescue'=>'Rescue absorbs fees','donor'=>'Donor covers fees'],'search_keywords'=>['fees','donor covers fees']],
+      'appearance_primary'=>['label'=>'Primary colour','field_type'=>'color','page'=>'appearance','section'=>'appearance','field_id'=>'primary','default'=>$defaults['appearance']['primary'],'search_keywords'=>['appearance','colour']],
+    ];
+    foreach ($settings as $id=>$meta) {
+      $module_section = explode('_', $id, 2)[0];
+      Plugin_UI_Suite_Registry::register_setting('payments_'.$id, $meta + ['module'=>'payments','field_id'=>$meta['field_id'] ?? $id,'default'=>$meta['default'] ?? '']);
+    }
+    foreach (['dashboard','general','providers','widget','campaigns','gift-aid','fees','appearance','transactions','reports','diagnostics','help'] as $i=>$section) Plugin_UI_Suite_Registry::register_navigation('payments_'.$section, ['context'=>'payments','module'=>'payments','slug'=>$section,'label'=>ucwords(str_replace('-',' ', $section)),'order'=>$i]);
+  }
+
+  public static function init() { self::register_registry_metadata(); add_action('admin_init',[__CLASS__,'register_settings']); add_action('rest_api_init',[__CLASS__,'register_rest_routes']); add_action('admin_enqueue_scripts',[__CLASS__,'enqueue_admin_assets']); add_action('wp_ajax_plugin_payments_checkout',[__CLASS__,'handle_checkout']); add_action('wp_ajax_nopriv_plugin_payments_checkout',[__CLASS__,'handle_checkout']); add_action('admin_post_plugin_payments_export_gift_aid',[__CLASS__,'export_gift_aid']); add_shortcode('donation_widget',[__CLASS__,'render_shortcode']); add_action('init',[__CLASS__,'register_block']); add_action('wp_enqueue_scripts',[__CLASS__,'enqueue_frontend_assets']); }
   public static function gateway_manager() { static $m; if (!$m) $m = new Plugin_Payment_Gateway_Manager(); return $m; }
-  public static function defaults() { return ['active_provider'=>'stripe','provider_settings'=>[],'general'=>['enabled'=>1,'test_mode'=>1,'live_mode'=>0,'default_type'=>'one_off','currency'=>'GBP','success_url'=>home_url('/thank-you/'),'cancel_url'=>home_url('/'),'button_text'=>'Continue','thank_you_message'=>'Thank you for your support.','enable_campaigns'=>1,'title'=>'Support our work','subtitle'=>'Choose an amount that works for you','intro_text'=>'','learn_more_url'=>''],'one_off'=>['enabled'=>1,'allow_custom'=>1,'min'=>1,'max'=>10000,'default'=>5,'presets'=>[['amount'=>'3','description'=>'Makes a small contribution'],['amount'=>'5','description'=>'Supports essential work'],['amount'=>'10','description'=>'Helps fund ongoing services'],['amount'=>'17.50','description'=>'Creates meaningful impact']]],'recurring'=>['enabled'=>1,'allow_custom'=>1,'min'=>1,'max'=>1000,'default'=>5,'presets'=>[['amount'=>'3','description'=>'Provides steady monthly support'],['amount'=>'5','description'=>'Funds reliable monthly help'],['amount'=>'10','description'=>'Sustains ongoing work'],['amount'=>'17.50','description'=>'Creates lasting impact']]],'campaigns'=>[],'gift_aid'=>['enabled'=>0,'wording'=>'Add Gift Aid to this donation.','declaration'=>'I confirm I am a UK taxpayer and want this charity to reclaim Gift Aid on my donation.','required'=>0,'store_declaration'=>1],'fee_recovery'=>['enabled'=>0,'percentage'=>'2.9','fixed'=>'0.30','wording'=>'I would like to cover payment processing fees.'],'appearance'=>['primary'=>'#401268','background'=>'#ffffff','text'=>'#1f2937','font_family'=>'','button_style'=>'rounded','spacing'=>16,'radius'=>16,'shadow'=>1,'mode'=>'light','show_logo'=>0]]; }
+  public static function defaults() { return ['active_provider'=>'stripe','provider_settings'=>[],'general'=>['enabled'=>1,'test_mode'=>1,'live_mode'=>0,'default_type'=>'one_off','currency'=>'GBP','success_url'=>home_url('/thank-you/'),'cancel_url'=>home_url('/'),'button_text'=>'Continue','thank_you_message'=>'Thank you for your support.','enable_campaigns'=>1,'title'=>'Support our work','subtitle'=>'Choose an amount that works for you','intro_text'=>'','learn_more_url'=>''],'one_off'=>['enabled'=>1,'allow_custom'=>1,'min'=>1,'max'=>10000,'default'=>5,'presets'=>[['amount'=>'3','description'=>'Makes a small contribution'],['amount'=>'5','description'=>'Supports essential work'],['amount'=>'10','description'=>'Helps fund ongoing services'],['amount'=>'17.50','description'=>'Creates meaningful impact']]],'recurring'=>['enabled'=>1,'allow_custom'=>1,'min'=>1,'max'=>1000,'default'=>5,'presets'=>[['amount'=>'3','description'=>'Provides steady monthly support'],['amount'=>'5','description'=>'Funds reliable monthly help'],['amount'=>'10','description'=>'Sustains ongoing work'],['amount'=>'17.50','description'=>'Creates lasting impact']]],'campaigns'=>[],'gift_aid'=>['enabled'=>0,'wording'=>'Add Gift Aid to this donation.','declaration'=>'I confirm I am a UK taxpayer and want this charity to reclaim Gift Aid on my donation.','required'=>0,'store_declaration'=>1],'fee_recovery'=>['enabled'=>0,'payer'=>'rescue','override_defaults'=>0,'percentage'=>'','fixed'=>'','wording'=>'I would like to cover payment processing fees.'],'appearance'=>['primary'=>'#401268','background'=>'#ffffff','text'=>'#1f2937','font_family'=>'','button_style'=>'rounded','spacing'=>16,'radius'=>16,'shadow'=>1,'mode'=>'light','show_logo'=>0]]; }
   public static function settings() {
     $settings = self::merge_settings(get_option(self::OPTION_KEY, []), self::defaults());
     $settings['campaigns'] = self::registered_campaigns($settings['campaigns'] ?? []);
@@ -528,8 +555,10 @@ final class Plugin_Payments_Module {
     $clean['gift_aid']['declaration']=sanitize_textarea_field($ga['declaration']??$clean['gift_aid']['declaration']);
     $fr=$input['fee_recovery']??[];
     $clean['fee_recovery']['enabled']=!empty($fr['enabled'])?1:0;
-    $clean['fee_recovery']['percentage']=(string)max(0,(float)($fr['percentage']??$clean['fee_recovery']['percentage']));
-    $clean['fee_recovery']['fixed']=(string)max(0,(float)($fr['fixed']??$clean['fee_recovery']['fixed']));
+    $clean['fee_recovery']['payer']=in_array(($fr['payer']??'rescue'), ['rescue','donor'], true) ? $fr['payer'] : 'rescue';
+    $clean['fee_recovery']['override_defaults']=!empty($fr['override_defaults'])?1:0;
+    $clean['fee_recovery']['percentage']=$clean['fee_recovery']['override_defaults'] ? (string)max(0,(float)($fr['percentage']??0)) : '';
+    $clean['fee_recovery']['fixed']=$clean['fee_recovery']['override_defaults'] ? (string)max(0,(float)($fr['fixed']??0)) : '';
     $clean['fee_recovery']['wording']=sanitize_text_field($fr['wording']??$clean['fee_recovery']['wording']);
     $a=$input['appearance']??[];
     foreach(['primary','background','text'] as $k) $clean['appearance'][$k]=sanitize_hex_color($a[$k]??$clean['appearance'][$k]) ?: $clean['appearance'][$k];
@@ -892,16 +921,26 @@ final class Plugin_Payments_Module {
      */
     return apply_filters('plugin_payments_applied_campaign_settings', $settings, $slug, $campaign);
   }
+  private static function provider_fee_profiles() {
+    return apply_filters('plugin_payments_provider_fee_profiles', [
+      'stripe'=>['name'=>'Stripe','rate'=>0.015,'fixed'=>0.20,'note'=>'UK charity card estimate; adjust through provider config if your account differs.'],
+      'paypal'=>['name'=>'PayPal','rate'=>0.029,'fixed'=>0.30,'note'=>'Standard online donation estimate.'],
+      'square'=>['name'=>'Square','rate'=>0.0175,'fixed'=>0.00,'note'=>'UK online card estimate.'],
+      'gocardless'=>['name'=>'GoCardless','rate'=>0.01,'fixed'=>0.20,'cap'=>4.00,'note'=>'Direct Debit estimate with cap.'],
+      'sumup'=>['name'=>'SumUp','rate'=>0.025,'fixed'=>0.00,'note'=>'Online payment link estimate.'],
+    ]);
+  }
   private static function fee_profile($provider_id, $currency='GBP') {
     $currency = strtoupper($currency);
-    $profiles = [
-      'stripe'=>['rate'=>0.015,'fixed'=>0.20],
-      'paypal'=>['rate'=>0.029,'fixed'=>0.30],
-      'square'=>['rate'=>0.0175,'fixed'=>0.00],
-      'gocardless'=>['rate'=>0.01,'fixed'=>0.20],
-    ];
-    $profile = $profiles[$provider_id] ?? ['rate'=>0,'fixed'=>0];
+    $profiles = self::provider_fee_profiles();
+    $profile = $profiles[$provider_id] ?? ['rate'=>0,'fixed'=>0,'note'=>'No processing fee profile configured.'];
     if (in_array($currency, ['JPY','KRW','VND'], true)) $profile['fixed'] = 0;
+    $settings = self::settings();
+    if (!empty($settings['fee_recovery']['override_defaults'])) {
+      $profile['rate'] = ((float)($settings['fee_recovery']['percentage'] ?? 0)) / 100;
+      $profile['fixed'] = (float)($settings['fee_recovery']['fixed'] ?? 0);
+      $profile['note'] = __('Advanced manual override is active.', 'plugin-ui-suite');
+    }
     return apply_filters('plugin_payments_fee_profile', $profile, $provider_id, $currency);
   }
   private static function amount_with_fee_recovery($amount, $provider_id, $currency='GBP') {
@@ -940,8 +979,9 @@ final class Plugin_Payments_Module {
     if ($validation_error) wp_send_json_error(['message'=>$validation_error], 400);
     $provider = self::gateway_manager()->get($s['active_provider']);
     $caps = $provider ? $provider->get_capabilities() : [];
-    $checkout_amount = (!empty($caps['fee_recovery']) && !empty($_POST['fee_recovery'])) ? self::amount_with_fee_recovery($amount, $s['active_provider'], $s['general']['currency']) : $amount;
-    $request = ['amount'=>$checkout_amount,'base_amount'=>$amount,'type'=>$type,'payment_type'=>$definition,'currency'=>$s['general']['currency'],'success_url'=>$s['general']['success_url'],'cancel_url'=>$s['general']['cancel_url'],'campaign'=>$campaign,'fee_recovery'=>!empty($_POST['fee_recovery']),'gift_aid'=>!empty($_POST['gift_aid'])];
+    $donor_covers = (!empty($s['fee_recovery']['enabled']) && ($s['fee_recovery']['payer'] ?? 'rescue') === 'donor') || !empty($_POST['fee_recovery']);
+    $checkout_amount = (!empty($caps['fee_recovery']) && $donor_covers) ? self::amount_with_fee_recovery($amount, $s['active_provider'], $s['general']['currency']) : $amount;
+    $request = ['amount'=>$checkout_amount,'base_amount'=>$amount,'type'=>$type,'payment_type'=>$definition,'currency'=>$s['general']['currency'],'success_url'=>$s['general']['success_url'],'cancel_url'=>$s['general']['cancel_url'],'campaign'=>$campaign,'fee_recovery'=>$donor_covers,'gift_aid'=>!empty($_POST['gift_aid'])];
     /**
      * Fires immediately before creating checkout.
      *
@@ -1035,7 +1075,7 @@ final class Plugin_Payments_Module {
       <?php endif; ?>
     </div>
   <?php endforeach; ?>
-  <?php if(!empty($caps['fee_recovery'])): ?><label class="plugin-payments-fee-recovery"><input type="checkbox" data-payment-fee-recovery /> <span><?php esc_html_e('I\'d like to cover the payment processing fees.', 'plugin-ui-suite'); ?></span></label><p class="plugin-payments-total" data-payment-total aria-live="polite"></p><?php endif; ?>
+  <?php if(!empty($caps['fee_recovery']) && !empty($s['fee_recovery']['enabled']) && ($s['fee_recovery']['payer'] ?? 'rescue') === 'donor'): ?><label class="plugin-payments-fee-recovery"><input type="checkbox" data-payment-fee-recovery checked /> <span><?php echo esc_html($s['fee_recovery']['wording']); ?></span></label><p class="plugin-payments-total" data-payment-total aria-live="polite"></p><?php endif; ?>
   <?php if(!empty($caps['gift_aid'])): ?><label class="plugin-payments-gift-aid"><input type="checkbox" data-payment-gift-aid /> <span><?php esc_html_e('Yes, I want to Gift Aid my donation and any donations I make in the future or have made in the past four years to this charity. I am a UK taxpayer and understand that if I pay less Income Tax and/or Capital Gains Tax than the amount of Gift Aid claimed on all my donations in that tax year it is my responsibility to pay any difference.', 'plugin-ui-suite'); ?></span></label><?php endif; ?>
   <p id="<?php echo esc_attr($widget_id); ?>-impact" class="plugin-payments-impact" data-payment-impact aria-live="polite"></p>
   <p id="<?php echo esc_attr($widget_id); ?>-error" class="plugin-payments-error" data-payment-error role="status" aria-live="polite"></p>
@@ -1093,7 +1133,54 @@ final class Plugin_Payments_Module {
   }
   private static function dashboard_campaign_progress_chart($campaigns, $currency){ $items=[]; foreach((array)$campaigns as $slug=>$campaign){ if(!empty($campaign['goal'])){ $campaign=self::campaign_with_metrics((array)$campaign,$currency); $items[$slug]=['progress'=>(float)($campaign['amount_raised']??0),'goal'=>(float)$campaign['goal']]; }} if(empty($items)) return '<p>'.esc_html__('No campaign goals configured.','plugin-ui-suite').'</p>'; $html=''; foreach($items as $slug=>$data){ $pct=$data['goal']>0?min(100,($data['progress']/$data['goal'])*100):0; $html.='<div class="ssp-chart-row"><span>'.esc_html($slug).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($data['progress'],$currency).' / '.self::money($data['goal'],$currency)).'</strong></div>'; } return $html; }
   private static function dashboard_chart($items,$currency){ if(empty($items)) return '<p>'.esc_html__('No data yet.','plugin-ui-suite').'</p>'; $max=max($items); $html=''; foreach($items as $label=>$value){ $pct=$max>0?($value/$max)*100:0; $html.='<div class="ssp-chart-row"><span>'.esc_html($label).'</span><div class="ssp-bar"><span style="width:'.esc_attr($pct).'%"></span></div><strong>'.esc_html(self::money($value,$currency)).'</strong></div>'; } return $html; }
+
+  private static function render_registry_admin_page($section) {
+    if (!class_exists('Plugin_UI_Suite_Registry')) return false;
+    $section = sanitize_key($section ?: 'dashboard');
+    $settings = self::settings();
+    echo '<div class="wrap"><h1>'.esc_html__('Payments', 'plugin-ui-suite').' · '.esc_html(ucwords(str_replace('-',' ', $section))).'</h1>';
+    echo '<nav class="plugin-suite-subnav plugin-payments-subnav">';
+    foreach (Plugin_UI_Suite_Registry::navigation_items('payments') as $item) {
+      $url = add_query_arg(['page'=>'plugin-ui-suite-payments-'.$item['slug']], admin_url('options-general.php'));
+      printf('<a class="%s" href="%s">%s</a>', $section === $item['slug'] ? 'active' : '', esc_url($url), esc_html($item['label']));
+    }
+    echo '</nav>';
+    if ($section === 'dashboard' || $section === 'reports' || $section === 'transactions') { self::render_dashboard($settings, self::gateway_manager()->all()); echo '</div>'; return true; }
+    if ($section === 'diagnostics') { echo '<div class="plugin-suite-card"><h2>'.esc_html__('Diagnostics','plugin-ui-suite').'</h2><pre>'.esc_html(wp_json_encode(['providers'=>array_keys(self::gateway_manager()->all()),'version'=>PLUGIN_SUITE_VERSION,'rest'=>rest_url('plugin-payments/v1/')], JSON_PRETTY_PRINT)).'</pre></div></div>'; return true; }
+    if ($section === 'help') { echo '<div class="plugin-suite-grid">'; foreach (Plugin_UI_Suite_Registry::help_items() as $guide) if (in_array('payments', (array)($guide['modules'] ?? ['payments']), true) || preg_match('/Stripe|PayPal|Square|GoCardless|SumUp|Gift Aid|Fees/i', $guide['title'] ?? '')) echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title']).'</h2><p>'.esc_html($guide['content'] ?? '').'</p></div>'; echo '</div></div>'; return true; }
+    if ($section === 'providers') self::render_registry_provider_page($settings);
+    else self::render_registry_payment_settings_section($section, $settings);
+    echo '</div>'; return true;
+  }
+
+  private static function render_registry_payment_settings_section($section, $settings) {
+    $fields = class_exists('Plugin_UI_Suite_Registry') ? Plugin_UI_Suite_Registry::settings_for_page($section) : [];
+    echo '<form method="post" action="options.php">'; settings_fields('plugin_payments_settings');
+    if (empty($fields)) { echo '<div class="plugin-suite-card"><p>'.esc_html__('This payments page is registry-controlled and has no editable fields yet.', 'plugin-ui-suite').'</p></div>'; submit_button(__('Save payments settings', 'plugin-ui-suite')); echo '</form>'; return; }
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><table class="form-table" role="presentation">';
+    foreach ($fields as $field) {
+      $registry_id = str_replace('payments_', '', $field['id']);
+      $parts = explode('_', $registry_id, 2); $group = $parts[0] === 'gift' ? 'gift_aid' : ($parts[0] === 'fee' ? 'fee_recovery' : ($parts[0] === 'appearance' ? 'appearance' : 'general'));
+      $field_id = $field['field_id']; $value = $settings[$group][$field_id] ?? $field['default'] ?? '';
+      $name = self::OPTION_KEY.'['.$group.']['.$field_id.']'; $html = '';
+      if (($field['field_type'] ?? 'text') === 'checkbox') $html = '<label><input type="checkbox" name="'.esc_attr($name).'" value="1" '.checked($value,1,false).' /> '.esc_html($field['description'] ?? '').'</label>';
+      elseif (($field['field_type'] ?? 'text') === 'select') { $html = '<select name="'.esc_attr($name).'">'; foreach ((array)($field['options'] ?? []) as $k=>$label) $html .= '<option value="'.esc_attr($k).'" '.selected($value,$k,false).'>'.esc_html($label).'</option>'; $html .= '</select>'; }
+      elseif (($field['field_type'] ?? 'text') === 'color') $html = '<input type="color" name="'.esc_attr($name).'" value="'.esc_attr($value).'" />';
+      else $html = '<input class="regular-text" type="text" name="'.esc_attr($name).'" value="'.esc_attr($value).'" />';
+      echo '<tr><th scope="row">'.esc_html($field['label']).'</th><td>'.$html.'</td></tr>';
+    }
+    echo '</table></div></div>'; submit_button(__('Save payments settings', 'plugin-ui-suite')); echo '</form>';
+  }
+
+  private static function render_registry_provider_page($settings) {
+    echo '<form method="post" action="options.php">'; settings_fields('plugin_payments_settings'); echo '<input type="hidden" name="'.esc_attr(self::OPTION_KEY).'[active_provider]" value="'.esc_attr($settings['active_provider']).'">';
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Choose provider','plugin-ui-suite').'</h2><select name="'.esc_attr(self::OPTION_KEY).'[active_provider]" data-registry-controller="active_provider">'; foreach (self::gateway_manager()->all() as $id=>$provider) echo '<option value="'.esc_attr($id).'" '.selected($settings['active_provider'],$id,false).'>'.esc_html($provider->get_name()).'</option>'; echo '</select></div>';
+    foreach (Plugin_UI_Suite_Registry::integration_items('payment_provider') as $integration) { $id = str_replace('payment_', '', $integration['id']); if ($id !== $settings['active_provider']) continue; echo '<div class="plugin-suite-card"><h2>'.esc_html($integration['name']).'</h2><table class="form-table">'; foreach ((array)$integration['configuration_fields'] as $field=>$meta) { $type = ($meta['type'] ?? 'text') === 'password' ? 'password' : 'text'; $value = $settings['provider_settings'][$id][$field] ?? ''; echo '<tr><th>'.esc_html($meta['label'] ?? $field).'</th><td><input class="regular-text" type="'.esc_attr($type).'" name="'.esc_attr(self::OPTION_KEY).'[provider_settings]['.$id.']['.$field.']" value="'.esc_attr($value).'" /></td></tr>'; } echo '</table><p><strong>'.esc_html__('Supported features:', 'plugin-ui-suite').'</strong> '.esc_html(implode(', ', (array)$integration['supported_features'])).'</p></div>'; }
+    echo '</div>'; submit_button(__('Save provider settings', 'plugin-ui-suite')); echo '</form>';
+  }
+
   public static function render_admin_page($embedded=false) {
+    if (!$embedded && !empty($_GET['payments_section']) && self::render_registry_admin_page(sanitize_key($_GET['payments_section']))) return;
     if(!current_user_can(self::admin_capability())) return;
     $s=self::settings();
     $providers=self::gateway_manager()->all();
@@ -1101,7 +1188,7 @@ final class Plugin_Payments_Module {
     if (!$embedded) echo '<div class="wrap"><h1>'.esc_html__('Payments','plugin-ui-suite').'</h1>';
     else echo '<h2>'.esc_html__('Payments','plugin-ui-suite').'</h2>';
     $payments_tabs=['dashboard'=>'Dashboard','general'=>'General','providers'=>'Providers','widget'=>'Donation Widget','campaigns'=>'Campaign Manager','gift-aid'=>'Gift Aid','fees'=>'Cover Processing Fees','appearance'=>'Appearance','diagnostics'=>'Diagnostics','help'=>'Help'];
-    echo '<nav class="plugin-suite-subnav plugin-payments-subnav">'; foreach($payments_tabs as $tab_id=>$tab_label) echo '<a href="#payments-'.esc_attr($tab_id).'">'.esc_html($tab_label).'</a>'; echo '</nav>';
+    echo '<nav class="plugin-suite-subnav plugin-payments-subnav">'; foreach($payments_tabs as $tab_id=>$tab_label) { $url = add_query_arg(['page'=>'plugin-ui-suite-payments-'.$tab_id], admin_url('options-general.php')); echo '<a href="'.esc_url($url).'">'.esc_html($tab_label).'</a>'; } echo '</nav>';
     echo '<section id="payments-dashboard">'; self::render_dashboard($s, $providers); echo '</section>'; 
     if (isset($_GET['settings-updated'])) echo '<div class="notice notice-success is-dismissible"><p>'.esc_html__('Payments settings saved.','plugin-ui-suite').'</p></div>';
     echo '<form method="post" action="'.esc_url(admin_url('options.php')).'">';
@@ -1152,7 +1239,7 @@ final class Plugin_Payments_Module {
       echo '</table></details>';
     }
     echo '</div><p><button type="button" class="button" id="ssp-add-campaign">'.esc_html__('Add another campaign','plugin-ui-suite').'</button></p><script>document.getElementById("ssp-add-campaign").addEventListener("click",function(){var c=document.querySelector("#ssp-campaigns .ssp-campaign:last-child"),n=c.cloneNode(true),i=document.querySelectorAll("#ssp-campaigns .ssp-campaign").length;n.querySelector("summary").textContent="New campaign";n.querySelectorAll("input,textarea").forEach(function(el){el.name=el.name.replace(/\\[campaigns\\]\\[\\d+\\]/,"[campaigns]["+i+"]");if(el.type!=="color")el.value="";});n.open=true;c.parentNode.appendChild(n);});</script>';
-    echo '</section><section id="payments-gift-aid"><h2>'.esc_html__('Gift Aid','plugin-ui-suite').'</h2><table class="form-table" role="presentation"><tr><th>Enable</th><td><input type="checkbox" name="'.esc_attr($name).'[gift_aid][enabled]" value="1" '.checked($s['gift_aid']['enabled']??0,1,false).'/></td></tr><tr><th>Consent wording</th><td><input class="regular-text" name="'.esc_attr($name).'[gift_aid][wording]" value="'.esc_attr($s['gift_aid']['wording']??'').'"/></td></tr><tr><th>Declaration text</th><td><textarea class="large-text" rows="3" name="'.esc_attr($name).'[gift_aid][declaration]">'.esc_textarea($s['gift_aid']['declaration']??'').'</textarea></td></tr><tr><th>Behaviour</th><td><label><input type="checkbox" name="'.esc_attr($name).'[gift_aid][required]" value="1" '.checked($s['gift_aid']['required']??0,1,false).'/> Required</label> <label><input type="checkbox" name="'.esc_attr($name).'[gift_aid][store_declaration]" value="1" '.checked($s['gift_aid']['store_declaration']??0,1,false).'/> Store declaration</label></td></tr></table></section><section id="payments-fees"><h2>'.esc_html__('Cover Processing Fees','plugin-ui-suite').'</h2><table class="form-table" role="presentation"><tr><th>Enable</th><td><input type="checkbox" name="'.esc_attr($name).'[fee_recovery][enabled]" value="1" '.checked($s['fee_recovery']['enabled']??0,1,false).'/></td></tr><tr><th>Suggested percentage / fixed amount</th><td><input class="small-text" name="'.esc_attr($name).'[fee_recovery][percentage]" value="'.esc_attr($s['fee_recovery']['percentage']??'').'"/> <input class="small-text" name="'.esc_attr($name).'[fee_recovery][fixed]" value="'.esc_attr($s['fee_recovery']['fixed']??'').'"/></td></tr><tr><th>Custom wording</th><td><input class="regular-text" name="'.esc_attr($name).'[fee_recovery][wording]" value="'.esc_attr($s['fee_recovery']['wording']??'').'"/></td></tr></table></section>';
+    echo '</section><section id="payments-gift-aid"><h2>'.esc_html__('Gift Aid','plugin-ui-suite').'</h2><table class="form-table" role="presentation"><tr><th>Enable</th><td><input type="checkbox" name="'.esc_attr($name).'[gift_aid][enabled]" value="1" '.checked($s['gift_aid']['enabled']??0,1,false).'/></td></tr><tr><th>Consent wording</th><td><input class="regular-text" name="'.esc_attr($name).'[gift_aid][wording]" value="'.esc_attr($s['gift_aid']['wording']??'').'"/></td></tr><tr><th>Declaration text</th><td><textarea class="large-text" rows="3" name="'.esc_attr($name).'[gift_aid][declaration]">'.esc_textarea($s['gift_aid']['declaration']??'').'</textarea></td></tr><tr><th>Behaviour</th><td><label><input type="checkbox" name="'.esc_attr($name).'[gift_aid][required]" value="1" '.checked($s['gift_aid']['required']??0,1,false).'/> Required</label> <label><input type="checkbox" name="'.esc_attr($name).'[gift_aid][store_declaration]" value="1" '.checked($s['gift_aid']['store_declaration']??0,1,false).'/> Store declaration</label></td></tr></table></section><section id="payments-fees"><h2>'.esc_html__('Cover Processing Fees','plugin-ui-suite').'</h2><table class="form-table" role="presentation"><tr><th>Enable</th><td><input type="checkbox" name="'.esc_attr($name).'[fee_recovery][enabled]" value="1" '.checked($s['fee_recovery']['enabled']??0,1,false).'/></td></tr><tr><th>Who covers fees?</th><td><select name="'.esc_attr($name).'[fee_recovery][payer]"><option value="rescue" '.selected($s['fee_recovery']['payer']??'rescue','rescue',false).'>Rescue absorbs fees</option><option value="donor" '.selected($s['fee_recovery']['payer']??'rescue','donor',false).'>Donor covers fees</option></select><p class="description">Fees are calculated automatically from the active provider profile.</p></td></tr><tr><th>Advanced override</th><td><label><input type="checkbox" name="'.esc_attr($name).'[fee_recovery][override_defaults]" value="1" '.checked($s['fee_recovery']['override_defaults']??0,1,false).'/> Override provider defaults</label> <input class="small-text" placeholder="%" name="'.esc_attr($name).'[fee_recovery][percentage]" value="'.esc_attr($s['fee_recovery']['percentage']??'').'"/> <input class="small-text" placeholder="fixed" name="'.esc_attr($name).'[fee_recovery][fixed]" value="'.esc_attr($s['fee_recovery']['fixed']??'').'"/></td></tr><tr><th>Custom wording</th><td><input class="regular-text" name="'.esc_attr($name).'[fee_recovery][wording]" value="'.esc_attr($s['fee_recovery']['wording']??'').'"/></td></tr></table></section>';
     echo '<section id="payments-appearance"><h2>'.esc_html__('Appearance','plugin-ui-suite').'</h2><table class="form-table" role="presentation">';
     foreach(['primary'=>'Primary colour','background'=>'Background colour','text'=>'Text colour'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="color" name="'.esc_attr($name).'[appearance]['.esc_attr($k).']" value="'.esc_attr($s['appearance'][$k]).'"/></td></tr>';
     echo '<tr><th>Typography</th><td><input class="regular-text" name="'.esc_attr($name).'[appearance][font_family]" value="'.esc_attr($s['appearance']['font_family']??'').'"/></td></tr><tr><th>Button style</th><td><select name="'.esc_attr($name).'[appearance][button_style]"><option value="rounded" '.selected($s['appearance']['button_style']??'rounded','rounded',false).'>Rounded</option><option value="square" '.selected($s['appearance']['button_style']??'rounded','square',false).'>Square</option><option value="pill" '.selected($s['appearance']['button_style']??'rounded','pill',false).'>Pill</option></select></td></tr><tr><th>Spacing</th><td><input type="number" min="0" max="64" name="'.esc_attr($name).'[appearance][spacing]" value="'.esc_attr($s['appearance']['spacing']??16).'"/></td></tr><tr><th>Corner radius</th><td><input type="number" min="0" max="48" name="'.esc_attr($name).'[appearance][radius]" value="'.esc_attr($s['appearance']['radius']).'"/></td></tr><tr><th>Mode</th><td><select name="'.esc_attr($name).'[appearance][mode]"><option value="light" '.selected($s['appearance']['mode'],'light',false).'>Light</option><option value="dark" '.selected($s['appearance']['mode'],'dark',false).'>Dark</option></select></td></tr></table></section><section id="payments-diagnostics">';

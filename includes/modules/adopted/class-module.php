@@ -3,7 +3,7 @@
  * Plugin Name: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
  * Version: 1.1.14
- * Author: Jordan Sutton
+ * Author: Jordan Sutton | Webstax
  */
 
 if (!defined('ABSPATH')) exit;
