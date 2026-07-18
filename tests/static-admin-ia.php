@@ -9,7 +9,8 @@ function ok($cond, $msg){ global $errors; if (!$cond) $errors[] = $msg; }
 ok(substr_count($core, "'slug'=>'plugin-ui-suite'") === 1, 'Expected one suite settings admin registration.');
 ok(strpos($core, "add_submenu_page('options-general.php','Rescue Plugin Suite Updates'") === false, 'Updates submenu must not be registered.');
 ok(strpos($core, "add_submenu_page('options-general.php','Payments:") === false, 'Payments submenus must not be registered.');
-ok(strpos($core, "'data-source'=>'Data Source'") !== false, 'Data Source tab missing.');
+ok(strpos($core, "'data-source'=>'Integrations'") !== false, 'Integrations tab missing.');
+ok(strpos($core, "'registry'=>'Registry'") !== false && strpos($core, 'developer_mode_enabled') !== false, 'Registry tab must remain developer-only.');
 ok(strpos($core, "'updates'=>'Updates'") !== false, 'Updates tab missing.');
 ok(strpos($core, "'layout'=>'Layout builder','adopted'") === false, 'Standalone layout tab still registered.');
 ok(strpos($updater, "const REPO = 'JayS67/Rescue-Plugin-Suite'") !== false, 'Canonical repository constant missing or wrong.');

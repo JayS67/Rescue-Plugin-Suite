@@ -50,10 +50,14 @@ final class Plugin_UI_Suite_Registry {
     return !empty($flags['installed']) && !empty($flags['enabled']) && empty($flags['hidden']) && empty($flags['future_premium']);
   }
   public static function register_navigation($id, array $metadata) { self::register('navigation', $id, $metadata); }
+  public static function developer_mode_enabled() {
+    return (defined('WP_DEBUG') && WP_DEBUG) || (defined('PLUGIN_UI_SUITE_DEVELOPER_MODE') && PLUGIN_UI_SUITE_DEVELOPER_MODE) || (bool) apply_filters('plugin_ui_suite_developer_mode', false);
+  }
   public static function navigation_items($context='admin') {
     if (isset(self::$cache['navigation_'.$context])) return self::$cache['navigation_'.$context];
     $items = array_filter(self::all('navigation'), function($item) use ($context) {
       if (($item['context'] ?? 'admin') !== $context) return false;
+      if (($item['slug'] ?? '') === 'registry' && !Plugin_UI_Suite_Registry::developer_mode_enabled()) return false;
       $module = $item['module'] ?? '';
       return $module === '' || self::module_enabled($module);
     });
