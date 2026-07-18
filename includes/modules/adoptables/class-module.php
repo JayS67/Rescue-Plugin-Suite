@@ -179,6 +179,12 @@ final class Plugin_Adoptables_UI_Shortcode {
   }
 
   public static function get_options() {
+    // The Suite option is canonical. The preview already reaches this source
+    // through sync_legacy_options(); public requests must not depend on that
+    // admin-only mirror having been refreshed first.
+    if (class_exists('Plugin_UI_Suite_Plugin')) {
+      return Plugin_UI_Suite_Plugin::get_adoptables_render_options();
+    }
     $d = self::default_options();
     $saved = self::get_saved_options();
     if (!is_array($saved)) $saved = [];
@@ -1174,6 +1180,8 @@ final class Plugin_Adoptables_UI_Shortcode {
 
 <div id="asm-adoptables-widget"
      class="min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-xl"
+     data-asm-renderer-version="<?php echo esc_attr(PLUGIN_SUITE_VERSION); ?>"
+     data-asm-rest-url="<?php echo esc_url(rest_url('plugin/v1/adoptables')); ?>"
      style="background:var(--asm-bg); <?php echo esc_attr($vars_css); ?>">
 
   <?php
@@ -1551,6 +1559,16 @@ final class Plugin_Adoptables_UI_Shortcode {
 (function(){
   const ROOT = document.getElementById("asm-adoptables-widget");
   if(!ROOT) return;
+
+  // Keep the lifecycle visible to support staff without leaving temporary
+  // console logging on public pages. Inspect data-asm-stage on the widget to
+  // see the last completed public initialisation stage.
+  let diagnosticStage = "container-found";
+  function setDiagnosticStage(stage){
+    diagnosticStage = stage;
+    ROOT.dataset.asmStage = stage;
+  }
+  setDiagnosticStage("configuration-parsed");
 
   const LOADING_STATUS_TEXT = <?php echo wp_json_encode((string)$o['loading_status_text']); ?>;
 
@@ -2145,8 +2163,13 @@ final class Plugin_Adoptables_UI_Shortcode {
       breed_line: `<div class="asm-ad-card-pad hidden sm:block"><div class="font-semibold truncate text-xs sm:text-sm lg:text-base" style="color:#64748b;">${safeBreed}</div></div>`,
       favourite_button: ASM_WIDGET.enableFavourites && ASM_WIDGET.favouriteButtonPosition !== 'hidden' ? `<button type="button" class="asm-fav-toggle absolute z-20 inline-flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-full border-2 bg-white/95 shadow asm-fav-${escAttr(ASM_WIDGET.favouriteButtonPosition.replace('_','-'))}" style="border-color:${ASM_WIDGET.brandColor}; color:${ASM_WIDGET.brandColor};" data-favid="${safeId}" aria-pressed="${isFav ? 'true' : 'false'}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}: ${safeNameAttr}">${favouriteIconSvg(isFav, "w-3.5 h-3.5 sm:w-5 sm:h-5")}</button>` : ``
     };
-    const order = Array.isArray(ASM_WIDGET.builderCardOrder) && ASM_WIDGET.builderCardOrder.length ? ASM_WIDGET.builderCardOrder : ['image','reservation_badge','name_meta','breed_line','favourite_button'];
-    return `<div class="asm-ad-card ${displayClass} group text-left bg-white shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] focus-within:ring-4 focus-within:ring-pink-200" style="position:relative;border-style:solid;border-color:var(--asm-card-border-color);border-width:var(--asm-card-border-width);" data-animalid="${safeId}" data-animal-name="${safeNameAttr}">${order.map(key => bits[key] ?? '').join('')}<button type="button" class="asm-card-open absolute inset-0" data-animalid="${safeId}" aria-label="Open ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-modal" style="background:transparent;border:0;padding:0;margin:0;cursor:pointer;z-index:1;"></button></div>`;
+    const defaultOrder = ['image','reservation_badge','name_meta','breed_line','favourite_button'];
+    const requestedOrder = Array.isArray(ASM_WIDGET.builderCardOrder) ? ASM_WIDGET.builderCardOrder : [];
+    const order = requestedOrder.filter(key => Object.prototype.hasOwnProperty.call(bits, key));
+    // A stale legacy layout can contain only obsolete keys. Never turn that
+    // configuration into an empty clickable shell; use the supported design.
+    const cardParts = (order.length ? order : defaultOrder).map(key => bits[key] ?? '').join('');
+    return `<div class="asm-ad-card ${displayClass} group text-left bg-white shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] focus-within:ring-4 focus-within:ring-pink-200" style="position:relative;border-style:solid;border-color:var(--asm-card-border-color);border-width:var(--asm-card-border-width);" data-animalid="${safeId}" data-animal-name="${safeNameAttr}">${cardParts}<button type="button" class="asm-card-open absolute inset-0" data-animalid="${safeId}" aria-label="Open ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-modal" style="background:transparent;border:0;padding:0;margin:0;cursor:pointer;z-index:1;"></button></div>`;
   }
 
 
@@ -2205,6 +2228,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       ? slice.map(cardTemplate).join("")
       : `<div class="col-span-full rounded-2xl border-2 bg-white p-6 text-center font-semibold" style="border-color:${ASM_WIDGET.brandColor};color:#64748b;">${filtersActive ? 'No animals found matching your filters.' : 'No animals are currently available.'}</div>`;
     grid.setAttribute("aria-busy", "false");
+    setDiagnosticStage(`cards-inserted:${slice.length}:page:${pageIndex + 1}`);
 
     const text = sourceCats.length
       ? `Showing ${start + 1}-${end} of ${sourceCats.length} • Page ${pageIndex + 1}/${pageCount}`
@@ -2883,9 +2907,12 @@ final class Plugin_Adoptables_UI_Shortcode {
   }
 
   async function initAdoptables(){
+    setDiagnosticStage("dom-content-loaded");
     setLoading(true);
-    showStatus(LOADING_STATUS_TEXT);
-    ensureModalInBody();
+    try {
+      showStatus(LOADING_STATUS_TEXT);
+      setDiagnosticStage("initialising");
+      ensureModalInBody();
 
     qs("asm-prev")?.addEventListener("click", () => { pageIndex = Math.max(0, pageIndex - 1); renderPage(); });
     qs("asm-next")?.addEventListener("click", () => { pageIndex = pageIndex + 1; renderPage(); });
@@ -2934,10 +2961,12 @@ final class Plugin_Adoptables_UI_Shortcode {
       requestAnimationFrame(() => updateStableHeight());
     }, { passive: true });
 
-    try {
+      setDiagnosticStage("request-started");
       const animals = await fetchAdoptables();
+      setDiagnosticStage(`response-parsed:${animals.length}`);
       let cats = ASM_WIDGET.catsOnly ? animals.filter(isCat) : animals;
       cats.sort((a,b) => daysOnShelter(b) - daysOnShelter(a));
+      setDiagnosticStage(`animals-filtered:${cats.length}`);
 
       rawCats = cats;
       allCats = rawCats.slice();
@@ -2947,6 +2976,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       pageIndex = 0;
 
       applyFilters();
+      setDiagnosticStage(`filters-applied:${filteredCats.length}`);
 
 	      let initialDeepLinkOpened = false;
 	      const openRequestedCat = () => {
@@ -2978,10 +3008,13 @@ final class Plugin_Adoptables_UI_Shortcode {
         }
       });
     } catch (err){
-      // The error is handled here so the widget never leaves an inaccessible
-      // loading grid behind when the endpoint or response is unavailable.
+      // A failure before the request (for example, a duplicate/legacy DOM
+      // collision) must also replace the loading state. The completed stage is
+      // retained on the container for targeted support diagnostics.
+      ROOT.dataset.asmFailedStage = diagnosticStage;
+      setDiagnosticStage(`failed:${diagnosticStage}`);
       showStatus(
-        "Could not load adoptables from the proxy endpoint. Check that the Rescue Plugin Suite data proxy is active and /wp-json/plugin/v1/adoptables returns data.",
+        "Unable to load adoptable animals. Please try again later.",
         true
       );
       const grid = qs("asm-grid");
