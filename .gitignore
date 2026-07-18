@@ -1,0 +1,13 @@
+# Generated release packages and distribution archives.
+*.zip
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+
+# Local build output directories.
+build/
+dist/
+release/
+releases/
+artifacts/

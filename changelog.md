@@ -1,3 +1,14 @@
+## 14.0.34
+- Unified the WordPress admin around a single Rescue Plugin Suite settings submenu with Payments and Updates rendered as internal suite tabs.
+- Moved Payments into internal subtabs for Dashboard, General, Providers, Donation Widget, Campaigns, Gift Aid, Cover Fees, Appearance, Transactions, Reports, Diagnostics and Help, with legacy admin URL redirects.
+- Moved updater controls into the suite Updates tab, corrected the canonical GitHub repository to JayS67/Rescue-Plugin-Suite, and added update diagnostics for repository, API URL, response code, versions, selected release asset and last error.
+- Added a Data Source tab with Provider, Endpoints, Authentication, Field Mapping, Cache and Connection Test subtabs while preserving existing option keys and saved values.
+- Removed the standalone Layout Builder top-level tab and rendered layout controls beneath Adoptables, Adopted, Statistics, Match Quiz and Forms.
+- Replaced fragile inline sortable persistence with a dedicated admin sortable script that synchronises hidden fields after drag and keyboard moves, normalises order values and preserves frontend render ordering.
+- Improved Registry and wide admin table responsiveness so long identifiers, values and actions wrap instead of overlapping.
+- Removed duplicate editable settings from Global/shortcut pages, preserving read-only links and backward-compatible redirects without deleting saved options.
+- Preserved provider credentials, payment transaction data, shortcodes and existing option keys during settings IA migration.
+
 ## 14.0.32
 - Added live block editor preview controls for suite blocks.
 - Added WP-Cron webhook retries with exponential backoff and webhook delivery audit logging.
