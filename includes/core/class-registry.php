@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) exit;
 final class Plugin_UI_Suite_Registry {
   private static $cache = [];
   private static $items = [
-    'modules'=>[], 'settings'=>[], 'navigation'=>[], 'widgets'=>[], 'integrations'=>[],
+    'modules'=>[], 'settings'=>[], 'navigation'=>[], 'integrations'=>[],
     'analytics'=>[], 'permissions'=>[], 'help'=>[], 'notifications'=>[], 'assets'=>[],
     'migrations'=>[], 'updates'=>[], 'setup_steps'=>[],
   ];
