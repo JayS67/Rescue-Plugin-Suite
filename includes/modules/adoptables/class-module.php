@@ -1560,8 +1560,11 @@ final class Plugin_Adoptables_UI_Shortcode {
   const LOADING_STATUS_TEXT = <?php echo wp_json_encode((string)$o['loading_status_text']); ?>;
 
   const ASM_WIDGET = {
-    proxyBase: "/wp-json/plugin/v1/adoptables",
-    imageProxyBase: "/wp-json/plugin/v1/animal-image",
+    // Use WordPress' generated REST base rather than assuming the site is
+    // installed at the web root. The former hard-coded /wp-json URL bypassed
+    // the site prefix on subdirectory installs, leaving the grid loading.
+    proxyBase: <?php echo wp_json_encode(rest_url('plugin/v1/adoptables')); ?>,
+    imageProxyBase: <?php echo wp_json_encode(rest_url('plugin/v1/animal-image')); ?>,
     brandColor: getComputedStyle(ROOT).getPropertyValue("--asm-brand").trim() || "#ff647e",
     catsOnly: <?php echo !empty($o['cats_only']) ? 'true' : 'false'; ?>,
     showReservationLabel: <?php echo !empty($o['show_reservation_label']) ? 'true' : 'false'; ?>,
@@ -1758,6 +1761,11 @@ final class Plugin_Adoptables_UI_Shortcode {
     el.style.display = msg ? "block" : "none";
     el.textContent = msg || "";
     el.style.color = isError ? "#b91c1c" : "#64748b";
+  }
+
+  function setLoading(isLoading){
+    const grid = qs("asm-grid");
+    if (grid) grid.setAttribute("aria-busy", isLoading ? "true" : "false");
   }
 
   function safeText(v, fallback="—"){
@@ -2880,6 +2888,7 @@ final class Plugin_Adoptables_UI_Shortcode {
   }
 
   async function initAdoptables(){
+    setLoading(true);
     showStatus(LOADING_STATUS_TEXT);
     ensureModalInBody();
 
@@ -2965,32 +2974,30 @@ final class Plugin_Adoptables_UI_Shortcode {
 	        openRequestedCat();
 	      });
 
-	      const reveal = () => {
-	        requestAnimationFrame(() => {
-	          requestAnimationFrame(() => {
-	            ROOT.classList.add("asm-ready");
-	            if (!initialDeepLinkOpened) {
-	              initialDeepLinkOpened = true;
-	              openRequestedCat();
-	            }
-	          });
-	        });
-	      };
 
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(reveal).catch(reveal);
-      } else {
-        reveal();
-      }
+      requestAnimationFrame(() => {
+        ROOT.classList.add("asm-ready");
+        if (!initialDeepLinkOpened) {
+          initialDeepLinkOpened = true;
+          openRequestedCat();
+        }
+      });
     } catch (err){
-      console.error(err);
+      // The error is handled here so the widget never leaves an inaccessible
+      // loading grid behind when the endpoint or response is unavailable.
       showStatus(
         "Could not load adoptables from the proxy endpoint. Check that the Rescue Plugin Suite data proxy is active and /wp-json/plugin/v1/adoptables returns data.",
         true
       );
-      qs("asm-page-label").textContent = "Load failed.";
-      qs("asm-page-label-bottom").textContent = "Load failed.";
+      const grid = qs("asm-grid");
+      if (grid) grid.innerHTML = '<div class="col-span-full rounded-2xl border-2 bg-white p-6 text-center font-semibold" style="border-color:' + ASM_WIDGET.brandColor + ';color:#64748b;">Unable to load adoptable animals. Please try again later.</div>';
+      const pageLabel = qs("asm-page-label");
+      const pageLabelBottom = qs("asm-page-label-bottom");
+      if (pageLabel) pageLabel.textContent = "Load failed.";
+      if (pageLabelBottom) pageLabelBottom.textContent = "Load failed.";
       ROOT.classList.add("asm-ready");
+    } finally {
+      setLoading(false);
     }
   }
 
