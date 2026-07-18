@@ -21,6 +21,8 @@ final class Plugin_UI_Suite_Plugin {
     add_action('admin_notices', [__CLASS__, 'render_admin_notices']);
     add_action('admin_menu', [__CLASS__, 'admin_menu'], 20);
     add_action('admin_menu', [__CLASS__, 'remove_legacy_admin_pages'], 999);
+    add_filter('plugin_action_links', [__CLASS__, 'plugin_action_links'], 10, 2);
+    add_filter('plugin_row_meta', [__CLASS__, 'plugin_row_meta'], 10, 2);
     add_action('wp', [__CLASS__, 'maybe_disable_cache_for_suite_pages']);
     add_action('admin_post_plugin_ui_suite_save', [__CLASS__, 'handle_save']);
     add_action('admin_post_plugin_ui_suite_preview', [__CLASS__, 'render_preview']);
@@ -61,6 +63,41 @@ final class Plugin_UI_Suite_Plugin {
     self::ensure_webhook_retry_schedule();
     self::maybe_run_migrations();
     self::register_core_framework_metadata();
+  }
+
+
+  public static function plugin_file() {
+    return plugin_basename(PLUGIN_SUITE_PATH . 'plugin-ui-suite.php');
+  }
+
+  private static function admin_page_url($tab = 'global') {
+    $args = ['page' => 'plugin-ui-suite'];
+    if ($tab !== '') $args['tab'] = $tab;
+    return add_query_arg($args, admin_url('options-general.php'));
+  }
+
+  private static function help_centre_url() {
+    return self::admin_page_url('help');
+  }
+
+  private static function support_url() {
+    return self::github_url('issues/new');
+  }
+
+  public static function plugin_action_links($links, $plugin_file) {
+    if ($plugin_file !== self::plugin_file() || !current_user_can('manage_options')) return $links;
+    $action_links = [
+      'settings' => '<a href="' . esc_url(self::admin_page_url('global')) . '">' . esc_html__('Settings', 'plugin-ui-suite') . '</a>',
+      'help_centre' => '<a href="' . esc_url(self::help_centre_url()) . '">' . esc_html__('Help Centre', 'plugin-ui-suite') . '</a>',
+    ];
+    return array_merge($action_links, $links);
+  }
+
+  public static function plugin_row_meta($links, $plugin_file) {
+    if ($plugin_file !== self::plugin_file() || !current_user_can('manage_options')) return $links;
+    $links[] = '<a href="' . esc_url(self::help_centre_url()) . '">' . esc_html__('Documentation', 'plugin-ui-suite') . '</a>';
+    $links[] = '<a href="' . esc_url(self::support_url()) . '" target="_blank" rel="noopener noreferrer">' . esc_html__('Support', 'plugin-ui-suite') . '</a>';
+    return $links;
   }
 
   public static function redirect_legacy_admin_urls() {
