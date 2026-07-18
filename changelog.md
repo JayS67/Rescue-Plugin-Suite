@@ -1,11 +1,11 @@
-## 15.0.5-beta
+## 15.0.6-beta
 
 - Rebuilt the GitHub release workflow around an explicit WordPress package allow-list and immutable `rescue-plugin-suite-v*.zip` assets.
 - Restricted native updater selection to the exact version-matched release asset, added release-package diagnostics/validation, and accepted verified WordPress temporary extraction paths.
 
 - Hardened the public Adoptables initialisation lifecycle so an error at any stage, including a missing or collided public DOM element before the REST request begins, clears the loading state and shows the existing visible error state rather than leaving skeletons indefinitely.
 - Added inspectable Adoptables renderer, REST URL and lifecycle-stage data attributes to distinguish a stale cached public renderer from a current widget and to pinpoint the completed public stage without persistent console logging.
-- Bumped the suite asset version to 15.0.5-beta so versioned frontend assets are invalidated after this release.
+- Bumped the suite asset version to 15.0.6-beta so versioned frontend assets are invalidated after this release.
 - Fixed public Adoptables cards using an obsolete legacy layout order: public rendering now reads the same canonical Suite render options as the preview and falls back to the supported card-part order when obsolete keys produce no card parts.
 
 ## 15.0.4-beta

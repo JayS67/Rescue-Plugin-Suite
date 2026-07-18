@@ -23,7 +23,9 @@ ok(strpos($updater, 'zipball_url') === false && strpos($updater, 'tarball_url') 
 ok(strpos($updater, 'Release package unavailable') !== false && strpos($updater, 'assets_returned') !== false, 'Missing package diagnostics must include the expected package and returned assets.');
 ok(strpos($workflow, "tags:
       - 'v*'") !== false && strpos($workflow, 'cp plugin-ui-suite.php readme.txt changelog.md uninstall.php') !== false, 'Release workflow must build an explicit v* tagged production package.');
-ok(strpos($workflow, 'rescue-plugin-suite-${GITHUB_REF_NAME}.zip') !== false && strpos($workflow, 'gh release create') !== false, 'Release workflow must attach the tag-named custom ZIP.');
+ok(strpos($workflow, 'PACKAGE_NAME="rescue-plugin-suite-${GITHUB_REF_NAME}.zip"') !== false, 'Release workflow must define one canonical tag-named package variable.');
+ok(strpos($workflow, 'ZIP="build-rescue-plugin-suite-') === false && strpos($workflow, 'ASSET="build-rescue-plugin-suite-') === false, 'Release workflow must never add a build prefix to the public asset filename.');
+ok(strpos($workflow, '"${PACKAGE_PATH}#${PACKAGE_NAME}"') !== false && strpos($workflow, 'Verify public release asset list') !== false, 'Release workflow must upload and verify the canonical public ZIP name.');
 ok(strpos($updater, 'JordanSutton/Rescue-Plugin-Suite') === false, 'Old hard-coded repository remains.');
 ok(strpos($payments, "'payments_section'=>\$tab_id") !== false, 'Payments subtab URLs must stay inside suite page.');
 ok(strpos($core, "plugin-ui-suite-payments-") !== false && strpos($core, 'redirect_legacy_admin_urls') !== false, 'Legacy payment redirects missing.');
