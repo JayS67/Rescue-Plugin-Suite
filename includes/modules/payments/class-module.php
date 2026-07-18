@@ -1148,7 +1148,7 @@ final class Plugin_Payments_Module {
     if ($section === 'dashboard' || $section === 'reports' || $section === 'transactions') { self::render_dashboard($settings, self::gateway_manager()->all()); echo '</div>'; return true; }
     if ($section === 'diagnostics') { echo '<div class="plugin-suite-card"><h2>'.esc_html__('Diagnostics','plugin-ui-suite').'</h2><pre>'.esc_html(wp_json_encode(['providers'=>array_keys(self::gateway_manager()->all()),'version'=>PLUGIN_SUITE_VERSION,'rest'=>rest_url('plugin-payments/v1/')], JSON_PRETTY_PRINT)).'</pre></div></div>'; return true; }
     if ($section === 'help') { echo '<div class="plugin-suite-grid">'; foreach (Plugin_UI_Suite_Registry::help_items() as $guide) if (in_array('payments', (array)($guide['modules'] ?? ['payments']), true) || preg_match('/Stripe|PayPal|Square|GoCardless|SumUp|Gift Aid|Fees/i', $guide['title'] ?? '')) echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title']).'</h2><p>'.esc_html($guide['content'] ?? '').'</p></div>'; echo '</div></div>'; return true; }
-    if ($section === 'providers') self::render_registry_provider_page($settings);
+    if ($section === 'providers') { echo '<div class="plugin-suite-card"><p>'.esc_html__('Payment provider connections now live in Integrations.', 'plugin-ui-suite').'</p></div>'; }
     else self::render_registry_payment_settings_section($section, $settings);
     echo '</div>'; return true;
   }
@@ -1181,14 +1181,50 @@ final class Plugin_Payments_Module {
     echo '</div>'; submit_button(__('Save provider settings', 'plugin-ui-suite')); echo '</form>';
   }
 
+  public static function integration_provider_labels() {
+    $labels = [];
+    foreach (self::gateway_manager()->all() as $id=>$provider) $labels['payment-'.$id] = $provider->get_name();
+    return $labels;
+  }
+
+  public static function render_integration_provider_panel($integration_id) {
+    $id = str_replace('payment-', '', sanitize_key($integration_id));
+    $providers = self::gateway_manager()->all();
+    if (empty($providers[$id])) { echo '<div class="plugin-suite-card"><p>'.esc_html__('Payment provider not found.', 'plugin-ui-suite').'</p></div>'; return; }
+    $settings = self::get_settings();
+    $name = self::OPTION_KEY;
+    $provider = $providers[$id];
+    $enabled = !empty($settings['provider_settings'][$id]['enabled']);
+    $webhook = rest_url('plugin-payments/v1/'.$id.'-webhook');
+    $status = $provider->validate_configuration($settings['provider_settings'][$id] ?? []);
+    echo '<form method="post" action="options.php">'; settings_fields('plugin_payments_settings');
+    echo '<input type="hidden" name="_wp_http_referer" value="'.esc_url(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-'.$id], admin_url('options-general.php'))).'" />';
+    echo '<input type="hidden" name="'.esc_attr($name).'[active_provider]" value="'.esc_attr($settings['active_provider']).'">';
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html($provider->get_name()).' integration</h2><p class="description">Connect this payment service here. Payments only controls donation behaviour, campaigns, widget wording and reports.</p><table class="form-table" role="presentation">';
+    echo '<tr><th>'.esc_html__('Enable integration','plugin-ui-suite').'</th><td><label><input type="checkbox" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).'][enabled]" value="1" '.checked($enabled, true, false).'/> '.esc_html__('Allow this provider to take donations','plugin-ui-suite').'</label></td></tr>';
+    echo '<tr><th>'.esc_html__('Webhook URL','plugin-ui-suite').'</th><td><code>'.esc_html($webhook).'</code><p class="description">Copy this URL into the provider dashboard when webhooks are required.</p></td></tr>';
+    echo '<tr><th>'.esc_html__('Connection status','plugin-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Connected':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
+    foreach($provider->get_configuration_fields() as $key=>$f){
+      $val=$settings['provider_settings'][$id][$key]??'';
+      echo '<tr><th><label for="ssp-integration-'.esc_attr($id.'-'.$key).'">'.esc_html($f['label']).'</label></th><td>';
+      if(($f['type'] ?? 'text')==='checkbox') echo '<input id="ssp-integration-'.esc_attr($id.'-'.$key).'" type="checkbox" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="1" '.checked($val,1,false).'/>';
+      else { $display_val = ($f['type'] ?? 'text')==='password' ? '' : $val; echo '<input id="ssp-integration-'.esc_attr($id.'-'.$key).'" class="regular-text" type="'.esc_attr($f['type'] ?? 'text').'" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="'.esc_attr($display_val).'" autocomplete="off"/>'; if(($f['type'] ?? '')==='password' && $val !== '') echo '<p class="description">'.esc_html__('Saved. Leave blank to keep the existing value.','plugin-ui-suite').'</p>'; }
+      echo '</td></tr>';
+    }
+    echo '<tr><th>'.esc_html__('Provider cache','plugin-ui-suite').'</th><td><p class="description">Payment provider configuration is read from saved settings at checkout. Donation history, webhook audit and Gift Aid exports remain under Payments → Diagnostics and Reports.</p></td></tr>';
+    echo '<tr><th>'.esc_html__('Test connection','plugin-ui-suite').'</th><td><button type="button" class="button" disabled>'.esc_html__('Test connection','plugin-ui-suite').'</button><p class="description">Remote payment connection tests will use these saved credentials when gateway diagnostics are enabled.</p></td></tr>';
+    echo '<tr><th>'.esc_html__('Documentation','plugin-ui-suite').'</th><td>'.esc_html__('Open your provider dashboard documentation for API keys and webhook setup, then return here to save the connection.','plugin-ui-suite').'</td></tr>';
+    echo '</table></div></div>'; submit_button(__('Save integration', 'plugin-ui-suite')); echo '</form>';
+  }
+
   public static function render_admin_page($embedded=false) {
     if(!current_user_can(self::admin_capability())) return;
     $s=self::settings();
     $providers=self::gateway_manager()->all();
     $name=self::OPTION_KEY;
     if (!$embedded) echo '<div class="wrap"><h1>'.esc_html__('Payments','plugin-ui-suite').'</h1>';
-    else echo '<h2>'.esc_html__('Payments','plugin-ui-suite').'</h2><p class="description">Set up online donations step by step: enable payments, connect a provider, create campaigns, then test checkout before going live.</p>';
-    $payments_tabs=['dashboard'=>'Dashboard','general'=>'General','providers'=>'Providers','campaigns'=>'Campaigns','widget'=>'Donation Widget','gift-aid'=>'Gift Aid','fees'=>'Cover Fees','appearance'=>'Appearance','transactions'=>'Transactions','reports'=>'Reports','diagnostics'=>'Diagnostics','help'=>'Help'];
+    else echo '<h2>'.esc_html__('Payments','plugin-ui-suite').'</h2><p class="description">Set up donations step by step: enable donations, choose the saved provider from Integrations, create campaigns, configure the widget, then review reports before launch.</p>';
+    $payments_tabs=['dashboard'=>'Dashboard','general'=>'Donation Settings','campaigns'=>'Campaigns','widget'=>'Donation Widget','gift-aid'=>'Gift Aid','fees'=>'Cover Fees','appearance'=>'Appearance','transactions'=>'Transactions','reports'=>'Reports','diagnostics'=>'Diagnostics','help'=>'Help'];
     $current_section = sanitize_key($_GET['payments_section'] ?? 'dashboard'); if (!isset($payments_tabs[$current_section])) $current_section='dashboard';
     echo '<nav class="plugin-suite-subnav plugin-payments-subnav">'; foreach($payments_tabs as $tab_id=>$tab_label) { $url = add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$tab_id], admin_url('options-general.php')); echo '<a class="'.($current_section===$tab_id?'active':'').'" href="'.esc_url($url).'">'.esc_html($tab_label).'</a>'; } echo '</nav>';
     echo '<style>.plugin-payments-section{display:none}.plugin-payments-section.active{display:block}</style>';
@@ -1196,26 +1232,10 @@ final class Plugin_Payments_Module {
     if (isset($_GET['settings-updated'])) echo '<div class="notice notice-success is-dismissible"><p>'.esc_html__('Payments settings saved.','plugin-ui-suite').'</p></div>';
     echo '<form method="post" action="'.esc_url(admin_url('options.php')).'">';
     settings_fields('plugin_payments_settings'); echo '<input type="hidden" name="_wp_http_referer" value="'.esc_url(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$current_section], admin_url('options-general.php'))).'" />';
-    echo '<section class="plugin-payments-section '.($current_section==='general'?'active':'').'" id="payments-general"><h2>'.esc_html__('General','plugin-ui-suite').'</h2><p class="description">Turn donations on, choose test or live mode, set currency and pick the provider used by the donation widget.</p><table class="form-table" role="presentation">';
+    echo '<section class="plugin-payments-section '.($current_section==='general'?'active':'').'" id="payments-general"><h2>'.esc_html__('General','plugin-ui-suite').'</h2><p class="description">Turn donations on, choose test or live mode, set currency and pick which already-connected integration the donation widget should use.</p><table class="form-table" role="presentation">';
     foreach(['enabled'=>'Enable payments','test_mode'=>'Test mode','live_mode'=>'Live mode'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="checkbox" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="1" '.checked($s['general'][$k]??0,1,false).'/></td></tr>';
-    echo '<tr><th>'.esc_html__('Currency','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[general][currency]" value="'.esc_attr($s['general']['currency']).'"/></td></tr><tr><th>'.esc_html__('Default provider','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[active_provider]">'; foreach($providers as $id=>$p) echo '<option value="'.esc_attr($id).'" '.selected($s['active_provider'],$id,false).'>'.esc_html($p->get_name()).'</option>'; echo '</select><p class="description">Choose which provider the donation widget uses by default.</p></td></tr></table></section>';
-    echo '<section class="plugin-payments-section '.($current_section==='providers'?'active':'').'" id="payments-providers"><h2>'.esc_html__('Providers','plugin-ui-suite').'</h2><p>'.esc_html__('Connect Stripe, PayPal, Square, GoCardless or SumUp. Enable one provider, paste the credentials from that provider dashboard, save, then check Diagnostics for webhook and checkout issues.','plugin-ui-suite').'</p>';
-    foreach($providers as $id=>$p){
-      $enabled=!empty($s['provider_settings'][$id]['enabled']); $webhook=rest_url('plugin-payments/v1/'.$id.'-webhook');
-      echo '<div class="plugin-suite-card ssp-provider-card"><h3><label><input type="checkbox" class="ssp-provider-enabled" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).'][enabled]" value="1" '.checked($enabled, true, false).'/> '.esc_html($p->get_name()).'</label></h3><div class="ssp-provider-fields" data-provider="'.esc_attr($id).'"><table class="form-table" role="presentation">';
-      echo '<tr><th>'.esc_html__('Webhook URL','plugin-ui-suite').'</th><td><code>'.esc_html($webhook).'</code></td></tr><tr><th>'.esc_html__('Webhook status','plugin-ui-suite').'</th><td>'.esc_html__('Waiting for verified webhook event','plugin-ui-suite').'</td></tr>';
-      $status=$p->validate_configuration($s['provider_settings'][$id]??[]);
-      echo '<tr><th>'.esc_html__('Connection status','plugin-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Connected':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
-      foreach($p->get_configuration_fields() as $key=>$f){
-        $val=$s['provider_settings'][$id][$key]??'';
-        echo '<tr><th><label for="ssp-'.esc_attr($id.'-'.$key).'">'.esc_html($f['label']).'</label></th><td>';
-        if($f['type']==='checkbox') echo '<input id="ssp-'.esc_attr($id.'-'.$key).'" type="checkbox" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="1" '.checked($val,1,false).'/>';
-        else { $display_val = $f['type']==='password' ? '' : $val; echo '<input id="ssp-'.esc_attr($id.'-'.$key).'" class="regular-text" type="'.esc_attr($f['type']).'" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="'.esc_attr($display_val).'" autocomplete="off"/>'; if($f['type']==='password' && $val !== '') echo '<p class="description">'.esc_html__('Saved. Leave blank to keep the existing value.','plugin-ui-suite').'</p>'; }
-        echo '</td></tr>';
-      }
-      echo '<tr><th>'.esc_html__('Test Connection','plugin-ui-suite').'</th><td><button type="button" class="button" disabled>'.esc_html__('Test Connection','plugin-ui-suite').'</button><p class="description">'.esc_html__('Connection tests use the saved credentials and will be enabled when remote diagnostics are connected.','plugin-ui-suite').'</p></td></tr>';
-      echo '</table></div></div>';
-    }
+    echo '<tr><th>'.esc_html__('Currency','plugin-ui-suite').'</th><td><input class="small-text" name="'.esc_attr($name).'[general][currency]" value="'.esc_attr($s['general']['currency']).'"/></td></tr><tr><th>'.esc_html__('Donation provider','plugin-ui-suite').'</th><td><select name="'.esc_attr($name).'[active_provider]">'; foreach($providers as $id=>$p) echo '<option value="'.esc_attr($id).'" '.selected($s['active_provider'],$id,false).'>'.esc_html($p->get_name()).'</option>'; echo '</select><p class="description">Choose from providers connected in Integrations. Credentials and webhooks are no longer managed on the Payments page.</p></td></tr></table></section>';
+    if ($current_section === 'providers') $current_section = 'general';
     echo '</section><section class="plugin-payments-section '.($current_section==='widget'?'active':'').'" id="payments-widget"><h2>'.esc_html__('Donation Widget','plugin-ui-suite').'</h2><table class="form-table" role="presentation">';
     foreach(['enable_campaigns'=>'Enable campaigns'] as $k=>$label) echo '<tr><th>'.esc_html($label).'</th><td><input type="checkbox" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="1" '.checked($s['general'][$k],1,false).'/></td></tr>';
     foreach(['title','subtitle','intro_text','success_url','cancel_url','button_text','thank_you_message','learn_more_url'] as $k) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$k))).'</th><td><input class="regular-text" name="'.esc_attr($name).'[general]['.esc_attr($k).']" value="'.esc_attr($s['general'][$k]).'"/></td></tr>';
@@ -1254,7 +1274,7 @@ final class Plugin_Payments_Module {
     echo '</tbody></table>';
     submit_button('Save Payments Settings');
     echo '<h2>'.esc_html__('Diagnostics','plugin-ui-suite').'</h2><table class="widefat striped"><tbody><tr><th>Registered payment providers</th><td>'.esc_html(implode(', ', array_keys($providers))).'</td></tr><tr><th>Plugin version</th><td>'.esc_html(PLUGIN_SUITE_VERSION).'</td></tr><tr><th>REST endpoint status</th><td>'.esc_html(rest_url('plugin-payments/v1/')).'</td></tr><tr><th>Last payment</th><td>'.esc_html(wp_json_encode(array_slice((array)get_option(self::PAYMENT_EVENTS_KEY, []), -1))).'</td></tr><tr><th>Last webhook received</th><td>'.esc_html(wp_json_encode(array_slice((array)get_option(self::WEBHOOK_EVENTS_KEY, []), -1))).'</td></tr><tr><th>Debug log</th><td><pre>'.esc_html(wp_json_encode(array_slice((array)get_option(self::AUDIT_KEY, []), -10), JSON_PRETTY_PRINT)).'</pre></td></tr></tbody></table></section>';
-    echo '</section><section class="plugin-payments-section '.($current_section==='help'?'active':'').'" id="payments-help"><h2>'.esc_html__('Help','plugin-ui-suite').'</h2><p>'.esc_html__('Use General for payment behaviour, Providers for account connections, Donation Widget for public form text and amounts, Campaign Manager for campaign details, and Diagnostics for payment records and troubleshooting.','plugin-ui-suite').'</p></section>';
+    echo '</section><section class="plugin-payments-section '.($current_section==='help'?'active':'').'" id="payments-help"><h2>'.esc_html__('Help','plugin-ui-suite').'</h2><p>'.esc_html__('Use Donation Settings for payment behaviour, Integrations for provider account connections, Donation Widget for public form text and amounts, Campaigns for appeal details, and Diagnostics for donation records and troubleshooting.','plugin-ui-suite').'</p></section>';
     echo '</form><hr/><h2>'.esc_html__('Preview','plugin-ui-suite').'</h2><p class="description">'.esc_html__('This preview renders the saved donation widget exactly as WordPress will render it from the shortcode.','plugin-ui-suite').'</p><div class="ssp-payments-preview">'.self::render_shortcode().'</div>';
     if (!$embedded) echo '</div>';
     echo '<script>document.querySelectorAll("input[name=\"'.esc_js($name).'[active_provider]\"]").forEach(function(r){function u(){var c=document.querySelector("input[name=\"'.esc_js($name).'[active_provider]\"]:checked");document.querySelectorAll(".ssp-provider-fields").forEach(function(e){var card=e.closest(".ssp-provider-card"),enabled=card&&card.querySelector(".ssp-provider-enabled")&&card.querySelector(".ssp-provider-enabled").checked;e.style.display=enabled?"block":"none"})}r.addEventListener("change",u);document.querySelectorAll(".ssp-provider-enabled").forEach(function(c){c.addEventListener("change",u);});u();});</script>';

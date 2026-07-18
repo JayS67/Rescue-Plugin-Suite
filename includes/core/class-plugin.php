@@ -70,9 +70,20 @@ final class Plugin_UI_Suite_Plugin {
     }
     if (strpos($page, 'plugin-ui-suite-payments-') === 0) {
       $section = substr($page, strlen('plugin-ui-suite-payments-'));
-      $allowed = ['dashboard','general','providers','widget','campaigns','gift-aid','fees','appearance','transactions','reports','diagnostics','help'];
+      if ($section === 'providers') {
+        wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('options-general.php'))); exit;
+      }
+      $allowed = ['dashboard','general','widget','campaigns','gift-aid','fees','appearance','transactions','reports','diagnostics','help'];
       if (!in_array($section, $allowed, true)) $section = 'dashboard';
       wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$section], admin_url('options-general.php'))); exit;
+    }
+    if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'payments' && !empty($_GET['payments_section']) && sanitize_key(wp_unslash($_GET['payments_section'])) === 'providers') {
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('options-general.php'))); exit;
+    }
+    if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'data-source' && !empty($_GET['subtab'])) {
+      $legacy_subtab = sanitize_key(wp_unslash($_GET['subtab']));
+      $map = ['provider'=>'asm','endpoints'=>'custom-api','authentication'=>'custom-api','field-mapping'=>'custom-api','cache'=>'asm','connection-test'=>'asm'];
+      if (isset($map[$legacy_subtab])) { wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>$map[$legacy_subtab]], admin_url('options-general.php'))); exit; }
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'layout') {
       wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'adoptables','subtab'=>'layout'], admin_url('options-general.php'))); exit;
@@ -95,12 +106,12 @@ final class Plugin_UI_Suite_Plugin {
     if (!class_exists('Plugin_UI_Suite_Registry')) return;
     foreach ([
       'global'=>['name'=>'General','description'=>'Shared site-wide display, cache and housekeeping settings.','icon'=>'admin-generic'],
-      'proxy'=>['name'=>'API & Advanced','description'=>'Rescue management systems, data source and API connection settings.','icon'=>'admin-site-alt3'],
+      'proxy'=>['name'=>'Developer Tools','description'=>'Developer-only proxy, registry and diagnostics tools.','icon'=>'admin-tools','flags'=>['hidden'=>!Plugin_UI_Suite_Registry::developer_mode_enabled()]],
       'adoptables'=>['name'=>'Adoptables','description'=>'Public adoptable animal widget and layout settings.','icon'=>'pets'],
       'adopted'=>['name'=>'Adopted','description'=>'Happy endings widget and layout settings.','icon'=>'heart'],
       'stats'=>['name'=>'Statistics','description'=>'Impact statistics widget settings.','icon'=>'chart-bar'],
       'forms'=>['name'=>'Forms','description'=>'Application and enquiry form routing.','icon'=>'feedback'],
-      'payments'=>['name'=>'Payments','description'=>'Donation providers, widget, campaigns, Gift Aid and reporting.','icon'=>'money-alt'],
+      'payments'=>['name'=>'Payments','description'=>'Donation behaviour, widget, campaigns, Gift Aid and reporting.','icon'=>'money-alt'],
     ] as $id=>$module) Plugin_UI_Suite_Registry::register_module($id, $module);
     foreach (self::default_settings() as $module=>$fields) {
       if (!is_array($fields)) continue;
@@ -116,20 +127,20 @@ final class Plugin_UI_Suite_Plugin {
     }
     foreach (['Donation Widget','Adoptables','Adopted','Statistics','Forms','Match Quiz'] as $panel) Plugin_UI_Suite_Registry::register('analytics', sanitize_title($panel), ['title'=>$panel,'module'=>sanitize_title($panel)]);
     foreach ([
-      'Stripe'=>['url'=>'https://docs.stripe.com/keys','content'=>'Go to Stripe Dashboard → Developers → API keys. Copy the publishable key and secret key. Paste them into Payments → Providers → Stripe, save, then use Diagnostics to confirm the connection. If a payment fails, check test mode and webhook signing secret first.'],
-      'PayPal'=>['url'=>'https://developer.paypal.com/dashboard/applications/live','content'=>'Go to PayPal Developer Dashboard → Apps & Credentials. Create or open an app. Copy the Client ID and Secret. Paste them into Payments → Providers → PayPal, save, then make a small sandbox test donation.'],
-      'Square'=>['url'=>'https://developer.squareup.com/apps','content'=>'Go to Square Developer → Applications. Copy the Application ID, Access Token and Location ID. Paste them into Payments → Providers → Square. Use sandbox mode until your checkout has been tested.'],
-      'GoCardless'=>['url'=>'https://manage.gocardless.com/developers/access-tokens','content'=>'Go to GoCardless Dashboard → Developers → Access tokens. Create an access token, paste it into Payments → Providers → GoCardless, then test a Direct Debit flow before enabling live donations.'],
-      'SumUp'=>['url'=>'https://developer.sumup.com/','content'=>'Go to SumUp developer settings and copy the merchant/API details supplied for your account. Paste them into Payments → Providers → SumUp and test with a small payment link before launch.'],
-      'ASM'=>['url'=>'https://sheltermanager.com/site/en_asm3_help.html','content'=>'Use API & Advanced for Animal Shelter Manager. Enter the ASM service URL, account, username and password together. Save, then click Test connection. If animals do not load, confirm the account name and user permissions in ASM.'],
-      'Other supported rescue systems'=>['url'=>'','content'=>'Choose the matching rescue platform under API & Advanced. Only fill in the fields shown for that platform. If your platform uses hosted application forms, paste the hosted form link rather than expecting the suite to collect answers directly.'],
+      'Stripe'=>['url'=>'https://docs.stripe.com/keys','content'=>'Go to Stripe Dashboard → Developers → API keys. Copy the publishable key and secret key. Paste them into Integrations → Stripe, save, then use Diagnostics to confirm the connection. If a payment fails, check test mode and webhook signing secret first.'],
+      'PayPal'=>['url'=>'https://developer.paypal.com/dashboard/applications/live','content'=>'Go to PayPal Developer Dashboard → Apps & Credentials. Create or open an app. Copy the Client ID and Secret. Paste them into Integrations → PayPal, save, then make a small sandbox test donation.'],
+      'Square'=>['url'=>'https://developer.squareup.com/apps','content'=>'Go to Square Developer → Applications. Copy the Application ID, Access Token and Location ID. Paste them into Integrations → Square. Use sandbox mode until your checkout has been tested.'],
+      'GoCardless'=>['url'=>'https://manage.gocardless.com/developers/access-tokens','content'=>'Go to GoCardless Dashboard → Developers → Access tokens. Create an access token, paste it into Integrations → GoCardless, then test a Direct Debit flow before enabling live donations.'],
+      'SumUp'=>['url'=>'https://developer.sumup.com/','content'=>'Go to SumUp developer settings and copy the merchant/API details supplied for your account. Paste them into Integrations → SumUp and test with a small payment link before launch.'],
+      'ASM'=>['url'=>'https://sheltermanager.com/site/en_asm3_help.html','content'=>'Use Integrations → ASM. Enter the ASM service URL, account, username and password together. Save, then click Test connection. If animals do not load, confirm the account name and user permissions in ASM.'],
+      'Other supported rescue systems'=>['url'=>'','content'=>'Choose the matching rescue platform under Integrations. Only fill in the fields shown for that platform. If your platform uses hosted application forms, paste the hosted form link rather than expecting the suite to collect answers directly.'],
     ] as $guide=>$data) Plugin_UI_Suite_Registry::register('help', sanitize_title($guide), ['title'=>$guide,'keywords'=>[$guide,'setup','test','troubleshoot'],'external_url'=>$data['url'],'content'=>$data['content']]);
     foreach ([
       'organisation'=>'Tell the suite who you are and which rescue details appear in public widgets.',
       'website'=>'Add the pages where visitors will adopt, donate, read stories and contact you.',
       'rescue-management'=>'Choose your animal management platform and keep credentials beside that platform.',
       'integrations'=>'Connect ASM, custom APIs or other supported systems in one place.',
-      'payment-provider'=>'Choose Stripe, PayPal, Square, GoCardless or SumUp and test before going live.',
+      'payment-provider'=>'Connect Stripe, PayPal, Square, GoCardless or SumUp in Integrations, then choose the default donation provider in Payments.',
       'campaigns'=>'Create your first appeal so donations can be tracked clearly.',
       'donation-widget'=>'Set the public donation wording, amounts and thank-you path.',
       'forms'=>'Add application or enquiry forms and explain platform limitations.',
@@ -138,7 +149,8 @@ final class Plugin_UI_Suite_Plugin {
       'updates'=>'Check the installed version and choose whether automatic updates are enabled.',
       'finished'=>'Review the checklist and save your setup.',
     ] as $i=>$description) Plugin_UI_Suite_Registry::register('setup_steps', $i, ['module'=>'global','title'=>ucwords(str_replace('-',' ', $i)),'description'=>$description,'order'=>count(Plugin_UI_Suite_Registry::all('setup_steps'))+1]);
-    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','stats'=>'Statistics','widgets'=>'Widgets','payments'=>'Payments','quiz'=>'Match quiz','forms'=>'Forms','proxy'=>'API & Advanced','diagnostics'=>'Diagnostics','registry'=>'Registry','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['registry','data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Happy Endings','stats'=>'Statistics','widgets'=>'Widgets','payments'=>'Donations','quiz'=>'Match Quiz','forms'=>'Forms','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    if (Plugin_UI_Suite_Registry::developer_mode_enabled()) foreach (['proxy'=>'Developer Tools','diagnostics'=>'Advanced Diagnostics','registry'=>'Registry'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>'global','order'=>90 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
     Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'order'=>10]);
   }
 
@@ -1260,7 +1272,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) return;
     $settings = self::get_settings();
     $tab = sanitize_key($_GET['tab'] ?? 'global');
-    if ($tab === 'registry' && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
+    if (in_array($tab, ['registry','proxy','diagnostics'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
     if (!in_array($tab,['global','data-source','adoptables','adopted','stats','widgets','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
     echo '<div class="wrap"><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue widgets, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
@@ -1292,7 +1304,7 @@ final class Plugin_UI_Suite_Plugin {
     echo '<div class="plugin-suite-grid">';
 
     self::form_start('global');
-    echo '<div class="plugin-suite-card"><h2>General settings</h2><p class="description">Use this page for site-wide behaviour, cache settings, public page links, branding, import/export and safe reset tools.</p><table class="form-table">';
+    echo '<div class="plugin-suite-card"><h2>General settings</h2><p class="description">Use this page for organisation-wide behaviour, shared styling, public page links, plugin-wide cache, import/export and safe reset tools. Service connections now live in Integrations.</p><table class="form-table">';
     ob_start(); self::select_input('global','style_behavior',$s['global']['style_behavior'], ['original_ui_defaults'=>'Original UI defaults first','global_style_first'=>'Global style first']); self::row('UI style behaviour', ob_get_clean());
     foreach ([['cache_adoptables_seconds','Adoptables cache seconds'],['cache_adopted_seconds','Adopted cache seconds'],['cache_stats_seconds','Statistics cache seconds']] as $r){ ob_start(); self::number_input('global',$r[0],$s['global'][$r[0]],0,600); self::row($r[1], ob_get_clean()); }
     ob_start(); self::checkbox_input('global','bypass_plugin_cache',$s['global']['bypass_plugin_cache'] ?? 0,'Bypass suite transients and request fresh API data'); self::row('Cache bypass', ob_get_clean() . '<p class="description">When enabled, adoptables, adopted animals, statistics and SEO profile feeds skip the plugin cache. This may increase requests to your configured API.</p>');
@@ -1330,16 +1342,37 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function render_data_source_tab($s) {
+    $sub = sanitize_key($_GET['subtab'] ?? 'asm');
+    $items = ['asm'=>'ASM','shelterluv'=>'Shelterluv','petpoint'=>'PetPoint','custom-api'=>'Custom API'];
+    if (class_exists('Plugin_Payments_Module')) foreach (Plugin_Payments_Module::integration_provider_labels() as $id=>$label) $items[$id] = $label;
+    $sub = self::subtab_nav('data-source', $items);
+    if (!isset($items[$sub])) $sub = 'asm';
+    echo '<div class="plugin-suite-note"><strong>One service, one page.</strong> Each integration contains its credentials, authentication, endpoints or webhook URL, mapping notes, cache behaviour, status, diagnostics and documentation links. Existing option keys are preserved for backwards compatibility.</div>';
+    $payment_labels = class_exists('Plugin_Payments_Module') ? Plugin_Payments_Module::integration_provider_labels() : [];
+    if (isset($payment_labels[$sub])) { Plugin_Payments_Module::render_integration_provider_panel($sub); return; }
+
     self::form_start('data-source');
-    $sub = self::subtab_nav('data-source', ['provider'=>'Provider','endpoints'=>'Endpoints','authentication'=>'Authentication','field-mapping'=>'Field Mapping','cache'=>'Cache','connection-test'=>'Connection Test']);
     echo '<div class="plugin-suite-grid">';
-    if ($sub === 'provider') { echo '<div class="plugin-suite-card"><h2>Connected rescue system</h2><p class="description">Choose where animal and statistics data comes from. Most rescues only need to choose one system and complete the fields for that system.</p><table class="form-table">'; ob_start(); self::select_input('global','data_source',$s['global']['data_source'] ?? 'asm', ['asm'=>'Animal Shelter Manager (ASM)','custom_api'=>'Custom API','shelterluv'=>'Shelterluv','petpoint'=>'PetPoint']); self::row('Live source', ob_get_clean()); ob_start(); self::select_input('global','provider_profile',$s['global']['provider_profile'] ?? '', array_map(function($v){ return $v['label']; }, self::provider_profile_templates())); self::row('Provider template', ob_get_clean()); ob_start(); self::checkbox_input('global','preview_mode',$s['global']['preview_mode'] ?? 0,'Allow admins to preview another source with ?asm_suite_source=custom_api, shelterluv, petpoint or asm'); self::row('Safe preview mode', ob_get_clean()); echo '</table></div>'; }
-    elseif ($sub === 'endpoints') { echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>API endpoints</h2><p class="description">Only edit these URLs if your rescue platform or developer has supplied them. Leave unused providers blank.</p><table class="form-table">'; self::row('Custom API base URL', '<input type="url" name="suite[global][custom_api_url]" value="' . esc_attr($s['global']['custom_api_url'] ?? '') . '" class="regular-text code" placeholder="https://example.org/api" />'); foreach (['custom_api_adoptables_url'=>'Adoptables endpoint','custom_api_adoptions_url'=>'Adoptions endpoint','custom_api_report_url'=>'Report endpoint','custom_api_incare_url'=>'In-care endpoint','custom_api_image_url'=>'Image endpoint','shelterluv_adoptables_url'=>'Shelterluv adoptables','shelterluv_adoptions_url'=>'Shelterluv adoptions','shelterluv_report_url'=>'Shelterluv report','shelterluv_incare_url'=>'Shelterluv in-care','shelterluv_image_url'=>'Shelterluv image','petpoint_adoptables_url'=>'PetPoint adoptables','petpoint_adoptions_url'=>'PetPoint adoptions','petpoint_report_url'=>'PetPoint report','petpoint_incare_url'=>'PetPoint in-care','petpoint_image_url'=>'PetPoint image'] as $key=>$label) self::row($label, '<input type="url" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />'); echo '</table></div>'; }
-    elseif ($sub === 'authentication') { echo '<div class="plugin-suite-card"><h2>Login and API details</h2><p class="description">Copy credentials exactly from your rescue system. Password fields are stored securely by WordPress and can be left unchanged when saved.</p><table class="form-table">'; self::row('Auth header', '<input type="text" name="suite[global][custom_api_auth_header]" value="' . esc_attr($s['global']['custom_api_auth_header'] ?? 'X-API-Key') . '" class="regular-text" />'); self::row('Custom API key', '<input type="password" name="suite[global][custom_api_key]" value="' . esc_attr($s['global']['custom_api_key'] ?? '') . '" class="regular-text" autocomplete="new-password" />'); foreach (['shelterluv_api_key'=>'Shelterluv API key','shelterluv_base_url'=>'Shelterluv base URL','shelterluv_org_id'=>'Shelterluv org ID','petpoint_username'=>'PetPoint username','petpoint_password'=>'PetPoint password','petpoint_base_url'=>'PetPoint base URL','petpoint_shelter_id'=>'PetPoint shelter ID','petpoint_adopted_report_id'=>'PetPoint adopted report ID'] as $key=>$label) self::row($label, '<input type="'.($key==='petpoint_password'?'password':'text').'" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text" />'); echo '</table></div>'; }
-    elseif ($sub === 'field-mapping') { echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Field mapping</h2><p class="description">Advanced: maps fields from a custom or supported API into the names used by the public widgets.</p><textarea name="suite[global][field_map]" rows="10" class="large-text code">' . esc_textarea($s['global']['field_map'] ?: (self::provider_profile_templates()[$s['global']['provider_profile'] ?? '']['map'] ?? '')) . '</textarea></div>'; }
-    elseif ($sub === 'cache') { echo '<div class="plugin-suite-card"><h2>API cache</h2><table class="form-table">'; foreach ([['cache_adoptables_seconds','Adoptables cache seconds'],['cache_adopted_seconds','Adopted cache seconds'],['cache_stats_seconds','Statistics cache seconds']] as $r){ ob_start(); self::number_input('global',$r[0],$s['global'][$r[0]],0,600); self::row($r[1], ob_get_clean()); } ob_start(); self::checkbox_input('global','bypass_plugin_cache',$s['global']['bypass_plugin_cache'] ?? 0,'Bypass suite transients and request fresh API data'); self::row('Cache bypass', ob_get_clean()); echo '</table></div>'; }
-    else { echo '<div class="plugin-suite-card"><h2>Connection test</h2><p>Use Diagnostics for saved endpoint checks. This tab keeps integration settings in one location without changing option keys.</p></div>'; }
-    echo '</div>'; self::form_end();
+    echo '<div class="plugin-suite-card"><h2>'.esc_html($items[$sub]).' integration</h2><p class="description">Complete the details supplied by this service, save, then use Diagnostics to confirm the connection. Leave optional endpoint overrides blank unless your provider or developer supplied them.</p><table class="form-table">';
+    ob_start(); self::select_input('global','data_source',$s['global']['data_source'] ?? 'asm', ['asm'=>'Animal Shelter Manager (ASM)','custom_api'=>'Custom API','shelterluv'=>'Shelterluv','petpoint'=>'PetPoint']); self::row('Use as live animal source', ob_get_clean());
+    if ($sub === 'asm') {
+      self::row('Credentials', '<p class="description">ASM service URL, account, username and password are read from the existing ASM proxy constants/settings. Use Developer Tools only when a developer needs raw proxy checks.</p>');
+      self::row('Documentation', '<a href="https://sheltermanager.com/site/en_asm3_help.html" target="_blank" rel="noopener">ASM API documentation</a>');
+    } elseif ($sub === 'shelterluv') {
+      foreach (['shelterluv_api_key'=>'API key','shelterluv_base_url'=>'Base URL','shelterluv_org_id'=>'Organisation ID','shelterluv_statuses'=>'Statuses','shelterluv_location_ids'=>'Location IDs','shelterluv_animal_type'=>'Animal type'] as $key=>$label) self::row($label, '<input type="'.($key==='shelterluv_api_key'?'password':'text').'" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text" />');
+      foreach (['shelterluv_adoptables_url'=>'Adoptables endpoint','shelterluv_adoptions_url'=>'Adoptions endpoint','shelterluv_report_url'=>'Report endpoint','shelterluv_incare_url'=>'In-care endpoint','shelterluv_image_url'=>'Image endpoint'] as $key=>$label) self::row($label, '<input type="url" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />');
+    } elseif ($sub === 'petpoint') {
+      foreach (['petpoint_username'=>'Username','petpoint_password'=>'Password','petpoint_base_url'=>'Base URL','petpoint_shelter_id'=>'Shelter ID','petpoint_location_ids'=>'Location IDs','petpoint_species_id'=>'Species ID','petpoint_statuses'=>'Statuses','petpoint_adopted_report_id'=>'Adopted report ID'] as $key=>$label) self::row($label, '<input type="'.($key==='petpoint_password'?'password':'text').'" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text" />');
+      foreach (['petpoint_adoptables_url'=>'Adoptables endpoint','petpoint_adoptions_url'=>'Adoptions endpoint','petpoint_report_url'=>'Report endpoint','petpoint_incare_url'=>'In-care endpoint','petpoint_image_url'=>'Image endpoint'] as $key=>$label) self::row($label, '<input type="url" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />');
+    } else {
+      foreach (['custom_api_url'=>'Base URL','custom_api_auth_header'=>'Authentication header','custom_api_key'=>'API key'] as $key=>$label) self::row($label, '<input type="'.($key==='custom_api_key'?'password':($key==='custom_api_url'?'url':'text')).'" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />');
+      foreach (['custom_api_adoptables_url'=>'Adoptables endpoint','custom_api_adoptions_url'=>'Adoptions endpoint','custom_api_report_url'=>'Report endpoint','custom_api_incare_url'=>'In-care endpoint','custom_api_image_url'=>'Image endpoint'] as $key=>$label) self::row($label, '<input type="url" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />');
+    }
+    ob_start(); self::select_input('global','provider_profile',$s['global']['provider_profile'] ?? '', array_map(function($v){ return $v['label']; }, self::provider_profile_templates())); self::row('Field mapping template', ob_get_clean());
+    self::row('Field mapping', '<textarea name="suite[global][field_map]" rows="6" class="large-text code">' . esc_textarea($s['global']['field_map'] ?: (self::provider_profile_templates()[$s['global']['provider_profile'] ?? '']['map'] ?? '')) . '</textarea>');
+    self::row('Provider cache', '<p class="description">Animal and statistics feed cache times are plugin-wide so widgets stay consistent. Change them in General → General settings. Provider cache can be bypassed from there when testing.</p>');
+    self::row('Status and health', '<strong>'.esc_html(($s['global']['data_source'] ?? 'asm') === str_replace('-', '_', $sub) ? 'Selected as live source' : 'Configured but not selected').'</strong><p class="description">Use Advanced Diagnostics in developer mode for raw endpoint payloads.</p>');
+    echo '</table></div></div>'; self::form_end();
   }
 
   private static function subtab_nav($tab, $items) {
