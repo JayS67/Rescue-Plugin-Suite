@@ -20,6 +20,9 @@ ok(strpos($core, "'layout'=>'Layout builder','adopted'") === false, 'Standalone 
 ok(strpos($updater, "const REPO = 'JayS67/Rescue-Plugin-Suite'") !== false, 'Canonical repository constant missing or wrong.');
 ok(strpos($updater, 'expected_asset_name') !== false && strpos($updater, "'rescue-plugin-suite-v' . self::normalize_version") !== false, 'Updater must calculate the exact custom WordPress package name.');
 ok(strpos($updater, 'zipball_url') === false && strpos($updater, 'tarball_url') === false, 'Updater must never fall back to GitHub source archives.');
+ok(strpos($updater, "add_filter('pre_site_transient_update_plugins'") !== false && strpos($updater, 'serve_native_update_transient') !== false, 'Updater must supply the native response when WordPress reads update_plugins.');
+ok(strpos($updater, "'id'=>'github.com/'.self::repository()") !== false && strpos($updater, "'plugin'=>self::plugin_file()") !== false, 'Native response must use the GitHub id and active plugin basename.');
+ok(strpos($updater, 'before_update_now_url') !== false && strpos($updater, 'Update metadata has not been registered with WordPress.') !== false, 'Update Now must depend on native transient metadata and refresh must report missing metadata.');
 ok(strpos($updater, 'Release package unavailable') !== false && strpos($updater, 'assets_returned') !== false, 'Missing package diagnostics must include the expected package and returned assets.');
 ok(strpos($workflow, "tags:
       - 'v*'") !== false && strpos($workflow, 'cp plugin-ui-suite.php readme.txt changelog.md uninstall.php') !== false, 'Release workflow must build an explicit v* tagged production package.');
