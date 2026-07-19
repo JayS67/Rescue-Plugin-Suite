@@ -20,6 +20,8 @@ final class Plugin_UI_Suite_Updater {
   /** Request-local update context. It is deliberately never used to load replacement code. */
   private static $update_context = [];
   private static $shutdown_registered = false;
+  /** Whether the current upgrader lifecycle has been reliably identified as ours. */
+  private static $current_upgrade_is_ours = false;
 
   public static function repository() { return self::REPO; }
   public static function api_url() { return 'https://api.github.com/repos/' . self::repository() . '/releases'; }
@@ -78,8 +80,11 @@ final class Plugin_UI_Suite_Updater {
     add_action('admin_init', [__CLASS__, 'audit_update_hooks'], 999);
     add_filter('plugins_api', [__CLASS__, 'plugin_information'], 10, 3);
     add_filter('auto_update_plugin', [__CLASS__, 'filter_auto_update'], 10, 2);
-    add_filter('upgrader_package_options', [__CLASS__, 'package_options']);
-    add_filter('upgrader_pre_install', [__CLASS__, 'pre_install'], 10, 3);
+    // These are global upgrader hooks: every callback must identify this plugin first.
+    add_filter('upgrader_package_options', [__CLASS__, 'package_options'], 10, 1);
+    add_filter('upgrader_pre_install', [__CLASS__, 'pre_install'], 10, 2);
+    add_filter('upgrader_source_selection', [__CLASS__, 'source_selection'], 10, 4);
+    add_filter('upgrader_post_install', [__CLASS__, 'post_install'], 10, 3);
     add_action('upgrader_process_complete', [__CLASS__, 'after_upgrade'], 10, 2);
   }
 
@@ -174,22 +179,71 @@ final class Plugin_UI_Suite_Updater {
   public static function native_update_entry($point) { $transient=get_site_transient('update_plugins'); $entry=is_object($transient) && isset($transient->response) && is_array($transient->response) ? ($transient->response[self::plugin_file()] ?? null) : null; self::trace($point,['entry'=>self::safe_native_entry($transient)]); return $entry; }
   public static function plugin_information($result,$action,$args) { if ($action !== 'plugin_information' || empty($args->slug) || $args->slug !== self::SLUG) return $result; $release=self::latest_release(false); self::trace('plugins_api', ['latest_version'=>$release['version'] ?? '']); return (object)['name'=>'Rescue Plugin Suite','slug'=>self::SLUG,'version'=>$release['version'] ?? PLUGIN_SUITE_VERSION,'author'=>'Jordan Sutton | Webstax','homepage'=>self::releases_url(),'download_link'=>$release['download_url'] ?? '','sections'=>['description'=>'Unified rescue plugin suite.','changelog'=>!empty($release['body']) ? wp_kses_post(wpautop($release['body'])) : 'No release notes were returned by GitHub.']]; }
 
-  private static function is_our_upgrade($hook_extra) { return ($hook_extra['type'] ?? '') === 'plugin' && in_array(self::plugin_file(), (array)($hook_extra['plugins'] ?? [$hook_extra['plugin'] ?? '']), true); }
+  /**
+   * Identify our package from every reliable piece of WordPress upgrader context.
+   * Upload installs can lack hook_extra metadata until source selection, so they
+   * are deliberately not claimed merely because they are a plugin install.
+   */
+  private static function is_our_upgrade($hook_extra = [], $package = '', $source = '') {
+    $hook_extra = is_array($hook_extra) ? $hook_extra : [];
+    $type = (string)($hook_extra['type'] ?? '');
+    if ($type !== '' && $type !== 'plugin') return false;
+
+    $plugin = (string)($hook_extra['plugin'] ?? '');
+    $plugins = isset($hook_extra['plugins']) && is_array($hook_extra['plugins']) ? $hook_extra['plugins'] : [];
+    if ($plugin === self::plugin_file() || in_array(self::plugin_file(), $plugins, true)) return true;
+    if ($plugin === self::SLUG || in_array(self::SLUG, $plugins, true)) return true;
+
+    foreach ([$package, $source] as $candidate) {
+      $candidate = (string)$candidate;
+      if ($candidate === '') continue;
+      $path = (string)(wp_parse_url($candidate, PHP_URL_PATH) ?: $candidate);
+      $basename = strtolower(basename(rtrim($path, '/')));
+      if ($basename === self::PACKAGE_DIRECTORY || $basename === self::PACKAGE_DIRECTORY . '.zip') return true;
+      if (strpos($candidate, 'github.com/' . self::repository() . '/') !== false
+        || strpos($candidate, 'api.github.com/repos/' . self::repository()) !== false) return true;
+    }
+    return false;
+  }
+  private static function lifecycle_is_ours($hook_extra = [], $package = '', $source = '') {
+    return self::is_our_upgrade($hook_extra, $package, $source) || self::$current_upgrade_is_ours;
+  }
   public static function package_options($options) {
-    if (!self::is_our_upgrade((array)($options['hook_extra'] ?? []))) return $options;
+    $options = is_array($options) ? $options : [];
+    self::$current_upgrade_is_ours = self::is_our_upgrade($options['hook_extra'] ?? [], $options['package'] ?? '');
+    if (!self::$current_upgrade_is_ours) return $options;
     self::callback_stage(__FUNCTION__, 'before', ['package_url'=>(string)($options['package'] ?? ''), 'destination'=>(string)($options['destination'] ?? '')]);
     self::callback_stage(__FUNCTION__, 'after');
     return $options;
   }
-  public static function pre_install($response,$hook_extra,$upgrader) {
-    if (!self::is_our_upgrade((array)$hook_extra)) return $response;
-    self::callback_stage(__FUNCTION__, 'before', ['destination'=>defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : '']);
+  /** WordPress supplies only $response and $hook_extra to upgrader_pre_install. */
+  public static function pre_install($response, $hook_extra) {
+    if (!self::lifecycle_is_ours($hook_extra)) return $response;
+    self::callback_stage(__FUNCTION__, 'before');
     self::callback_stage(__FUNCTION__, 'after', is_wp_error($response) ? ['error'=>$response->get_error_message()] : []);
     return $response;
   }
   /**
-   * The release ZIP has the canonical rescue-plugin-suite/ root. Do not attach
-   * upgrader_source_selection: WordPress core must own moving/replacing files.
+   * Source selection is a filter with ($source, $remote_source, $upgrader, $hook_extra).
+   * It only identifies an uploaded Rescue Plugin Suite ZIP; it never changes the source.
+   */
+  public static function source_selection($source, $remote_source, $upgrader, $hook_extra) {
+    if (!self::is_our_upgrade($hook_extra, '', $source)) return $source;
+    self::$current_upgrade_is_ours = true;
+    self::callback_stage(__FUNCTION__, 'before', ['source'=>(string)$source]);
+    self::callback_stage(__FUNCTION__, 'after');
+    return $source;
+  }
+  /** WordPress supplies ($response, $hook_extra, $result) to upgrader_post_install. */
+  public static function post_install($response, $hook_extra, $result) {
+    if (!self::lifecycle_is_ours($hook_extra, '', is_array($result) ? ($result['destination'] ?? '') : '')) return $response;
+    self::callback_stage(__FUNCTION__, 'before', ['destination'=>(string)(is_array($result) ? ($result['destination'] ?? '') : '')]);
+    self::callback_stage(__FUNCTION__, 'after', is_wp_error($response) ? ['error'=>$response->get_error_message()] : []);
+    return $response;
+  }
+  /**
+   * The release ZIP has the canonical rescue-plugin-suite/ root. Source
+   * selection only observes that root; WordPress core owns file replacement.
    */
   private static function read_plugin_header($file) {
     $header = is_readable($file) ? (string)@file_get_contents($file, false, null, 0, 8192) : '';
@@ -197,11 +251,12 @@ final class Plugin_UI_Suite_Updater {
     return ['Version'=>trim($version[1] ?? '')];
   }
   public static function after_upgrade($upgrader,$hook_extra) {
-    if (!self::is_our_upgrade((array)$hook_extra)) return;
+    if (!self::lifecycle_is_ours($hook_extra)) return;
     self::callback_stage(__FUNCTION__, 'before');
     // Header parsing is plain text only; never execute the replacement bootstrap during this request.
     $plugin_data = self::read_plugin_header(PLUGIN_SUITE_PATH . 'plugin-ui-suite.php');
     self::callback_stage(__FUNCTION__, 'after', ['post_update_version'=>$plugin_data['Version'] ?? '', 'active'=>function_exists('is_plugin_active') ? (bool)is_plugin_active(self::plugin_file()) : null]);
+    self::$current_upgrade_is_ours = false;
   }
 
   public static function handle_ignore() { if (empty($_GET['plugin_suite_ignore_update']) || !current_user_can('update_plugins')) return; check_admin_referer('plugin_suite_ignore_update'); update_option(self::IGNORE_KEY,sanitize_text_field(wp_unslash($_GET['plugin_suite_ignore_update'])),false); wp_safe_redirect(remove_query_arg(['plugin_suite_ignore_update','_wpnonce'])); exit; }
