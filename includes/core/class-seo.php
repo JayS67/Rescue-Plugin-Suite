@@ -390,7 +390,6 @@ final class Plugin_UI_Suite_SEO {
     $schemas = [];
     $adoptables_tag = $settings['shortcodes']['adoptables'] ?? 'adoptables';
     $adopted_tag = $settings['shortcodes']['adopted'] ?? 'adopted';
-    $stats_tag = $settings['shortcodes']['statistics'] ?? 'stats';
     $quiz_tag = $settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz';
     if (has_shortcode($content, $adoptables_tag) || has_shortcode($content, 'plugin_adoptables_ui')) {
       $items = [];
@@ -405,9 +404,6 @@ final class Plugin_UI_Suite_SEO {
         $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::ui_modal_url($a,true),'name'=>self::animal_name($a)];
       }
       $schemas[] = ['@context'=>'https://schema.org','@type'=>'ItemList','name'=>'Adoption success stories','itemListElement'=>$items];
-    }
-    if (has_shortcode($content, $stats_tag) || has_shortcode($content, 'stats')) {
-      $schemas[] = ['@context'=>'https://schema.org','@type'=>'Dataset','name'=>'Rescue impact statistics','description'=>'Published rescue, care and adoption statistics.','url'=>get_permalink($post)];
     }
     if (has_shortcode($content, $quiz_tag)) {
       $schemas[] = ['@context'=>'https://schema.org','@type'=>'WebApplication','name'=>'Cat adoption match quiz','applicationCategory'=>'LifestyleApplication','operatingSystem'=>'Web','url'=>get_permalink($post)];

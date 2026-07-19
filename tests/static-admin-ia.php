@@ -6,6 +6,8 @@ $payments = file_get_contents($root . '/includes/modules/payments/class-module.p
 $adoptables = file_get_contents($root . '/includes/modules/adoptables/class-module.php');
 $forms = file_get_contents($root . '/includes/modules/forms/class-module.php');
 $proxy = file_get_contents($root . '/includes/modules/asm-proxy/class-module.php');
+$seo = file_get_contents($root . '/includes/core/class-seo.php');
+$statistics = file_get_contents($root . '/includes/modules/statistics/class-module.php');
 $js = file_get_contents($root . '/assets/js/admin-sortable.js');
 $workflow = file_get_contents($root . '/.github/workflows/release.yml');
 $errors = [];
@@ -51,5 +53,8 @@ ok(strpos($forms, 'plugin_asm_online_form_url($form_id)') !== false, 'Standalone
 ok(strpos($adoptables, 'plugin_asm_online_form_url($apply_form_id)') !== false, 'Adoptables Forms must use the canonical ASM URL builder.');
 ok(strpos($forms, 'https://service.sheltermanager.com/asmservice') === false, 'Standalone Forms must not hard-code an ASM service URL.');
 ok(strpos($adoptables, 'https://service.sheltermanager.com/asmservice') === false, 'Adoptables must not hard-code an ASM service URL.');
+ok(strpos($seo, "'@type'=>'Data" . "set'") === false, 'Statistics pages must not emit Dataset JSON-LD.');
+ok(strpos($seo, "'@type'=>'NGO'") !== false, 'NGO JSON-LD schema must remain available.');
+ok(strpos($statistics, "add_shortcode('stats'") !== false, 'Statistics widget shortcode must remain registered.');
 if ($errors) { fwrite(STDERR, implode("\n", $errors) . "\n"); exit(1); }
 echo "Static admin IA checks passed\n";
