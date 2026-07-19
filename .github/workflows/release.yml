@@ -69,6 +69,7 @@ jobs:
           test "$(unzip -p "$PACKAGE_PATH" rescue-plugin-suite/plugin-ui-suite.php | sed -nE 's/^[[:space:]*#@\/]*Version:[[:space:]]*([^[:space:]*]+).*/\1/p' | head -n1)" = "$VERSION"
           rm -rf "${RUNNER_TEMP}/package-check"; unzip -q "$PACKAGE_PATH" -d "${RUNNER_TEMP}/package-check"
           find "${RUNNER_TEMP}/package-check/rescue-plugin-suite" -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/package-bootstrap-smoke.php "$PACKAGE_PATH"
       - name: Publish immutable release asset
         env:
           GH_TOKEN: ${{ github.token }}
