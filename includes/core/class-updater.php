@@ -15,6 +15,11 @@ final class Plugin_UI_Suite_Updater {
   const LOG_KEY = 'plugin_ui_suite_update_trace_v2';
   const TRANSIENT_STATE_KEY = 'plugin_ui_suite_native_update_state_v1';
   const REFRESH_NOTICE_KEY = 'plugin_ui_suite_update_refresh_notice';
+  const UPDATE_LOG_FILE = 'rescue-plugin-suite-update.log';
+
+  /** Request-local update context. It is deliberately never used to load replacement code. */
+  private static $update_context = [];
+  private static $shutdown_registered = false;
 
   public static function repository() { return self::REPO; }
   public static function api_url() { return 'https://api.github.com/repos/' . self::repository() . '/releases'; }
@@ -29,11 +34,37 @@ final class Plugin_UI_Suite_Updater {
 
   /** Keep a small, inspectable trace without exposing response bodies or credentials. */
   private static function trace($stage, $data = []) {
+    self::$update_context = array_merge(self::$update_context, ['stage'=>$stage], array_intersect_key((array)$data, array_flip(['source', 'destination'])));
     $entry = array_merge(['time'=>current_time('mysql'), 'stage'=>$stage, 'installed_version'=>PLUGIN_SUITE_VERSION, 'plugin_basename'=>self::plugin_file(), 'slug'=>self::SLUG], $data);
     $log = get_option(self::LOG_KEY, []); if (!is_array($log)) $log = []; $log[] = $entry;
     update_option(self::LOG_KEY, array_slice($log, -100), false);
-    if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) error_log('Rescue Plugin Suite updater: ' . wp_json_encode($entry));
+    self::write_update_log($entry);
   }
+  /** This logger is best-effort: a permissions or disk error must not affect an update. */
+  private static function write_update_log($entry) {
+    try {
+      if (!function_exists('wp_upload_dir') || !function_exists('wp_json_encode')) return;
+      $uploads = wp_upload_dir(null, false); $directory = is_array($uploads) ? ($uploads['basedir'] ?? '') : '';
+      if (!$directory || !empty($uploads['error'])) return;
+      $line = wp_json_encode($entry); if (!is_string($line)) return;
+      @file_put_contents(trailingslashit($directory) . self::UPDATE_LOG_FILE, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+    } catch (Throwable $ignored) { /* Diagnostic logging must never break WordPress. */ }
+  }
+  private static function update_request_context() {
+    return (isset($GLOBALS['pagenow']) && $GLOBALS['pagenow'] === 'update.php' && isset($_REQUEST['action']) && in_array($_REQUEST['action'], ['upgrade-plugin', 'update-selected'], true));
+  }
+  public static function register_shutdown_diagnostics() {
+    if (self::$shutdown_registered) return; self::$shutdown_registered = true;
+    register_shutdown_function([__CLASS__, 'capture_shutdown_error']);
+  }
+  public static function capture_shutdown_error() {
+    try {
+      $error = error_get_last(); $fatal_types = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+      if (!$error || !in_array((int)($error['type'] ?? 0), $fatal_types, true)) return;
+      self::write_update_log(['time'=>gmdate('Y-m-d H:i:s'), 'stage'=>self::$update_context['stage'] ?? 'unknown', 'event'=>'shutdown_fatal', 'php_error_type'=>(int)$error['type'], 'message'=>(string)$error['message'], 'file'=>(string)$error['file'], 'line'=>(int)$error['line'], 'request_uri'=>(string)($_SERVER['REQUEST_URI'] ?? ''), 'installed_version'=>defined('PLUGIN_SUITE_VERSION') ? PLUGIN_SUITE_VERSION : '', 'source'=>self::$update_context['source'] ?? '', 'destination'=>self::$update_context['destination'] ?? '', 'active'=>function_exists('is_plugin_active') ? (bool)is_plugin_active(self::plugin_file()) : null]);
+    } catch (Throwable $ignored) { /* Never turn shutdown diagnostics into a second failure. */ }
+  }
+  private static function callback_stage($callback, $when, $data = []) { self::trace('updater_callback_' . $when, array_merge(['callback'=>$callback], $data)); }
   private static function diagnostics($values) { update_option(self::LAST_DIAGNOSTICS_KEY, $values, false); }
 
   public static function init() {
@@ -43,12 +74,12 @@ final class Plugin_UI_Suite_Updater {
     add_filter('pre_site_transient_update_plugins', [__CLASS__, 'serve_native_update_transient'], 10, 1);
     add_filter('site_transient_update_plugins', [__CLASS__, 'observe_native_update_transient'], 10, 1);
     add_action('admin_init', [__CLASS__, 'trace_update_request'], 1);
+    if (self::update_request_context()) self::register_shutdown_diagnostics();
     add_action('admin_init', [__CLASS__, 'audit_update_hooks'], 999);
     add_filter('plugins_api', [__CLASS__, 'plugin_information'], 10, 3);
     add_filter('auto_update_plugin', [__CLASS__, 'filter_auto_update'], 10, 2);
     add_filter('upgrader_package_options', [__CLASS__, 'package_options']);
     add_filter('upgrader_pre_install', [__CLASS__, 'pre_install'], 10, 3);
-    add_filter('upgrader_source_selection', [__CLASS__, 'source_selection'], 10, 4);
     add_action('upgrader_process_complete', [__CLASS__, 'after_upgrade'], 10, 2);
   }
 
@@ -144,21 +175,34 @@ final class Plugin_UI_Suite_Updater {
   public static function plugin_information($result,$action,$args) { if ($action !== 'plugin_information' || empty($args->slug) || $args->slug !== self::SLUG) return $result; $release=self::latest_release(false); self::trace('plugins_api', ['latest_version'=>$release['version'] ?? '']); return (object)['name'=>'Rescue Plugin Suite','slug'=>self::SLUG,'version'=>$release['version'] ?? PLUGIN_SUITE_VERSION,'author'=>'Jordan Sutton | Webstax','homepage'=>self::releases_url(),'download_link'=>$release['download_url'] ?? '','sections'=>['description'=>'Unified rescue plugin suite.','changelog'=>!empty($release['body']) ? wp_kses_post(wpautop($release['body'])) : 'No release notes were returned by GitHub.']]; }
 
   private static function is_our_upgrade($hook_extra) { return ($hook_extra['type'] ?? '') === 'plugin' && in_array(self::plugin_file(), (array)($hook_extra['plugins'] ?? [$hook_extra['plugin'] ?? '']), true); }
-  public static function package_options($options) { if (self::is_our_upgrade((array)($options['hook_extra'] ?? []))) self::trace('upgrader_package_options', ['package_url'=>(string)($options['package'] ?? ''),'destination'=>(string)($options['destination'] ?? '')]); return $options; }
-  public static function pre_install($response,$hook_extra,$upgrader) { if (!self::is_our_upgrade((array)$hook_extra)) return $response; self::trace('upgrader_pre_install', ['destination'=>defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : '']); if (is_wp_error($response)) self::trace('upgrader_pre_install_error', ['error'=>$response->get_error_message()]); return $response; }
-  public static function source_selection($source,$remote_source,$upgrader,$hook_extra) {
-    if (!self::is_our_upgrade((array)$hook_extra)) return $source;
-    $source=trailingslashit($source); $bootstrap=$source.'plugin-ui-suite.php';
-    // WordPress may unpack a valid ZIP under a temporary wrapper. Inspect the
-    // bootstrap rather than rejecting that harmless directory name.
-    if (!is_readable($bootstrap)) { $children=glob($source.'*', GLOB_ONLYDIR); if (is_array($children) && count($children)===1 && is_readable(trailingslashit($children[0]).'plugin-ui-suite.php')) { $source=trailingslashit($children[0]); $bootstrap=$source.'plugin-ui-suite.php'; } }
-    $header=is_readable($bootstrap) ? (string)file_get_contents($bootstrap,false,null,0,8192) : '';
-    if (!preg_match('/Plugin Name:\s*Rescue Plugin Suite/i',$header) || !preg_match('/Version:\s*([^\r\n*]+)/i',$header,$match)) { $error=new WP_Error('plugin_suite_invalid_package','Release package unavailable or invalid: plugin-ui-suite.php must identify Rescue Plugin Suite.'); self::trace('zip_validation_failed',['error'=>$error->get_error_message()]); return $error; }
-    $installed_directory=self::plugin_directory(); if ($installed_directory!=='.' && basename(untrailingslashit($source))!==$installed_directory) { $target=trailingslashit($remote_source).$installed_directory; if (file_exists($target) || !rename(untrailingslashit($source),$target)) { $error=new WP_Error('plugin_suite_package_rename_failed','Unable to map the verified package to the installed plugin directory.'); self::trace('zip_validation_failed',['error'=>$error->get_error_message()]); return $error; } $source=trailingslashit($target); }
-    self::trace('zip_validated',['source'=>$source,'packaged_version'=>trim($match[1])]); return $source;
+  public static function package_options($options) {
+    if (!self::is_our_upgrade((array)($options['hook_extra'] ?? []))) return $options;
+    self::callback_stage(__FUNCTION__, 'before', ['package_url'=>(string)($options['package'] ?? ''), 'destination'=>(string)($options['destination'] ?? '')]);
+    self::callback_stage(__FUNCTION__, 'after');
+    return $options;
   }
-
-  public static function after_upgrade($upgrader,$hook_extra) { if (!self::is_our_upgrade((array)$hook_extra)) return; $plugin_data=function_exists('get_plugin_data') && is_readable(PLUGIN_SUITE_PATH.'plugin-ui-suite.php') ? get_plugin_data(PLUGIN_SUITE_PATH.'plugin-ui-suite.php', false, false) : []; self::trace('upgrader_process_complete', ['post_update_version'=>$plugin_data['Version'] ?? '', 'final_plugin_metadata'=>$plugin_data, 'active'=>function_exists('is_plugin_active') ? (bool)is_plugin_active(self::plugin_file()) : null]); self::record_removal('upgrader_process_complete'); delete_transient(self::RELEASE_TRANSIENT); delete_site_transient('update_plugins'); delete_option(self::IGNORE_KEY); }
+  public static function pre_install($response,$hook_extra,$upgrader) {
+    if (!self::is_our_upgrade((array)$hook_extra)) return $response;
+    self::callback_stage(__FUNCTION__, 'before', ['destination'=>defined('WP_PLUGIN_DIR') ? WP_PLUGIN_DIR : '']);
+    self::callback_stage(__FUNCTION__, 'after', is_wp_error($response) ? ['error'=>$response->get_error_message()] : []);
+    return $response;
+  }
+  /**
+   * The release ZIP has the canonical rescue-plugin-suite/ root. Do not attach
+   * upgrader_source_selection: WordPress core must own moving/replacing files.
+   */
+  private static function read_plugin_header($file) {
+    $header = is_readable($file) ? (string)@file_get_contents($file, false, null, 0, 8192) : '';
+    preg_match('/^[ \t\/*#@]*Version:\s*([^\r\n*]+)/mi', $header, $version);
+    return ['Version'=>trim($version[1] ?? '')];
+  }
+  public static function after_upgrade($upgrader,$hook_extra) {
+    if (!self::is_our_upgrade((array)$hook_extra)) return;
+    self::callback_stage(__FUNCTION__, 'before');
+    // Header parsing is plain text only; never execute the replacement bootstrap during this request.
+    $plugin_data = self::read_plugin_header(PLUGIN_SUITE_PATH . 'plugin-ui-suite.php');
+    self::callback_stage(__FUNCTION__, 'after', ['post_update_version'=>$plugin_data['Version'] ?? '', 'active'=>function_exists('is_plugin_active') ? (bool)is_plugin_active(self::plugin_file()) : null]);
+  }
 
   public static function handle_ignore() { if (empty($_GET['plugin_suite_ignore_update']) || !current_user_can('update_plugins')) return; check_admin_referer('plugin_suite_ignore_update'); update_option(self::IGNORE_KEY,sanitize_text_field(wp_unslash($_GET['plugin_suite_ignore_update'])),false); wp_safe_redirect(remove_query_arg(['plugin_suite_ignore_update','_wpnonce'])); exit; }
   public static function handle_update_actions() { $updates=!empty($_GET['page']) && $_GET['page']==='plugin-ui-suite' && ($_GET['tab'] ?? '')==='updates'; if (!$updates || !current_user_can('update_plugins')) return; if (!empty($_POST['plugin_suite_check_updates'])) { check_admin_referer('plugin_suite_updates'); self::trace('manual_refresh_start'); self::clear_update_caches(); self::record_removal('manual_refresh'); self::trace('native_transient_removed',['source'=>'manual_refresh']); self::latest_release(true); wp_update_plugins(); $entry=self::native_update_entry('manual_refresh_verified'); $args=['page'=>'plugin-ui-suite','tab'=>'updates','checked'=>'1']; if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '')!==self::plugin_file()) { set_transient(self::REFRESH_NOTICE_KEY,'Update metadata has not been registered with WordPress. Refresh update data.',MINUTE_IN_SECONDS); $args['metadata']='missing'; } wp_safe_redirect(add_query_arg($args,admin_url('options-general.php'))); exit; } if (!empty($_POST['plugin_suite_validate_release'])) { check_admin_referer('plugin_suite_updates'); self::validate_release_package(); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','validated'=>'1'],admin_url('options-general.php'))); exit; } if (isset($_POST['plugin_suite_auto_updates'])) { check_admin_referer('plugin_suite_updates'); update_option(self::AUTO_UPDATES_KEY,!empty($_POST['enabled'])?1:0,false); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','saved'=>'1'],admin_url('options-general.php'))); exit; } }
