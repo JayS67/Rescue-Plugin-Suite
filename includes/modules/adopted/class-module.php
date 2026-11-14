@@ -598,7 +598,7 @@ final class Plugin_Adopted_UI_Shortcode {
   private static function enqueue_assets() {
     $opts = self::get_options();
 
-    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', [], PLUGIN_SUITE_VERSION);
+    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
     wp_enqueue_script('rescue-plugin-suite-shared-modal', PLUGIN_SUITE_URL . 'assets/js/shared-modal.js', [], PLUGIN_SUITE_VERSION, true);
 
     if (trim((string)$opts['font_family']) === 'Inter') {
@@ -610,21 +610,7 @@ final class Plugin_Adopted_UI_Shortcode {
       );
     }
 
-    wp_register_script(self::TAILWIND_HANDLE . '-config', '', [], null, true);
-    wp_enqueue_script(self::TAILWIND_HANDLE . '-config');
-    wp_add_inline_script(
-      self::TAILWIND_HANDLE . '-config',
-      'window.tailwind = window.tailwind || {}; window.tailwind.config = { corePlugins: { preflight: false } };',
-      'before'
-    );
-
-    wp_enqueue_script(
-      self::TAILWIND_HANDLE,
-      'https://cdn.tailwindcss.com',
-      [],
-      null,
-      true
-    );
+    wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
   }
 
   /* -------------------------
@@ -728,7 +714,7 @@ final class Plugin_Adopted_UI_Shortcode {
     ob_start();
     ?>
 <section id="asm-successstories-widget" aria-labelledby="asm-plugin-heading"
-     class="w-full relative overflow-hidden rounded-2xl"
+     class="rps-widget w-full relative overflow-hidden rounded-2xl"
      style="background:var(--plugin-bg); <?php echo esc_attr($vars_css); ?>">
 
   <!-- Decorative paw prints (NEW SVG) -->
@@ -754,14 +740,14 @@ final class Plugin_Adopted_UI_Shortcode {
       $dur  = (mt_rand(360, 520) / 100) . 's'; // 3.60s–5.20s
       $rot  = mt_rand(-25, 25);
 
-      echo '<div class="asm-paw-bg" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; transform: rotate('.$rot.'deg);">'
+      echo '<div class="asm-paw-bg" aria-hidden="true" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; transform: rotate('.$rot.'deg);">'
           . $paw_svg($size)
           . '</div>';
     }
   ?>
 
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-    <div class="text-center mb-6">
+  <div class="rps-widget-shell max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+    <div class="rps-widget-heading text-center mb-6"><p class="rps-eyebrow">A new chapter</p>
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-2">
         <h2 id="asm-plugin-heading" class="leading-tight" style="color:var(--plugin-brand);"><?php echo esc_html($o['title_text']); ?></h2>
       </div>
@@ -769,7 +755,7 @@ final class Plugin_Adopted_UI_Shortcode {
       <p id="asm-plugin-subheading" style="color:var(--plugin-muted);"><?php echo esc_html($o['subtitle_text']); ?></p>
 
       <div class="mt-4 flex justify-center">
-        <select id="asm-plugin-year"
+        <select id="asm-plugin-year" aria-label="Adoption stories year"
                 class="w-full max-w-[260px] sm:max-w-[300px] px-4 py-2 border shadow-sm font-semibold bg-white"
                 style="border-color:var(--plugin-brand); color:var(--plugin-text); border-radius: var(--plugin-btn-radius);">
         </select>
@@ -778,7 +764,7 @@ final class Plugin_Adopted_UI_Shortcode {
 
     <?php if (!empty($o['show_top_navigation'])) : ?>
     <!-- TOP NAV -->
-    <div class="flex items-center justify-between gap-3 mb-5">
+    <div class="rps-widget-toolbar flex items-center justify-between gap-3 mb-5">
       <button id="asm-plugin-prev"
               class="shrink-0 inline-flex items-center justify-center w-11 h-11 bg-white shadow-md border-2 transition disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl"
               style="border-color:var(--plugin-brand); border-radius: var(--plugin-btn-radius);"
@@ -953,7 +939,7 @@ final class Plugin_Adopted_UI_Shortcode {
 
 <style>
   /* Avoid unstyled flash before Tailwind/JS render */
-  #asm-successstories-widget { opacity: 0; visibility: hidden; }
+  #asm-successstories-widget { opacity: 1; visibility: visible; }
   #asm-successstories-widget.asm-ready { opacity: 1; visibility: visible; transition: opacity 0.18s ease-out; }
 
   #asm-successstories-widget,
@@ -1203,8 +1189,9 @@ final class Plugin_Adopted_UI_Shortcode {
   }
 
   function currentDevice(){
-    if (window.matchMedia("(min-width: 1024px)").matches) return "d";
-    if (window.matchMedia("(min-width: 768px)").matches) return "t";
+    const width = Math.min(window.innerWidth, ROOT.getBoundingClientRect().width);
+    if (width >= 1024) return "d";
+    if (width >= 768) return "t";
     return "m";
   }
 
@@ -1371,30 +1358,15 @@ final class Plugin_Adopted_UI_Shortcode {
     const safeSex = escHtml(sex);
     const safeBreed = escHtml(breed);
     const imageBlock = animalId
-      ? `<img src="${escAttr(thumb)}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="eager" decoding="async" fetchpriority="auto" />`
+      ? `<img src="${escAttr(thumb)}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" />`
       : `<div class="w-full h-full flex items-center justify-center text-4xl">🐾</div>`;
 
     return `
-      <button type="button" class="asm-card group text-left bg-white rounded-2xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] w-full ${CFG.enableModals ? 'focus:outline-none focus:ring-4 focus:ring-pink-200 cursor-pointer' : ''}" data-animalid="${safeId}" tabindex="0"
+      <button type="button" class="rps-animal-card asm-card group text-left bg-white w-full" data-animalid="${safeId}"
            style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);" ${CFG.enableModals ? `aria-label="View adoption story for ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-plugin-modal"` : ''}>
-        <div class="relative">
-          <div class="bg-gray-100 aspect-square w-full" style="line-height:0;overflow:hidden;">${imageBlock}</div>
-
-          <div class="absolute inset-x-0 bottom-0 p-1.5 sm:p-2">
-            <div class="rounded-xl px-2 py-1.5 sm:px-3 sm:py-2 bg-white/85 backdrop-blur-sm shadow-sm border"
-                 style="border-color:${CFG.brandColor};">
-              <div class="plugin-card-name leading-tight truncate" style="color:${CFG.textColor};">${safeName}</div>
-              <div class="plugin-card-meta truncate" style="color:${CFG.mutedColor};">
-                <span class="sm:hidden">${safeAge} • ${safeBreed}</span>
-                <span class="hidden sm:inline">${safeSex} • ${safeAge}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="hidden sm:block" style="padding: var(--plugin-card-pad);">
-          <div class="font-semibold truncate text-xs sm:text-sm lg:text-base" style="color:${CFG.mutedColor};">${safeBreed}</div>
-        </div>
+        <span class="rps-card-media relative block"><span class="bg-gray-100 aspect-square w-full block" style="line-height:0;overflow:hidden;">${imageBlock}</span></span>
+        <span class="rps-card-details block"><span class="rps-card-name plugin-card-name block">${safeName}</span><span class="rps-card-meta plugin-card-meta block">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</span></span>
+        <span class="rps-card-footer"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Our story <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></span>
       </button>
     `;
   }

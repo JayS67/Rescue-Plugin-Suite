@@ -250,3 +250,17 @@
   outline: 2px solid color-mix(in srgb, var(--ssp-primary) 55%, transparent);
   outline-offset: 4px;
 }
+
+/* Donation panel: the same soft surfaces and deliberate controls as the suite. */
+.plugin-payments-widget { padding: clamp(24px, 4vw, 40px); border-radius: var(--ssp-radius); box-shadow: 0 6px 28px #2028380a; }
+.plugin-payments-widget h2 { letter-spacing: -.035em; font-weight: 750; line-height: 1.15; }
+.plugin-payments-widget .rps-donation-eyebrow { margin: 0 0 12px; color: var(--ssp-text); font-size: 11px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+.plugin-payments-types { padding: 5px; border: 1px solid color-mix(in srgb, var(--ssp-text) 25%, var(--ssp-bg)); border-radius: 14px; gap: 5px; }
+.plugin-payments-types button { border: 0; border-radius: 9px; min-block-size: 48px; }
+.plugin-payments-amounts button { border-width: 1px; min-block-size: 52px; font-variant-numeric: tabular-nums; }
+.plugin-payments-amounts button.is-active { box-shadow: inset 0 0 0 1px var(--ssp-primary); }
+.plugin-payments-widget input { border-color: color-mix(in srgb, var(--ssp-text) 52%, var(--ssp-bg)); }
+.plugin-payments-widget .plugin-payments-continue { min-block-size: 52px; margin-block-start: 12px; }
+.plugin-payments-widget .plugin-payments-hint { color: var(--ssp-text); font-size: 13px; }
+.plugin-payments-widget :is(button, input, a):focus-visible { outline: 3px solid #2459a6; outline-offset: 3px; box-shadow: 0 0 0 2px var(--ssp-bg); }
+@media (forced-colors: active) { .plugin-payments-widget button.is-active { outline: 2px solid Highlight; } }

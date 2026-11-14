@@ -747,11 +747,8 @@ function plugin_stats_ui_field_labels_caps_icons() {
 add_shortcode('stats', function () {
   $opts = plugin_stats_ui_get_options();
 
-  // Tailwind CDN (convenient).
-  wp_enqueue_script('plugin-tailwind', 'https://cdn.tailwindcss.com', [], null, false);
-
-  // Prevent Tailwind preflight from affecting the rest of the site
-  wp_add_inline_script('plugin-tailwind', 'tailwind.config = { corePlugins: { preflight: false } };', 'before');
+  wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
+  wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
 
   $font_css = empty($opts['font_family'])
     ? "font-family: inherit;"
@@ -816,7 +813,8 @@ add_shortcode('stats', function () {
 
   ob_start();
   ?>
-  <div class="plugin-stats-ui-wrap" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
+  <section class="plugin-stats-ui-wrap rps-widget" aria-labelledby="<?php echo esc_attr($instance); ?>_main_title" aria-describedby="<?php echo esc_attr($instance); ?>_description" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
+    <p class="rps-sr-only" id="<?php echo esc_attr($instance); ?>_description">Rescue impact statistics showing animal welfare outcomes for the selected year. Choose a year to update the totals. Each card gives a total and describes the outcome it measures.</p>
     <style>
       /* Scoped only */
       #<?php echo esc_attr($instance); ?> { margin:0 !important; padding:0 !important; }
@@ -825,7 +823,7 @@ add_shortcode('stats', function () {
       #<?php echo esc_attr($instance); ?>, #<?php echo esc_attr($instance); ?> * { box-sizing:border-box; }
 
       /* Prevent flash: hidden until JS marks ready */
-      #<?php echo esc_attr($instance); ?> { opacity:0; visibility:hidden; }
+      #<?php echo esc_attr($instance); ?> { opacity:1; visibility:visible; }
       #<?php echo esc_attr($instance); ?>.plugin-ready { opacity:1; visibility:visible; transition:opacity .18s ease-out; }
 
       @keyframes plugin_countUp { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
@@ -838,7 +836,7 @@ add_shortcode('stats', function () {
         100% { opacity: 0; transform: rotate(var(--plugin-paw-rot, 0deg)) scale(1.2); }
       }
 
-      #<?php echo esc_attr($instance); ?> .counter-card { animation: plugin_countUp 0.6s ease-out forwards; opacity: 0; }
+      #<?php echo esc_attr($instance); ?> .counter-card { animation: plugin_countUp 0.6s ease-out forwards; opacity: 1; }
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(1){animation-delay:.1s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(2){animation-delay:.2s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(3){animation-delay:.3s}
@@ -971,39 +969,41 @@ add_shortcode('stats', function () {
           $dur   = (mt_rand(360, 520) / 100) . 's';   // 3.60s–5.20s
           $rot   = mt_rand(-25, 25);
 
-          echo '<div class="paw-bg" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; --plugin-paw-rot: '.$rot.'deg;">'
+          echo '<div class="paw-bg" aria-hidden="true" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; --plugin-paw-rot: '.$rot.'deg;">'
               . $paw_svg($size)
               . '</div>';
         }
       ?>
 
-      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
-        <div class="text-center mb-8 sm:mb-10">
+      <div class="rps-widget-shell max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
+        <div class="rps-widget-heading text-center mb-8 sm:mb-10"><p class="rps-eyebrow">Together, we make a difference</p>
           <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                        <h1 class="plugin-heading leading-tight"
+                        <h2 class="plugin-heading leading-tight"
                 id="<?php echo esc_attr($instance); ?>_main_title"
                 style="color:<?php echo esc_attr($opts['brand_color']); ?>;">
               <?php echo esc_html($opts['title_text']); ?>
-            </h1>
+            </h2>
           </div>
 
           <p class="plugin-subheading font-semibold"
              id="<?php echo esc_attr($instance); ?>_year_label"
-             style="color:#64748b;">
+             style="color:#475569;">
             <?php echo esc_html($opts['year_label_prefix']); ?> —
           </p>
 
           <div class="mt-4 flex justify-center">
             <select
+              aria-label="Impact statistics year"
               id="<?php echo esc_attr($instance); ?>_year_select"
               class="w-full max-w-[240px] sm:max-w-[280px] px-4 py-2 rounded-xl border shadow-sm font-semibold bg-white"
               style="border-color:<?php echo esc_attr($opts['brand_color']); ?>; color:#334155;">
             </select>
           </div>
 
-          <p id="<?php echo esc_attr($instance); ?>_status"
+          <p role="status" aria-live="polite" aria-atomic="true"
+             id="<?php echo esc_attr($instance); ?>_status"
              class="mt-3 text-sm font-medium"
-             style="color:#64748b; display:none;"></p>
+             style="color:#475569; display:none;"></p>
         </div>
 
         <div class="<?php echo esc_attr($cardsWrapClass); ?>" data-plugin-grid>
@@ -1015,14 +1015,14 @@ add_shortcode('stats', function () {
             $iconPaths = isset($catalog[$slug]) ? $catalog[$slug][1] : $catalog['home'][1];
           ?>
             <div
-              class="counter-card bg-white shadow-md border-2 transition-all duration-300 hover:shadow-xl hover:scale-[1.02]<?php echo esc_attr($extra_classes); ?>"
+              class="rps-impact-card counter-card bg-white shadow-md border-2 transition-all duration-300 hover:shadow-xl hover:scale-[1.02]<?php echo esc_attr($extra_classes); ?>"
               id="<?php echo esc_attr($instance . '_card_' . $key); ?>"
               style="border-color:<?php echo esc_attr(!empty($opts['card_border_enabled']) ? ($opts['card_border_color'] ?: $opts['brand_color']) : 'transparent'); ?>; border-width:<?php echo !empty($opts['card_border_enabled']) ? (int)$opts['card_border_weight'] : 0; ?>px;">
 
               <div class="flex flex-col items-center text-center">
                 <div class="icon-float mb-3 sm:mb-4 w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center"
                      style="background:<?php echo esc_attr($opts['brand_color']); ?>;">
-                  <svg class="w-8 h-8 sm:w-9 sm:h-9 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <svg aria-hidden="true" focusable="false" class="w-8 h-8 sm:w-9 sm:h-9 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <?php echo $iconPaths; ?>
                   </svg>
                 </div>
@@ -1035,7 +1035,7 @@ add_shortcode('stats', function () {
                   <?php echo esc_html($label($key)); ?>
                 </span>
 
-                <span class="stat-caption text-sm mt-1" style="color:#64748b;">
+                <span class="stat-caption text-sm mt-1" style="color:#475569;">
                   <?php echo esc_html($caption($key)); ?>
                 </span>
               </div>
@@ -1044,7 +1044,7 @@ add_shortcode('stats', function () {
         </div>
 
         <div class="text-center mt-8 sm:mt-10">
-          <p class="plugin-paragraph font-medium px-2" style="color:#64748b;">
+          <p class="plugin-paragraph font-medium px-2" style="color:#475569;">
             <?php echo esc_html($opts['footer_text']); ?>
           </p>
         </div>
@@ -1057,7 +1057,7 @@ add_shortcode('stats', function () {
         if (!root) return;
 
         const PROXY = {
-          baseUrl: "/wp-json/plugin/v1",
+          baseUrl: <?php echo wp_json_encode(untrailingslashit(rest_url('plugin/v1'))); ?>,
           reportTitle: "Summary By Year"
         };
 
@@ -1109,8 +1109,11 @@ add_shortcode('stats', function () {
           const grid = getGridEl();
           if (!grid) return;
 
-          // Clear previous inline override so we can return to the CSS-defined columns
-          grid.style.gridTemplateColumns = "";
+          // Pick the configured layout for the embed width, not just the viewport.
+          const width = Math.min(window.innerWidth, root.getBoundingClientRect().width);
+          const device = width >= 1024 ? 'd' : (width >= 640 ? 't' : 'm');
+          const configuredCols = Number(getComputedStyle(root).getPropertyValue('--plugin-cols-' + device)) || 2;
+          grid.style.gridTemplateColumns = `repeat(${configuredCols}, minmax(0, 1fr))`;
 
           const cards = getVisibleCards();
           resetGridOverrides(cards);
@@ -1165,7 +1168,7 @@ add_shortcode('stats', function () {
           if (!el) return;
           el.style.display = msg ? "block" : "none";
           el.textContent = msg || "";
-          el.style.color = isError ? "#b91c1c" : "#64748b";
+          el.style.color = isError ? "#b91c1c" : "#475569";
         }
 
         function normalizeRow(r) {
@@ -1315,7 +1318,7 @@ add_shortcode('stats', function () {
         }
       })();
     </script>
-  </div>
+  </section>
   <?php
   return ob_get_clean();
 });

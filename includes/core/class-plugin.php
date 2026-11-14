@@ -48,6 +48,8 @@ final class Plugin_UI_Suite_Plugin {
     add_action('admin_post_plugin_ui_suite_retry_webhooks', [__CLASS__, 'handle_retry_webhooks']);
     add_action('admin_post_plugin_ui_suite_download_diagnostics', [__CLASS__, 'handle_download_diagnostics']);
     add_action('admin_post_plugin_ui_suite_copy_system_information', [__CLASS__, 'handle_copy_system_information']);
+    add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_frontend_assets']);
+    add_filter('do_shortcode_tag', [__CLASS__, 'defer_shortcode_scripts'], 10, 2);
     add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_admin_assets']);
     add_action('enqueue_block_editor_assets', [__CLASS__, 'enqueue_block_editor_assets']);
     add_action(self::WEBHOOK_CRON_HOOK, [__CLASS__, 'process_webhook_retry_queue']);
@@ -509,8 +511,8 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function get_settings() {
-    $settings = self::merge_with_defaults(self::default_settings(), self::load_saved_settings());
     $saved = self::load_saved_settings();
+    $settings = self::merge_with_defaults(self::default_settings(), $saved);
     if (isset($saved['widgets']) && is_array($saved['widgets'])) {
       $settings['featured'] = self::featured_settings(['featured'=>$settings['featured'] ?? [], 'widgets'=>$saved['widgets']]);
     }
@@ -562,8 +564,39 @@ final class Plugin_UI_Suite_Plugin {
   }
 
 
+  public static function defer_shortcode_scripts($output, $tag) {
+    $tags = array_merge(self::all_suite_shortcodes(), ['plugin_adoptables_ui', 'plugin_adopted_ui', 'donation_widget']);
+    if (!in_array($tag, $tags, true)) return $output;
+    // Block themes can texturise shortcode output. Keep executable JS outside
+    // post content so && and other operators cannot become HTML entities.
+    return preg_replace_callback('~<script\\b([^>]*)>(.*?)</script>~is', static function($match) {
+      if (preg_match('/\\bsrc\\s*=|\\btype\\s*=/i', $match[1]) || trim($match[2]) === '') return $match[0];
+      wp_register_script('rescue-plugin-suite-widgets', false, ['rescue-plugin-suite-shared-modal'], PLUGIN_SUITE_VERSION, true);
+      wp_enqueue_script('rescue-plugin-suite-shared-modal', PLUGIN_SUITE_URL . 'assets/js/shared-modal.js', [], PLUGIN_SUITE_VERSION, true);
+      wp_enqueue_script('rescue-plugin-suite-widgets');
+      wp_add_inline_script('rescue-plugin-suite-widgets', $match[2]);
+      return '';
+    }, $output);
+  }
+
+  public static function enqueue_frontend_assets() {
+    $profile = get_query_var(Plugin_UI_Suite_SEO::ADOPTABLE_VAR) || get_query_var(Plugin_UI_Suite_SEO::ADOPTED_VAR);
+    if (!$profile) {
+      $post = get_queried_object();
+      if (!$post || empty($post->post_content)) return;
+      $has_suite = strpos($post->post_content, '<!-- wp:asm-suite/') !== false;
+      foreach (self::all_suite_shortcodes() as $tag) {
+        if (has_shortcode($post->post_content, $tag)) { $has_suite = true; break; }
+      }
+      if (!$has_suite) return;
+    }
+    wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
+    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
+  }
+
   public static function enqueue_admin_assets($hook) {
     if ($hook !== 'settings_page_plugin-ui-suite') return;
+    wp_enqueue_style('plugin-suite-admin', PLUGIN_SUITE_URL . 'assets/css/admin.css', [], PLUGIN_SUITE_VERSION);
     wp_enqueue_script('plugin-suite-admin-help', PLUGIN_SUITE_URL . 'assets/js/admin-help.js', [], PLUGIN_SUITE_VERSION, true);
     wp_enqueue_script('plugin-suite-admin-sortable', PLUGIN_SUITE_URL . 'assets/js/admin-sortable.js', [], PLUGIN_SUITE_VERSION, true);
   }
@@ -623,10 +656,13 @@ final class Plugin_UI_Suite_Plugin {
   public static function render_form_shortcode($form_id) {
     $account = function_exists('plugin_asm_account') ? plugin_asm_account() : '';
     $form_id = preg_replace('/[^0-9]/', '', (string)$form_id);
-    if (!$account || !$form_id) return '<p>Form could not be loaded.</p>';
+    if (!$account || !$form_id) return '<section class="rescue-suite-form-wrap rps-widget" aria-label="Online application form"><p>This form is temporarily unavailable. Please contact the rescue for help.</p></section>';
     $script_url = function_exists('plugin_asm_online_form_url') ? esc_url(plugin_asm_online_form_url($form_id)) : '';
+    $form_tag = array_search($form_id, self::get_forms(), true);
+    $title = $form_tag ? ucwords(str_replace(['_', '-'], ' ', $form_tag)) : 'Online application form';
+    $title_id = wp_unique_id('rps-form-title-');
     ob_start(); ?>
-    <section class="rescue-suite-form-wrap" aria-label="Online application form"><noscript><p>This application form requires JavaScript. Please contact the rescue if you need help applying.</p></noscript><div id="asm3-onlineform" aria-live="polite"></div><script type="text/javascript" src="<?php echo esc_url($script_url); ?>"></script></section>
+    <section class="rescue-suite-form-wrap rps-widget" aria-labelledby="<?php echo esc_attr($title_id); ?>"><header class="rps-form-heading"><p class="rps-eyebrow">Your next step</p><h2 id="<?php echo esc_attr($title_id); ?>"><?php echo esc_html($title); ?></h2><p>Complete the form below to get in touch with the rescue.</p></header><noscript><p>This application form requires JavaScript. Please contact the rescue if you need help applying.</p></noscript><div id="asm3-onlineform" aria-live="polite"></div><script type="text/javascript" src="<?php echo esc_url($script_url); ?>"></script></section>
     <?php return ob_get_clean();
   }
 
@@ -658,26 +694,28 @@ final class Plugin_UI_Suite_Plugin {
     $q = $settings['quiz'] ?? [];
     if (empty($q['quiz_enabled'])) return '';
     $adoptables_page_url = esc_url_raw($settings['global']['adoptables_page_url'] ?? '');
+    $instance = wp_unique_id('rps-quiz-');
     ob_start(); ?>
-    <section class="asm-adoption-quiz-widget" aria-labelledby="asm-quiz-title" style="--asm-quiz-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-quiz-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-quiz-bg); border:none; border-radius:24px; padding:20px; box-shadow:0 12px 28px rgba(15,23,42,.08);">
-      <h2 id="asm-quiz-title" style="margin:0;color:var(--asm-quiz-brand);font-size:2rem;line-height:1.15;"><?php echo esc_html($q['quiz_title_text'] ?? 'Find your match'); ?></h2>
-      <p style="margin:.5rem 0 1.25rem;color:#6b7280;"><?php echo esc_html($q['quiz_intro_text'] ?? 'Answer a few quick questions and we will suggest adoptable animals that may suit your home.'); ?></p>
-      <form id="asm-quiz-questions" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;align-items:end;">
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q1_text'] ?? 'What age would you prefer?'); ?></span><select id="asm-quiz-age" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q1_either_label'] ?? 'No preference'); ?></option><option value="Under 1 year">Under 1 year</option><option value="1 to 3 years">1 to 3 years</option><option value="3 to 5 years">3 to 5 years</option><option value="5+ years">5+ years</option></select></label>
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q2_text'] ?? 'Do you have a preference for sex?'); ?></span><select id="asm-quiz-sex" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q2_either_label'] ?? 'No preference'); ?></option><option value="Female"><?php echo esc_html($q['q2_female_label'] ?? 'Female'); ?></option><option value="Male"><?php echo esc_html($q['q2_male_label'] ?? 'Male'); ?></option></select></label>
+    <section id="<?php echo esc_attr($instance); ?>" class="rps-widget asm-adoption-quiz-widget" aria-labelledby="<?php echo esc_attr($instance); ?>-asm-quiz-title" style="--asm-quiz-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-quiz-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-quiz-bg); border:none; border-radius:24px; padding:20px; box-shadow:0 12px 28px rgba(15,23,42,.08);">
+      <p class="rps-eyebrow">A little about your home</p>
+      <h2 id="<?php echo esc_attr($instance); ?>-asm-quiz-title" style="margin:0;color:var(--asm-quiz-brand);font-size:2rem;line-height:1.15;"><?php echo esc_html($q['quiz_title_text'] ?? 'Find your match'); ?></h2>
+      <p style="margin:.5rem 0 1.25rem;color:#475569;"><?php echo esc_html($q['quiz_intro_text'] ?? 'Answer a few quick questions and we will suggest adoptable animals that may suit your home.'); ?></p>
+      <form id="<?php echo esc_attr($instance); ?>-asm-quiz-questions" class="rps-quiz-fields">
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q1_text'] ?? 'What age would you prefer?'); ?></span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-age" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q1_either_label'] ?? 'No preference'); ?></option><option value="Under 1 year">Under 1 year</option><option value="1 to 3 years">1 to 3 years</option><option value="3 to 5 years">3 to 5 years</option><option value="5+ years">5+ years</option></select></label>
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q2_text'] ?? 'Do you have a preference for sex?'); ?></span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-sex" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q2_either_label'] ?? 'No preference'); ?></option><option value="Female"><?php echo esc_html($q['q2_female_label'] ?? 'Female'); ?></option><option value="Male"><?php echo esc_html($q['q2_male_label'] ?? 'Male'); ?></option></select></label>
         <?php if (empty($q['q3_hide'])): ?>
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q3_text'] ?? 'Would you prefer an indoor-only cat?'); ?></span><select id="asm-quiz-indoor" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q3_no_label'] ?? 'No preference'); ?></option><option value="yes"><?php echo esc_html($q['q3_yes_label'] ?? 'Yes'); ?></option><option value="no">No</option></select></label>
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q3_text'] ?? 'Would you prefer an indoor-only cat?'); ?></span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-indoor" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q3_no_label'] ?? 'No preference'); ?></option><option value="yes"><?php echo esc_html($q['q3_yes_label'] ?? 'Yes'); ?></option><option value="no">No</option></select></label>
         <?php endif; ?>
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Bonded pair</span><select id="asm-quiz-bonded" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Good with cats</span><select id="asm-quiz-good-cats" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></label>
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Good with dogs</span><select id="asm-quiz-good-dogs" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></label>
-        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Good with children</span><select id="asm-quiz-good-children" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Over 5">Over 5</option><option value="Over 12">Over 12</option></select></label>
-        <div><button id="asm-quiz-run" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:var(--asm-quiz-brand);color:#fff;border:none;font-weight:700;cursor:pointer;">Show matches</button></div>
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Bonded pair</span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-bonded" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Good with cats</span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-good-cats" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></label>
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Good with dogs</span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-good-dogs" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></label>
+        <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;">Good with children</span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-good-children" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Over 5">Over 5</option><option value="Over 12">Over 12</option></select></label>
+        <div><button id="<?php echo esc_attr($instance); ?>-asm-quiz-run" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:var(--asm-quiz-brand);color:#fff;border:none;font-weight:700;cursor:pointer;">Show matches</button></div>
       </form>
-      <div style="margin-top:1.25rem;"><h3 style="margin:0 0 .75rem;color:#111827;font-size:1.25rem;"><?php echo esc_html($q['results_title_text'] ?? 'Suggested matches'); ?></h3><div id="asm-quiz-results" role="status" aria-live="polite" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;"></div></div>
+      <div style="margin-top:1.25rem;"><h3 style="margin:0 0 .75rem;color:#111827;font-size:1.25rem;"><?php echo esc_html($q['results_title_text'] ?? 'Suggested matches'); ?></h3><div id="<?php echo esc_attr($instance); ?>-asm-quiz-results" role="status" aria-live="polite" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;"></div></div>
     </section>
     <script>(function(){
-	      const root=document.currentScript.previousElementSibling; if(!root) return;
+	      const root=document.getElementById(<?php echo wp_json_encode($instance); ?>); if(!root) return;
 	      const endpoint=<?php echo wp_json_encode(rest_url('plugin/v1/adoptables')); ?>;
 	      const adoptablesPageUrl=<?php echo wp_json_encode($adoptables_page_url); ?>;
 	      let animals=[];
@@ -729,11 +767,11 @@ final class Plugin_UI_Suite_Plugin {
         if(opts.goodChildren==='either' || goodWithChildren(a)===opts.goodChildren) score += 15;
         return score;
       }
-	      function render(list){ const el=root.querySelector('#asm-quiz-results'); if(!list.length){ el.innerHTML='<p style="color:#6b7280;grid-column:1/-1;"><?php echo esc_js($q['results_empty_text'] ?? 'No exact matches were found. Please browse all adoptables instead.'); ?></p>'; return; } el.innerHTML=list.slice(0,6).map(a=>{ const name=safe(a.ANIMALNAME ?? a.AnimalName); const meta=[sexValue(a), safe(a.ANIMALAGE ?? a.AnimalAge), safe(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1)].filter(Boolean).map(escHtml).join(' • '); const compat=['Cats: ' + goodWithCats(a),'Dogs: ' + goodWithDogs(a),'Children: ' + goodWithChildren(a)].map(escHtml).join(' • '); const url=modalLink(a); return `<a href="${escAttr(url)}" aria-label="View ${escAttr(name)}" style="display:block;background:#fff;border:2px solid var(--asm-quiz-brand);border-radius:20px;overflow:hidden;text-decoration:none;color:inherit;"><div style="aspect-ratio:1/1;background:#f3f4f6;"><img src="${escAttr(img(a))}" alt="${escAttr(name)}" style="width:100%;height:100%;object-fit:cover;display:block;" /></div><div style="padding:12px 14px;"><div style="font-weight:800;color:#111827;">${escHtml(name)}</div><div style="margin-top:.35rem;color:#6b7280;">${meta}</div><div style="margin-top:.5rem;color:#6b7280;font-size:.92rem;">${compat}</div></div></a>`; }).join(''); }
+	      function render(list){ const el=root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-results'); if(!list.length){ el.innerHTML='<p style="color:#475569;grid-column:1/-1;"><?php echo esc_js($q['results_empty_text'] ?? 'No exact matches were found. Please browse all adoptables instead.'); ?></p>'; return; } el.innerHTML=list.slice(0,6).map(a=>{ const name=safe(a.ANIMALNAME ?? a.AnimalName); const meta=[sexValue(a), safe(a.ANIMALAGE ?? a.AnimalAge), safe(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1)].filter(Boolean).map(escHtml).join(' • '); const compat=['Cats: ' + goodWithCats(a),'Dogs: ' + goodWithDogs(a),'Children: ' + goodWithChildren(a)].map(escHtml).join(' • '); const url=modalLink(a); return `<a class="rps-match-card" href="${escAttr(url)}" aria-label="View ${escAttr(name)}" style="display:block;background:#fff;border:2px solid var(--asm-quiz-brand);border-radius:20px;overflow:hidden;text-decoration:none;color:inherit;"><div style="aspect-ratio:1/1;background:#f3f4f6;"><img src="${escAttr(img(a))}" alt="${escAttr(name)}" style="width:100%;height:100%;object-fit:cover;display:block;" /></div><div style="padding:12px 14px;"><div style="font-weight:800;color:#111827;">${escHtml(name)}</div><div style="margin-top:.35rem;color:#475569;">${meta}</div><div style="margin-top:.5rem;color:#475569;font-size:.92rem;">${compat}</div></div></a>`; }).join(''); }
 	      function updateSeo(list){ const data={"@context":"https://schema.org","@type":"ItemList","itemListElement":list.slice(0,6).map((a,i)=>({"@type":"ListItem","position":i+1,"item":{"@type":"Thing","additionalType":"https://schema.org/Animal","name":safe(a.ANIMALNAME ?? a.AnimalName),"description":safe(a.ANIMALCOMMENTS ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION),"image":img(a),"url":modalLink(a)}}))}; let tag=root.querySelector('script[type="application/ld+json"]'); if(!tag){ tag=document.createElement('script'); tag.type='application/ld+json'; root.appendChild(tag);} tag.textContent=JSON.stringify(data); }
       fetch(endpoint,{credentials:'same-origin'}).then(r=>r.json()).then(data=>{ animals=(Array.isArray(data)?data:[]).filter(a=>!hasPending(a)); const initial=animals.slice(0,3); render(initial); updateSeo(animals); }).catch(()=>render([]));
-      root.querySelector('#asm-quiz-run').addEventListener('click',()=>{
-        const opts={ age:root.querySelector('#asm-quiz-age').value, sex:root.querySelector('#asm-quiz-sex').value, indoor:(root.querySelector('#asm-quiz-indoor') ? root.querySelector('#asm-quiz-indoor').value : 'either'), bonded:root.querySelector('#asm-quiz-bonded').value, goodCats:root.querySelector('#asm-quiz-good-cats').value, goodDogs:root.querySelector('#asm-quiz-good-dogs').value, goodChildren:root.querySelector('#asm-quiz-good-children').value };
+      root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-run').addEventListener('click',()=>{
+        const opts={ age:root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-age').value, sex:root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-sex').value, indoor:(root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-indoor') ? root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-indoor').value : 'either'), bonded:root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-bonded').value, goodCats:root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-good-cats').value, goodDogs:root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-good-dogs').value, goodChildren:root.querySelector('#<?php echo esc_attr($instance); ?>-asm-quiz-good-children').value };
         let list=animals.filter(a=>matchesAll(a,opts));
         render(list); updateSeo(list);
       });
@@ -752,22 +790,23 @@ final class Plugin_UI_Suite_Plugin {
     $subtitle = $w['subtitle_text'] ?? 'Meet one of the animals looking for a home';
     $button = $w['button_text'] ?? 'View animal';
     $adoptables_page_url = esc_url_raw($settings['global']['adoptables_page_url'] ?? '');
+    $instance = wp_unique_id('rps-featured-');
     ob_start(); ?>
-    <section class="asm-featured-animal-widget" aria-labelledby="asm-featured-title" style="--asm-featured-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-featured-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-featured-bg); border:2px solid var(--asm-featured-brand); border-radius:24px; padding:20px;">
-      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
-        <div style="flex:0 0 280px;max-width:100%;"><div style="aspect-ratio:1/1;background:#f3f4f6;border-radius:20px;overflow:hidden;"><img id="asm-featured-image" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" /></div></div>
-        <div style="flex:1 1 320px;min-width:0;">
-          <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b7280;">Featured</div>
-          <h3 style="margin:.35rem 0 0;font-size:2rem;line-height:1.15;color:var(--asm-featured-brand);"><?php echo esc_html($title); ?></h3>
-          <p style="margin:.4rem 0 1rem;color:#6b7280;"><?php echo esc_html($subtitle); ?></p>
-          <div id="asm-featured-name" style="font-size:1.5rem;font-weight:800;color:#111827;">Loading…</div>
-          <div id="asm-featured-meta" style="margin:.4rem 0 1rem;color:#4b5563;">Please wait</div>
-          <a id="asm-featured-link" href="#" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:var(--asm-featured-brand);color:#fff;text-decoration:none;font-weight:700;"><?php echo esc_html($button); ?></a>
+    <section id="<?php echo esc_attr($instance); ?>" class="rps-widget asm-featured-animal-widget" aria-labelledby="<?php echo esc_attr($instance); ?>-asm-featured-title" style="--asm-featured-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-featured-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-featured-bg); border:2px solid var(--asm-featured-brand); border-radius:24px; padding:20px;">
+      <div class="rps-featured-layout">
+        <div class="rps-featured-media"><div style="aspect-ratio:1/1;background:#f3f4f6;border-radius:20px;overflow:hidden;"><img id="<?php echo esc_attr($instance); ?>-asm-featured-image" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" /></div></div>
+        <div class="rps-featured-content">
+          <div class="rps-eyebrow">Featured</div>
+          <h2 id="<?php echo esc_attr($instance); ?>-asm-featured-title" style="margin:.35rem 0 0;font-size:2rem;line-height:1.15;color:var(--asm-featured-brand);"><?php echo esc_html($title); ?></h2>
+          <p style="margin:.4rem 0 1rem;color:#475569;"><?php echo esc_html($subtitle); ?></p>
+          <div id="<?php echo esc_attr($instance); ?>-asm-featured-name" style="font-size:1.5rem;font-weight:800;color:#111827;">Loading…</div>
+          <div id="<?php echo esc_attr($instance); ?>-asm-featured-meta" style="margin:.4rem 0 1rem;color:#4b5563;">Please wait</div>
+          <a id="<?php echo esc_attr($instance); ?>-asm-featured-link" href="#" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:var(--asm-featured-brand);color:#fff;text-decoration:none;font-weight:700;"><?php echo esc_html($button); ?></a>
         </div>
       </div>
     </section>
     <script>(function(){
-      const root=document.currentScript.previousElementSibling; if(!root) return;
+      const root=document.getElementById(<?php echo wp_json_encode($instance); ?>); if(!root) return;
       const endpoint=<?php echo wp_json_encode(rest_url('plugin/v1/adoptables')); ?>;
       const adoptablesPageUrl=<?php echo wp_json_encode($adoptables_page_url); ?>;
       function slugifyPart(value){ return String(value || '').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').replace(/-{2,}/g,'-'); }
@@ -789,12 +828,12 @@ final class Plugin_UI_Suite_Plugin {
         const sex=String(animal.SEXNAME ?? animal.SexName ?? animal.SEX ?? '');
         const breed=String(animal.BREEDNAME ?? animal.BreedName ?? animal.BREEDNAME1 ?? '');
         const img=<?php echo wp_json_encode(rest_url('plugin/v1/animal-image')); ?> + '?animalid=' + encodeURIComponent(id) + '&seq=1';
-        root.querySelector('#asm-featured-image').src=img;
-        root.querySelector('#asm-featured-image').alt=name;
-        root.querySelector('#asm-featured-name').textContent=name;
-        root.querySelector('#asm-featured-meta').textContent=[sex, age, breed].filter(Boolean).join(' • ');
-        root.querySelector('#asm-featured-link').href=modalDeepLink(adoptablesPageUrl,'cat',animalModalSlug(animal)); const fl=root.querySelector('#asm-featured-link'); if(fl && !fl.dataset.bound){ fl.dataset.bound='1'; fl.addEventListener('click',()=>{ const body=new URLSearchParams(); body.set('action','plugin_suite_track'); body.set('event','featured_widget_click'); body.set('nonce',<?php echo wp_json_encode(wp_create_nonce('plugin_suite_track')); ?>); fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:body.toString()}); }); }
-      }).catch(err=>{ root.querySelector('#asm-featured-name').textContent='No featured animal available'; root.querySelector('#asm-featured-meta').textContent=''; root.querySelector('#asm-featured-link').style.display='none'; });
+        root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-image').src=img;
+        root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-image').alt=name;
+        root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-name').textContent=name;
+        root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-meta').textContent=[sex, age, breed].filter(Boolean).join(' • ');
+        root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-link').href=modalDeepLink(adoptablesPageUrl,'cat',animalModalSlug(animal)); const fl=root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-link'); if(fl && !fl.dataset.bound){ fl.dataset.bound='1'; fl.addEventListener('click',()=>{ const body=new URLSearchParams(); body.set('action','plugin_suite_track'); body.set('event','featured_widget_click'); body.set('nonce',<?php echo wp_json_encode(wp_create_nonce('plugin_suite_track')); ?>); fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:body.toString()}); }); }
+      }).catch(err=>{ root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-name').textContent='No featured animal available'; root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-meta').textContent=''; root.querySelector('#<?php echo esc_attr($instance); ?>-asm-featured-link').style.display='none'; });
     })();</script>
     <?php return ob_get_clean();
   }
@@ -809,14 +848,18 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function maybe_disable_cache_for_suite_pages() {
+    $settings = self::get_settings();
     if (!is_singular()) return;
     $post = get_queried_object();
     if (!$post || empty($post->post_content)) return;
-    foreach (self::all_suite_shortcodes() as $tag) {
+    $tags = self::all_suite_shortcodes();
+    if (empty($settings['global']['bypass_plugin_cache']) && !isset($_GET['cat']) && !isset($_GET['adopted'])) {
+      // Form and donation pages carry nonces; keep their page-cache safeguards.
+      $tags = array_merge(array_keys(self::get_forms()), ['donation_widget']);
+    }
+    foreach ($tags as $tag) {
       if (has_shortcode($post->post_content, $tag)) {
         if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
-        if (!defined('DONOTCACHEOBJECT')) define('DONOTCACHEOBJECT', true);
-        if (!defined('DONOTCACHEDB')) define('DONOTCACHEDB', true);
         nocache_headers();
         return;
       }
@@ -1279,13 +1322,16 @@ final class Plugin_UI_Suite_Plugin {
     echo '</div>';
   }
 
-  private static function row($label,$html){ echo '<tr><th>'.$label.'</th><td>'.$html.'</td></tr>'; }
-  private static function start_wrap(){ ?>
-    <style>
-      .plugin-suite-tabs{display:flex;gap:8px;margin:18px 0 22px;flex-wrap:wrap}.plugin-suite-tab{padding:10px 14px;border:1px solid #ccd0d4;border-bottom:none;background:#f6f7f7;text-decoration:none;color:#1d2327;border-radius:6px 6px 0 0}.plugin-suite-tab.active{background:#fff;font-weight:600}.plugin-suite-panel{background:#fff;border:1px solid #ccd0d4;padding:22px;max-width:1450px}.plugin-suite-panel .form-table tr{display:table-row}.plugin-suite-panel .form-table th,.plugin-suite-panel .form-table td{padding:10px 8px;vertical-align:top}.plugin-suite-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}.plugin-suite-card{border:1px solid #e2e4e7;border-radius:10px;padding:16px;background:#fcfcfc;min-width:0}.plugin-suite-card h2,.plugin-suite-card h3{margin-top:0}.plugin-suite-inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.plugin-suite-table{width:100%;border-collapse:collapse}.plugin-suite-table th,.plugin-suite-table td{padding:10px 8px;border-top:1px solid #e2e4e7;vertical-align:top;text-align:left}.plugin-suite-card .form-table{width:100%;table-layout:fixed}.plugin-suite-card .form-table th{width:210px;max-width:210px;white-space:normal;word-break:break-word}.plugin-suite-card .form-table td{overflow-wrap:anywhere}.plugin-suite-card input[type=text],.plugin-suite-card textarea,.plugin-suite-card select,.plugin-suite-card .regular-text,.plugin-suite-card .large-text{width:100%;max-width:100%}.plugin-suite-card input.small-text{width:72px;max-width:100%}.plugin-suite-card input[type=color]{width:48px;min-width:48px;padding:0}.plugin-suite-save{margin-top:20px}.plugin-suite-preview-header{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:12px}.plugin-suite-preview-switch{display:flex;gap:8px;flex-wrap:wrap}.plugin-suite-preview-frame{width:100%;height:880px;border:1px solid #d0d7de;border-radius:12px;background:#fff}.plugin-suite-note{padding:12px 14px;background:#f6f7f7;border:1px solid #e2e4e7;border-radius:8px}.plugin-subgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.plugin-triplet{display:grid;grid-template-columns:150px 1fr 1fr 1fr 1fr;gap:8px;align-items:center}.plugin-triplet>div{min-width:0}.plugin-suite-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.plugin-sortable{list-style:none;margin:0;padding:0;border:1px solid #d0d7de;border-radius:10px;background:#fff}.plugin-sortable li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-top:1px solid #eef2f6;cursor:move}.plugin-sortable li:first-child{border-top:none}.plugin-sortable li.dragging{opacity:.45;transform:scale(.99)}.plugin-sortable li:focus-visible,.plugin-suite-tab:focus-visible,.plugin-suite-subnav a:focus-visible,.plugin-suite-card .button:focus-visible{outline:3px solid #7c3aed;outline-offset:2px}.plugin-sortable li:hover{background:#f8fafc}.plugin-suite-card{transition:box-shadow .18s ease,border-color .18s ease}.plugin-suite-card:hover{border-color:#c4b5fd;box-shadow:0 8px 24px rgba(64,18,104,.07)}@media (prefers-reduced-motion: reduce){.plugin-suite-card,.plugin-sortable li{transition:none!important;transform:none!important}}.plugin-sortable .dashicons{color:#6b7280}.plugin-suite-subnav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.plugin-suite-subnav a{display:inline-block;padding:8px 12px;border:1px solid #d0d7de;border-radius:8px;background:#f6f7f7;text-decoration:none;color:#1d2327}.plugin-suite-subnav a.active{background:#401268;color:#fff;border-color:#401268}.plugin-suite-subsection{display:none}.plugin-suite-subsection.active{display:block}
-      @media (max-width: 1200px){.plugin-suite-grid,.plugin-subgrid{grid-template-columns:1fr}.plugin-triplet{grid-template-columns:1fr}}
-    </style>
-  <?php }
+  private static function row($label,$html){
+    static $row_id = 0;
+    $id = 'rps-field-label-' . ++$row_id;
+    // The row heading names controls even when a field is not wrapped in a label.
+    $html = preg_replace_callback('/<(input|select|textarea)\\b[^>]*>/i', static function($match) use ($id) {
+      if (preg_match("/type=[\"'](?:hidden|checkbox|radio|submit|button)[\"']|aria-label(?:ledby)?=/i", $match[0])) return $match[0];
+      return preg_replace('/^<(input|select|textarea)/i', '<$1 aria-labelledby="' . $id . '"', $match[0]);
+    }, $html);
+    echo '<tr><th scope="row" id="'.esc_attr($id).'">'.$label.'</th><td>'.$html.'</td></tr>';
+  }
 
   public static function render_settings_page() {
     if (!current_user_can('manage_options')) return;
@@ -1293,12 +1339,11 @@ final class Plugin_UI_Suite_Plugin {
     $tab = sanitize_key($_GET['tab'] ?? 'global');
     if (in_array($tab, ['registry','proxy'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
     if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
-    echo '<div class="wrap"><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p>';
+    echo '<div class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p></details>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
-    self::start_wrap();
     if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::render_tabs($tab);
-    echo '<div class="plugin-suite-panel">';
+    echo '<div class="plugin-suite-panel" id="rps-settings-content" tabindex="-1">';
     if ($tab === 'global') self::render_global_tab($settings);
     elseif ($tab === 'data-source') self::render_data_source_tab($settings);
     elseif ($tab === 'adoptables') self::render_adoptables_tab($settings['adoptables'], $settings['global']);
@@ -1355,8 +1400,8 @@ final class Plugin_UI_Suite_Plugin {
 
     echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Export / Import</h2><div class="plugin-suite-actions">';
     echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_export'); echo '<input type="hidden" name="action" value="plugin_ui_suite_export" />'; submit_button('Export settings','secondary','submit',false); echo '</form>';
-    echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" enctype="multipart/form-data">'; wp_nonce_field('plugin_ui_suite_import'); echo '<input type="hidden" name="action" value="plugin_ui_suite_import" /><input type="file" name="import_file" accept="application/json" /> '; submit_button('Import settings','secondary','submit',false); echo '</form>';
-    $packs = get_option('plugin_ui_suite_setting_packs', []); if (!is_array($packs)) $packs = []; echo '<hr><h3>Named setting packs</h3><div class="plugin-suite-actions">'; echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_save_pack'); echo '<input type="hidden" name="action" value="plugin_ui_suite_save_pack" /><input type="text" name="pack_name" placeholder="Pack name" class="regular-text" /> '; submit_button('Save current settings as pack','secondary','submit',false); echo '</form>'; echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_load_pack'); echo '<input type="hidden" name="action" value="plugin_ui_suite_load_pack" /><select name="pack_id">'; foreach($packs as $pack_id=>$pack){ printf('<option value="%s">%s</option>', esc_attr($pack_id), esc_html($pack['name'] ?? $pack_id)); } echo '</select> '; submit_button('Load selected pack','secondary','submit',false); echo '</form></div><p class="description">Export includes suite settings and the three UI option sets. Import restores them on this site. Settings exports from newer suite builds are accepted where keys are compatible.</p></div>';
+    echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" enctype="multipart/form-data">'; wp_nonce_field('plugin_ui_suite_import'); echo '<input type="hidden" name="action" value="plugin_ui_suite_import" /><input type="file" aria-label="Import settings JSON file" name="import_file" accept="application/json" /> '; submit_button('Import settings','secondary','submit',false); echo '</form>';
+    $packs = get_option('plugin_ui_suite_setting_packs', []); if (!is_array($packs)) $packs = []; echo '<hr><h3>Named setting packs</h3><div class="plugin-suite-actions">'; echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_save_pack'); echo '<input type="hidden" name="action" value="plugin_ui_suite_save_pack" /><input type="text" aria-label="New settings pack name" name="pack_name" placeholder="Pack name" class="regular-text" /> '; submit_button('Save current settings as pack','secondary','submit',false); echo '</form>'; echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_load_pack'); echo '<input type="hidden" name="action" value="plugin_ui_suite_load_pack" /><select aria-label="Saved settings pack" name="pack_id">'; foreach($packs as $pack_id=>$pack){ printf('<option value="%s">%s</option>', esc_attr($pack_id), esc_html($pack['name'] ?? $pack_id)); } echo '</select> '; submit_button('Load selected pack','secondary','submit',false); echo '</form></div><p class="description">Export includes suite settings and the three UI option sets. Import restores them on this site. Settings exports from newer suite builds are accepted where keys are compatible.</p></div>';
     echo '</div>';
   }
 
@@ -2582,7 +2627,7 @@ final class Plugin_UI_Suite_Plugin {
     $query = sanitize_text_field($_GET['settings_search'] ?? '');
     echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>Plugin-wide settings search</h2><form method="get"><input type="hidden" name="page" value="plugin-ui-suite"><input type="hidden" name="tab" value="registry"><p><input class="regular-text" name="settings_search" value="'.esc_attr($query).'" placeholder="PayPal, Gift Aid, Adoptables, Featured Animal, Statistics"> <button class="button button-primary">Search</button></p></form>';
     if ($query !== '') { $results = Plugin_UI_Suite_Registry::search_settings($query); echo '<h3>Results</h3><table class="widefat striped"><thead><tr><th>Setting</th><th>Module</th><th>Page</th><th>Field</th></tr></thead><tbody>'; if (!$results) echo '<tr><td colspan="4">No matching settings found.</td></tr>'; foreach ($results as $id=>$setting) echo '<tr><td>'.esc_html($setting['label'] ?? $id).'</td><td>'.esc_html($setting['module'] ?? '').'</td><td>'.esc_html($setting['page'] ?? '').'</td><td><code>'.esc_html($setting['field_id'] ?? '').'</code></td></tr>'; echo '</tbody></table>'; }
-    echo '</div><div class="plugin-suite-card"><h2>Registry import / export</h2><p class="description">Exports use the Settings Registry. Sensitive fields are excluded unless explicitly requested.</p><div class="plugin-suite-actions"><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_export'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_export"><label><input type="checkbox" name="include_sensitive" value="1"> Include sensitive values</label> '; submit_button('Export registry settings','secondary','submit',false); echo '</form><form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_import'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_import"><input type="file" name="import_file" accept="application/json"> '; submit_button('Import registry settings','secondary','submit',false); echo '</form></div></div>';
+    echo '</div><div class="plugin-suite-card"><h2>Registry import / export</h2><p class="description">Exports use the Settings Registry. Sensitive fields are excluded unless explicitly requested.</p><div class="plugin-suite-actions"><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_export'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_export"><label><input type="checkbox" name="include_sensitive" value="1"> Include sensitive values</label> '; submit_button('Export registry settings','secondary','submit',false); echo '</form><form method="post" enctype="multipart/form-data" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_import'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_import"><input type="file" aria-label="Import settings JSON file" name="import_file" accept="application/json"> '; submit_button('Import registry settings','secondary','submit',false); echo '</form></div></div>';
     echo '<div class="plugin-suite-card"><h2>Feature flags</h2><table class="widefat striped"><thead><tr><th>Module</th><th>Flags</th><th>Reset</th></tr></thead><tbody>'; foreach (Plugin_UI_Suite_Registry::all('modules') as $id=>$module) { $flags = wp_parse_args($module['flags'] ?? [], ['installed'=>true,'enabled'=>true,'hidden'=>false,'experimental'=>false,'beta'=>false,'deprecated'=>false,'future_premium'=>false]); echo '<tr><td>'.esc_html($module['name'] ?? $id).'</td><td><code>'.esc_html(wp_json_encode($flags)).'</code></td><td><form method="post" action="'.esc_url(admin_url('admin-post.php')).'">'; wp_nonce_field('plugin_ui_suite_registry_reset'); echo '<input type="hidden" name="action" value="plugin_ui_suite_registry_reset"><input type="hidden" name="module" value="'.esc_attr($id).'">'; submit_button('Reset module','small','submit',false); echo '</form></td></tr>'; } echo '</tbody></table></div>';
     echo '<div class="plugin-suite-card"><h2>Registry-driven help</h2>'; foreach (Plugin_UI_Suite_Registry::all('help') as $guide) echo '<details><summary>'.esc_html($guide['title'] ?? '').'</summary><p>'.esc_html($guide['content'] ?? '').'</p></details>'; echo '</div>';
     echo '<div class="plugin-suite-card"><h2>Analytics panels</h2><ul>'; foreach (Plugin_UI_Suite_Registry::all('analytics') as $panel) echo '<li>'.esc_html($panel['title'] ?? '').'</li>'; echo '</ul></div>';
@@ -2801,7 +2846,7 @@ final class Plugin_UI_Suite_Plugin {
       }
       echo '</div><div class="plugin-suite-actions" style="margin-top:12px;">';
       foreach (['adoptables','adopted','stats','forms','proxy'] as $module) {
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" enctype="multipart/form-data">'; wp_nonce_field('plugin_ui_suite_import_module'); echo '<input type="hidden" name="action" value="plugin_ui_suite_import_module" /><input type="hidden" name="module" value="' . esc_attr($module) . '" /><label>' . esc_html(ucfirst($module)) . ' import <input type="file" name="import_file" accept="application/json" /></label> '; submit_button('Import','secondary','submit',false); echo '</form>';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" enctype="multipart/form-data">'; wp_nonce_field('plugin_ui_suite_import_module'); echo '<input type="hidden" name="action" value="plugin_ui_suite_import_module" /><input type="hidden" name="module" value="' . esc_attr($module) . '" /><label>' . esc_html(ucfirst($module)) . ' import <input type="file" aria-label="Import settings JSON file" name="import_file" accept="application/json" /></label> '; submit_button('Import','secondary','submit',false); echo '</form>';
       }
       echo '</div></div>';
     }
