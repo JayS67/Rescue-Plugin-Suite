@@ -57,3 +57,4 @@
 @media (forced-colors: active) {
   .rps-admin .plugin-suite-tab.active { border: 2px solid Highlight; }
 }
+.rps-admin .plugin-suite-mapping-example { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }

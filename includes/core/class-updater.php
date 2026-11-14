@@ -31,16 +31,18 @@ final class Plugin_UI_Suite_Updater {
 
   public static function normalize_version($version) { $version = trim((string)$version); $version = preg_replace('/^refs\/tags\//i', '', $version); return preg_replace('/^v(?=\d)/i', '', $version); }
   public static function expected_asset_name($version) { return 'rescue-plugin-suite-v' . self::normalize_version($version) . '.zip'; }
-  private static function release_channel() { return get_option(self::RELEASE_CHANNEL_KEY, 'beta') === 'stable' ? 'stable' : 'beta'; }
+  private static function release_channel() { return get_option(self::RELEASE_CHANNEL_KEY, 'stable') === 'stable' ? 'stable' : 'beta'; }
   public static function compare_versions($left, $right, $operator = null) { $left = self::normalize_version($left); $right = self::normalize_version($right); return $operator === null ? version_compare($left, $right) : version_compare($left, $right, $operator); }
 
   /** Keep a small, inspectable trace without exposing response bodies or credentials. */
   private static function trace($stage, $data = []) {
-    self::$update_context = array_merge(self::$update_context, ['stage'=>$stage], array_intersect_key((array)$data, array_flip(['source', 'destination'])));
-    $entry = array_merge(['time'=>current_time('mysql'), 'stage'=>$stage, 'installed_version'=>PLUGIN_SUITE_VERSION, 'plugin_basename'=>self::plugin_file(), 'slug'=>self::SLUG], $data);
-    $log = get_option(self::LOG_KEY, []); if (!is_array($log)) $log = []; $log[] = $entry;
-    update_option(self::LOG_KEY, array_slice($log, -100), false);
-    self::write_update_log($entry);
+    try {
+      self::$update_context = array_merge(self::$update_context, ['stage'=>$stage], array_intersect_key((array)$data, array_flip(['source', 'destination'])));
+      $entry = array_merge(['time'=>current_time('mysql'), 'stage'=>$stage, 'installed_version'=>PLUGIN_SUITE_VERSION, 'plugin_basename'=>self::plugin_file(), 'slug'=>self::SLUG], $data);
+      $log = get_option(self::LOG_KEY, []); if (!is_array($log)) $log = []; $log[] = $entry;
+      update_option(self::LOG_KEY, array_slice($log, -100), false);
+      self::write_update_log($entry);
+    } catch (Throwable $ignored) { /* Diagnostics must not interrupt a file replacement. */ }
   }
   /** This logger is best-effort: a permissions or disk error must not affect an update. */
   private static function write_update_log($entry) {
@@ -79,7 +81,8 @@ final class Plugin_UI_Suite_Updater {
     if (self::update_request_context()) self::register_shutdown_diagnostics();
     add_action('admin_init', [__CLASS__, 'audit_update_hooks'], 999);
     add_filter('plugins_api', [__CLASS__, 'plugin_information'], 10, 3);
-    add_filter('auto_update_plugin', [__CLASS__, 'filter_auto_update'], 10, 2);
+    // WordPress's native auto_update_plugins preference is authoritative.
+    add_action('init', [__CLASS__, 'migrate_auto_update_preference']);
     // These are global upgrader hooks: every callback must identify this plugin first.
     add_filter('upgrader_package_options', [__CLASS__, 'package_options'], 10, 1);
     add_filter('upgrader_pre_install', [__CLASS__, 'pre_install'], 10, 2);
@@ -140,18 +143,20 @@ final class Plugin_UI_Suite_Updater {
   }
 
   public static function latest_release($force=false) {
-    if (!$force && ($cached = get_transient(self::RELEASE_TRANSIENT)) && is_array($cached)) return $cached;
+    $cached = get_transient(self::RELEASE_TRANSIENT);
+    // Cache empty/error responses too: update hooks can run repeatedly in one request.
+    if (!$force && is_array($cached)) return $cached;
     $diag = ['repository'=>self::repository(),'repository_visibility'=>'public (browser_download_url; no token)','api_url'=>self::api_url(),'installed_version'=>PLUGIN_SUITE_VERSION,'plugin_basename'=>self::plugin_file(),'slug'=>self::SLUG,'zip_root_expectation'=>self::PACKAGE_DIRECTORY,'release_channel'=>self::release_channel(),'last_check_time'=>'','api_response_status'=>'','latest_eligible_release'=>'','github_tag'=>'','release_prerelease'=>'','expected_asset_filename'=>'','selected_asset_filename'=>'','selected_package_url'=>'','assets_returned'=>[],'candidate_evaluations'=>[],'last_error'=>''];
     $response = wp_remote_get(self::api_url(), ['timeout'=>20,'headers'=>['Accept'=>'application/vnd.github+json','User-Agent'=>'Rescue-Plugin-Suite/'.PLUGIN_SUITE_VERSION]]);
     update_option(self::LAST_CHECK_KEY, current_time('mysql'), false); $diag['last_check_time']=current_time('mysql');
-    if (is_wp_error($response)) { $diag['last_error']=$response->get_error_message(); self::diagnostics($diag); return []; }
+    if (is_wp_error($response)) { $diag['last_error']=$response->get_error_message(); self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT, [], 5 * MINUTE_IN_SECONDS); return []; }
     $code=(int)wp_remote_retrieve_response_code($response); $diag['api_response_status'] = $code;
-    if ($code < 200 || $code >= 300) { $diag['last_error']='GitHub returned HTTP '.$code; self::diagnostics($diag); return []; }
+    if ($code < 200 || $code >= 300) { $diag['last_error']='GitHub returned HTTP '.$code; self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT, [], 5 * MINUTE_IN_SECONDS); return []; }
     $releases=json_decode((string)wp_remote_retrieve_body($response),true);
-    if (!is_array($releases)) { $diag['last_error']='GitHub returned an invalid release response.'; self::diagnostics($diag); return []; }
+    if (!is_array($releases)) { $diag['last_error']='GitHub returned an invalid release response.'; self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT, [], 5 * MINUTE_IN_SECONDS); return []; }
     $result = self::select_release_candidate($releases, PLUGIN_SUITE_VERSION, self::release_channel());
     $release = $result['release']; $diag['candidate_evaluations'] = $result['candidates'];
-    if (!$release) { $diag['last_error']='No installable eligible GitHub release newer than the installed version was returned.'; self::diagnostics($diag); return []; }
+    if (!$release) { $diag['last_error']='No installable eligible GitHub release newer than the installed version was returned.'; self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT, [], 5 * MINUTE_IN_SECONDS); return []; }
     $diag['latest_eligible_release']=$release['version']; $diag['github_tag']='v'.$release['version']; $diag['expected_asset_filename']=$release['asset']; $diag['selected_asset_filename']=$release['asset']; $diag['selected_package_url']=$release['download_url'];
     self::diagnostics($diag); set_transient(self::RELEASE_TRANSIENT,$release,6*HOUR_IN_SECONDS); self::trace('release_selected',['latest_version'=>$release['version'],'asset'=>$release['asset'],'package_url'=>$release['download_url'],'candidate_evaluations'=>$result['candidates']]); return $release;
   }
@@ -195,8 +200,7 @@ final class Plugin_UI_Suite_Updater {
     if ($plugin === self::SLUG || in_array(self::SLUG, $plugins, true)) return true;
 
     foreach ([$package, $source] as $candidate) {
-      $candidate = (string)$candidate;
-      if ($candidate === '') continue;
+      if (!is_string($candidate) || $candidate === '') continue;
       $path = (string)(wp_parse_url($candidate, PHP_URL_PATH) ?: $candidate);
       $basename = strtolower(basename(rtrim($path, '/')));
       if ($basename === self::PACKAGE_DIRECTORY || $basename === self::PACKAGE_DIRECTORY . '.zip') return true;
@@ -206,10 +210,13 @@ final class Plugin_UI_Suite_Updater {
     return false;
   }
   private static function lifecycle_is_ours($hook_extra = [], $package = '', $source = '') {
-    return self::is_our_upgrade($hook_extra, $package, $source) || self::$current_upgrade_is_ours;
+    if (self::is_our_upgrade($hook_extra, $package, $source)) return true;
+    // Explicit context for another plugin/theme always wins over a previous package.
+    if (is_array($hook_extra) && (!empty($hook_extra['plugin']) || !empty($hook_extra['plugins']) || !empty($hook_extra['type']))) return false;
+    return self::$current_upgrade_is_ours;
   }
   public static function package_options($options) {
-    $options = is_array($options) ? $options : [];
+    if (!is_array($options)) return $options;
     self::$current_upgrade_is_ours = self::is_our_upgrade($options['hook_extra'] ?? [], $options['package'] ?? '');
     if (!self::$current_upgrade_is_ours) return $options;
     self::callback_stage(__FUNCTION__, 'before', ['package_url'=>(string)($options['package'] ?? ''), 'destination'=>(string)($options['destination'] ?? '')]);
@@ -223,15 +230,36 @@ final class Plugin_UI_Suite_Updater {
     self::callback_stage(__FUNCTION__, 'after', is_wp_error($response) ? ['error'=>$response->get_error_message()] : []);
     return $response;
   }
-  /**
-   * Source selection is a filter with ($source, $remote_source, $upgrader, $hook_extra).
-   * It only identifies an uploaded Rescue Plugin Suite ZIP; it never changes the source.
-   */
+  /** Validate replacement files before core removes the working installed copy. */
   public static function source_selection($source, $remote_source, $upgrader, $hook_extra) {
+    // Earlier validators may return WP_Error. Casting one to string is a fatal error.
+    if (is_wp_error($source) || !is_string($source)) return $source;
     if (!self::is_our_upgrade($hook_extra, '', $source)) return $source;
     self::$current_upgrade_is_ours = true;
-    self::callback_stage(__FUNCTION__, 'before', ['source'=>(string)$source]);
-    self::callback_stage(__FUNCTION__, 'after');
+    global $wp_filesystem;
+    if (!is_object($wp_filesystem)) return new WP_Error('rescue_update_filesystem', 'The update filesystem is unavailable. The installed plugin was kept.');
+    $required = ['plugin-ui-suite.php', 'includes/core/helpers.php', 'includes/core/class-registry.php', 'includes/core/class-plugin.php', 'includes/core/class-seo.php', 'includes/core/class-updater.php'];
+    foreach (['asm-proxy', 'forms', 'adoptables', 'adopted', 'statistics', 'payments'] as $module) $required[] = 'includes/modules/' . $module . '/class-module.php';
+    foreach ($required as $file) {
+      if (!$wp_filesystem->is_file(trailingslashit($source) . $file)) {
+        return new WP_Error('rescue_update_incomplete', 'The Rescue Plugin Suite package is incomplete (' . $file . '). The installed plugin was kept.');
+      }
+    }
+    $header = (string)$wp_filesystem->get_contents(trailingslashit($source) . 'plugin-ui-suite.php');
+    if (!preg_match('/^[ \t\/*#@]*Plugin Name:\s*Rescue Plugin Suite\s*$/mi', $header)) {
+      return new WP_Error('rescue_update_wrong_package', 'The package does not contain the Rescue Plugin Suite bootstrap. The installed plugin was kept.');
+    }
+    // Users may have installed the original ZIP into a different directory. Keep
+    // that basename so WordPress does not leave active_plugins pointing at a deleted path.
+    $directory = self::plugin_directory();
+    if ($directory !== '.' && basename(rtrim($source, '/\\')) !== basename($directory)) {
+      $target = trailingslashit($remote_source) . basename($directory) . '/';
+      if ($wp_filesystem->exists($target) || !$wp_filesystem->move($source, $target)) {
+        return new WP_Error('rescue_update_directory', 'The update could not preserve the installed plugin directory. The installed plugin was kept.');
+      }
+      $source = $target;
+    }
+    self::callback_stage(__FUNCTION__, 'after', ['source'=>$source]);
     return $source;
   }
   /** WordPress supplies ($response, $hook_extra, $result) to upgrader_post_install. */
@@ -242,8 +270,8 @@ final class Plugin_UI_Suite_Updater {
     return $response;
   }
   /**
-   * The release ZIP has the canonical rescue-plugin-suite/ root. Source
-   * selection only observes that root; WordPress core owns file replacement.
+   * Read replacement metadata as text. Core owns file replacement and rollback;
+   * replacement PHP must never be included into the request running old code.
    */
   private static function read_plugin_header($file) {
     $header = is_readable($file) ? (string)@file_get_contents($file, false, null, 0, 8192) : '';
@@ -260,7 +288,56 @@ final class Plugin_UI_Suite_Updater {
   }
 
   public static function handle_ignore() { if (empty($_GET['plugin_suite_ignore_update']) || !current_user_can('update_plugins')) return; check_admin_referer('plugin_suite_ignore_update'); update_option(self::IGNORE_KEY,sanitize_text_field(wp_unslash($_GET['plugin_suite_ignore_update'])),false); wp_safe_redirect(remove_query_arg(['plugin_suite_ignore_update','_wpnonce'])); exit; }
-  public static function handle_update_actions() { $updates=!empty($_GET['page']) && $_GET['page']==='plugin-ui-suite' && ($_GET['tab'] ?? '')==='updates'; if (!$updates || !current_user_can('update_plugins')) return; if (!empty($_POST['plugin_suite_check_updates'])) { check_admin_referer('plugin_suite_updates'); self::trace('manual_refresh_start'); self::clear_update_caches(); self::record_removal('manual_refresh'); self::trace('native_transient_removed',['source'=>'manual_refresh']); self::latest_release(true); wp_update_plugins(); $entry=self::native_update_entry('manual_refresh_verified'); $args=['page'=>'plugin-ui-suite','tab'=>'updates','checked'=>'1']; if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '')!==self::plugin_file()) { set_transient(self::REFRESH_NOTICE_KEY,'Update metadata has not been registered with WordPress. Refresh update data.',MINUTE_IN_SECONDS); $args['metadata']='missing'; } wp_safe_redirect(add_query_arg($args,admin_url('options-general.php'))); exit; } if (!empty($_POST['plugin_suite_validate_release'])) { check_admin_referer('plugin_suite_updates'); self::validate_release_package(); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','validated'=>'1'],admin_url('options-general.php'))); exit; } if (isset($_POST['plugin_suite_auto_updates'])) { check_admin_referer('plugin_suite_updates'); update_option(self::AUTO_UPDATES_KEY,!empty($_POST['enabled'])?1:0,false); wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates','saved'=>'1'],admin_url('options-general.php'))); exit; } }
+  public static function migrate_auto_update_preference() {
+    $legacy = get_option(self::AUTO_UPDATES_KEY, null);
+    if ($legacy === null) return;
+    // Preserve an explicitly enabled legacy preference, without turning off a
+    // native choice made in WordPress's Plugins screen.
+    if ($legacy) {
+      $plugins = (array)get_site_option('auto_update_plugins', []);
+      if (!in_array(self::plugin_file(), $plugins, true)) {
+        $plugins[] = self::plugin_file();
+        update_site_option('auto_update_plugins', array_values($plugins));
+      }
+    }
+    delete_option(self::AUTO_UPDATES_KEY);
+  }
+
+  public static function handle_update_actions() {
+    $updates = !empty($_GET['page']) && $_GET['page'] === 'plugin-ui-suite' && ($_GET['tab'] ?? '') === 'updates';
+    if (!$updates || !current_user_can('update_plugins')) return;
+    $args = ['page'=>'plugin-ui-suite', 'tab'=>'updates'];
+    if (!empty($_POST['plugin_suite_check_updates'])) {
+      check_admin_referer('plugin_suite_updates');
+      self::trace('manual_refresh_start');
+      self::clear_update_caches();
+      self::record_removal('manual_refresh');
+      self::trace('native_transient_removed', ['source'=>'manual_refresh']);
+      self::latest_release(true); wp_update_plugins();
+      $entry = self::native_update_entry('manual_refresh_verified');
+      $args['checked'] = '1';
+      if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '') !== self::plugin_file()) {
+        set_transient(self::REFRESH_NOTICE_KEY, 'Update metadata has not been registered with WordPress. Refresh update data.', MINUTE_IN_SECONDS);
+        $args['metadata'] = 'missing';
+      }
+    } elseif (!empty($_POST['plugin_suite_validate_release'])) {
+      check_admin_referer('plugin_suite_updates');
+      self::validate_release_package();
+      $args['validated'] = '1';
+    } elseif (isset($_POST['plugin_suite_update_preferences'])) {
+      check_admin_referer('plugin_suite_updates');
+      $channel = isset($_POST['release_channel']) && $_POST['release_channel'] === 'beta' ? 'beta' : 'stable';
+      update_option(self::RELEASE_CHANNEL_KEY, $channel, false);
+      $plugins = array_values(array_filter((array)get_site_option('auto_update_plugins', []), static function($plugin) { return $plugin !== self::plugin_file(); }));
+      if (!empty($_POST['enabled'])) $plugins[] = self::plugin_file();
+      update_site_option('auto_update_plugins', $plugins);
+      delete_option(self::AUTO_UPDATES_KEY);
+      self::clear_update_caches();
+      $args['saved'] = '1';
+    } else return;
+    wp_safe_redirect(add_query_arg($args, admin_url('options-general.php')));
+    exit;
+  }
   private static function validate_release_package() {
     $release=self::latest_release(true); $result=['download_success'=>'no','http_status'=>'','archive_opens'=>'no','top_level_directory'=>'','bootstrap_exists'=>'no','plugin_name'=>'','packaged_version'=>'','suitable_for_wordpress_installation'=>'no'];
     if (empty($release['download_url'])) { $result['error']='Release package unavailable.'; self::diagnostics(array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['release_package_validation'=>$result])); return; }
@@ -270,7 +347,8 @@ final class Plugin_UI_Suite_Updater {
     if (!class_exists('ZipArchive')) { $result['error']='ZipArchive is unavailable on this server.'; } else { $zip=new ZipArchive(); if ($zip->open($tmp)===true) { $result['archive_opens']='yes'; $names=[]; for($i=0;$i<$zip->numFiles;$i++) $names[]=$zip->getNameIndex($i); $roots=array_values(array_unique(array_filter(array_map(function($name){ return strtok($name,'/'); },$names)))); $result['top_level_directory']=$roots[0] ?? ''; $bootstrap='rescue-plugin-suite/plugin-ui-suite.php'; $index=$zip->locateName($bootstrap); if(count($roots)===1 && $result['top_level_directory']===self::PACKAGE_DIRECTORY && $index!==false) { $result['bootstrap_exists']='yes'; $header=$zip->getFromIndex($index); preg_match('/Plugin Name:\s*([^\r\n*]+)/i',$header,$name); preg_match('/Version:\s*([^\r\n*]+)/i',$header,$version); $result['plugin_name']=trim($name[1] ?? ''); $result['packaged_version']=trim($version[1] ?? ''); $result['suitable_for_wordpress_installation']=($result['plugin_name']==='Rescue Plugin Suite' && $result['packaged_version']===($release['version'] ?? ''))?'yes':'no'; } $zip->close(); } else $result['error']='Downloaded file is not a readable ZIP archive.'; }
     @unlink($tmp); self::diagnostics(array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['release_package_validation'=>$result])); self::trace('release_package_validated',$result);
   }
-  public static function filter_auto_update($update,$item) { return (!empty($item->plugin) && $item->plugin===self::plugin_file()) ? (bool)get_option(self::AUTO_UPDATES_KEY,0) : $update; }
+  /** Backward-compatible callback: never override WordPress's native preference. */
+  public static function filter_auto_update($update,$item) { return $update; }
   public static function render_update_banner() { if (!current_user_can('update_plugins')) return; $entry=self::native_update_entry('before_update_now_url'); if (!$entry || empty($entry->package) || empty($entry->new_version) || ($entry->plugin ?? '')!==self::plugin_file() || !self::compare_versions($entry->new_version,PLUGIN_SUITE_VERSION,'>')) { $release=self::latest_release(false); if (!empty($release['version']) && self::compare_versions($release['version'],PLUGIN_SUITE_VERSION,'>')) echo '<div class="notice notice-error"><p>Update metadata has not been registered with WordPress. Refresh update data.</p></div>'; return; } if (get_option(self::IGNORE_KEY)===$entry->new_version) return; $url=wp_nonce_url(self_admin_url('update.php?action=upgrade-plugin&plugin='.rawurlencode(self::plugin_file())),'upgrade-plugin_'.self::plugin_file()); echo '<div class="notice notice-warning"><p><strong>Rescue Plugin Suite update available.</strong> Installed version: '.esc_html(PLUGIN_SUITE_VERSION).'. Latest version: '.esc_html($entry->new_version).'.</p><p><a class="button button-primary" href="'.esc_url($url).'">Update Now</a></p></div>'; }
   private static function render_candidate_evaluations($candidates) {
     if (!is_array($candidates) || !$candidates) return;
@@ -279,6 +357,18 @@ final class Plugin_UI_Suite_Updater {
     echo '</tbody></table>';
   }
 
-  public static function render_updates_panel($embedded=false) { if (!current_user_can('update_plugins')) return; $release=self::latest_release(!empty($_GET['checked'])); $native=self::native_update_entry('render_updates_tab'); $raw=get_site_option('_site_transient_update_plugins',false); $state=(array)get_option(self::TRANSIENT_STATE_KEY,[]); $diag=array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['active_plugin_basename'=>self::plugin_file(),'native_transient_exists'=>is_object($raw)?'yes':'no','native_response_key_exists'=>$native?'yes':'no','native_response_new_version'=>$native->new_version ?? '','native_response_package_url'=>$native->package ?? '','native_no_update_key_exists'=>is_object($raw) && isset($raw->no_update[self::plugin_file()])?'yes':'no','custom_selected_version'=>$release['version'] ?? '','custom_selected_package'=>$release['download_url'] ?? '','update_object_source'=>'Plugin_UI_Suite_Updater authoritative GitHub release cache','last_transient_write_time'=>$state['updated_at'] ?? '','last_transient_removal_source'=>$state['last_removal_source'] ?? '']); self::diagnostics($diag); $notice=get_transient(self::REFRESH_NOTICE_KEY); if ($notice) { delete_transient(self::REFRESH_NOTICE_KEY); echo '<div class="notice notice-error"><p>'.esc_html($notice).'</p></div>'; } if (!$embedded) echo '<div class="wrap"><h1>Rescue Plugin Suite Updates</h1>'; echo '<p>Installed: <code>'.esc_html(PLUGIN_SUITE_VERSION).'</code> &mdash; Latest: <code>'.esc_html($release['version'] ?? 'Unknown').'</code></p>'; if ($native) echo '<details><summary>Native update object</summary><pre>'.esc_html(wp_json_encode(self::safe_native_entry((object)['response'=>[self::plugin_file()=>$native]]),JSON_PRETTY_PRINT)).'</pre></details>'; echo '<form method="post">'; wp_nonce_field('plugin_suite_updates'); echo '<button class="button" name="plugin_suite_check_updates" value="1">Check for updates now</button> <button class="button" name="plugin_suite_validate_release" value="1">Validate release package</button></form><h2>Update diagnostics</h2><table class="widefat striped"><tbody>'; foreach ((array)$diag as $key=>$value) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$key))).'</th><td><code>'.esc_html(is_scalar($value)?(string)$value:wp_json_encode($value)).'</code></td></tr>'; echo '</tbody></table>'; self::render_candidate_evaluations($diag['candidate_evaluations'] ?? []); echo '<h2>Update trace</h2><pre>'.esc_html(wp_json_encode(get_option(self::LOG_KEY,[]),JSON_PRETTY_PRINT)).'</pre>'; if (!$embedded) echo '</div>'; }
+  private static function render_update_preferences() {
+    $enabled = in_array(self::plugin_file(), (array)get_site_option('auto_update_plugins', []), true);
+    echo '<form method="post" class="plugin-suite-card"><h2>Update preferences</h2>';
+    wp_nonce_field('plugin_suite_updates');
+    echo '<p><label for="rps-release-channel">Release channel</label><br><select id="rps-release-channel" name="release_channel">';
+    echo '<option value="stable" ' . selected(self::release_channel(), 'stable', false) . '>Stable releases (recommended)</option>';
+    echo '<option value="beta" ' . selected(self::release_channel(), 'beta', false) . '>Stable and beta releases</option></select></p>';
+    echo '<p><label><input type="checkbox" name="enabled" value="1" ' . checked($enabled, true, false) . '> Enable automatic updates for Rescue Plugin Suite</label></p>';
+    echo '<p class="description">This is the same preference as the automatic-update control on WordPress’s Plugins screen. Existing beta selections are preserved; new installations use stable releases.</p>';
+    echo '<button class="button button-primary" name="plugin_suite_update_preferences" value="1">Save update preferences</button></form>';
+  }
+
+  public static function render_updates_panel($embedded=false) { if (!current_user_can('update_plugins')) return; $release=self::latest_release(!empty($_GET['checked'])); $native=self::native_update_entry('render_updates_tab'); $raw=get_site_option('_site_transient_update_plugins',false); $state=(array)get_option(self::TRANSIENT_STATE_KEY,[]); $diag=array_merge((array)get_option(self::LAST_DIAGNOSTICS_KEY,[]),['active_plugin_basename'=>self::plugin_file(),'native_transient_exists'=>is_object($raw)?'yes':'no','native_response_key_exists'=>$native?'yes':'no','native_response_new_version'=>$native->new_version ?? '','native_response_package_url'=>$native->package ?? '','native_no_update_key_exists'=>is_object($raw) && isset($raw->no_update[self::plugin_file()])?'yes':'no','custom_selected_version'=>$release['version'] ?? '','custom_selected_package'=>$release['download_url'] ?? '','update_object_source'=>'Plugin_UI_Suite_Updater authoritative GitHub release cache','last_transient_write_time'=>$state['updated_at'] ?? '','last_transient_removal_source'=>$state['last_removal_source'] ?? '']); self::diagnostics($diag); self::render_update_preferences(); $notice=get_transient(self::REFRESH_NOTICE_KEY); if ($notice) { delete_transient(self::REFRESH_NOTICE_KEY); echo '<div class="notice notice-error"><p>'.esc_html($notice).'</p></div>'; } if (!$embedded) echo '<div class="wrap"><h1>Rescue Plugin Suite Updates</h1>'; echo '<p>Installed: <code>'.esc_html(PLUGIN_SUITE_VERSION).'</code> &mdash; Latest: <code>'.esc_html($release['version'] ?? 'Unknown').'</code></p>'; if ($native) echo '<details><summary>Native update object</summary><pre>'.esc_html(wp_json_encode(self::safe_native_entry((object)['response'=>[self::plugin_file()=>$native]]),JSON_PRETTY_PRINT)).'</pre></details>'; echo '<form method="post">'; wp_nonce_field('plugin_suite_updates'); echo '<button class="button" name="plugin_suite_check_updates" value="1">Check for updates now</button> <button class="button" name="plugin_suite_validate_release" value="1">Validate release package</button></form><h2>Update diagnostics</h2><table class="widefat striped"><tbody>'; foreach ((array)$diag as $key=>$value) echo '<tr><th>'.esc_html(ucwords(str_replace('_',' ',$key))).'</th><td><code>'.esc_html(is_scalar($value)?(string)$value:wp_json_encode($value)).'</code></td></tr>'; echo '</tbody></table>'; self::render_candidate_evaluations($diag['candidate_evaluations'] ?? []); echo '<h2>Update trace</h2><pre>'.esc_html(wp_json_encode(get_option(self::LOG_KEY,[]),JSON_PRETTY_PRINT)).'</pre>'; if (!$embedded) echo '</div>'; }
   public static function render_updates_page() { self::render_updates_panel(false); }
 }

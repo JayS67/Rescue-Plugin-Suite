@@ -2,12 +2,16 @@
   "name": "rescue-plugin-suite",
   "private": true,
   "scripts": {
-    "build:css": "tailwindcss -c tailwind.config.cjs -i assets/css/utilities.src.css -o assets/css/utilities.css --minify",
-    "test:widgets": "node tests/widgets-browser.cjs"
+    "build:css": "tailwindcss -c tailwind.config.cjs -i assets/css/utilities.src.css -o assets/css/utilities.css --minify && node scripts/scope-utilities.cjs assets/css/utilities.css",
+    "test:widgets": "node tests/widgets-browser.cjs",
+    "test:isolation": "node tests/site-isolation.cjs"
   },
   "devDependencies": {
     "axe-core": "4.14.0",
     "playwright": "1.65.1",
-    "tailwindcss": "3.4.19"
-  }
+    "tailwindcss": "3.4.19",
+    "postcss": "8.5.33",
+    "postcss-selector-parser": "6.1.6"
+  },
+  "version": "15.1.2"
 }

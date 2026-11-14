@@ -1,5 +1,5 @@
 /* Shared frontend safeguards for Rescue Plugin Suite public displays. */
-.rps-hidden,[hidden]{display:none!important}.rps-modal-open{overflow:hidden}.rps-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.rps-image-stable{background:#f8fafc;object-fit:cover;transform:translateZ(0);backface-visibility:hidden}.rps-fade-in{opacity:1;transition:opacity .18s ease-out}.rps-fade-in:not(.is-ready){opacity:0}
+.rps-hidden,:where(.rps-widget,.asm-animal-profile,.plugin-payments-widget,#asm-modal,#asm-plugin-modal,#asm-filters-wrap,#asm-favourites-modal,#asm-compare-modal)[hidden],:where(.rps-widget,.asm-animal-profile,.plugin-payments-widget,#asm-modal,#asm-plugin-modal,#asm-filters-wrap,#asm-favourites-modal,#asm-compare-modal) [hidden]{display:none!important}.rps-modal-open{overflow:hidden}.rps-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.rps-image-stable{background:#f8fafc;object-fit:cover;transform:translateZ(0);backface-visibility:hidden}.rps-fade-in{opacity:1;transition:opacity .18s ease-out}.rps-fade-in:not(.is-ready){opacity:0}
 
 /* Shared public design: brand colours, typography and layout settings remain configurable. */
 :is(#asm-adoptables-widget, #asm-successstories-widget, .plugin-stats-ui-wrap, .asm-adoption-quiz-widget, .asm-featured-animal-widget, .asm-animal-profile) {
@@ -175,3 +175,38 @@
 @media (max-width: 600px) {
   .rescue-suite-form-wrap :is(table, tbody, tr, td) { display: block; width: 100% !important; }
 }
+
+/* Presentation controls affect the outer widget only; dialog surfaces remain opaque. */
+:is(.rps-widget,.plugin-payments-widget)[data-rps-transparent="true"],
+:is(.rps-widget,.plugin-payments-widget)[data-rps-transparent="true"] .rps-widget-backdrop {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+:is(.rps-widget,.plugin-payments-widget)[data-rps-show-titles="false"] :is(.rps-widget-title,.rps-eyebrow,.rps-donation-eyebrow) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+:is(.rps-widget,.plugin-payments-widget)[data-rps-show-subtitles="false"] .rps-widget-subtitle,
+:is(.rps-widget,.plugin-payments-widget)[data-rps-show-footers="false"] .rps-widget-footer { display: none !important; }
+/* Preserve the decorative pattern on transparent embeds, including narrow screens. */
+.rps-widget[data-rps-transparent="true"] :is(.asm-paw-bg,.paw-bg) { display: block !important; }
+@media (prefers-reduced-motion: reduce) {
+  .rps-widget :is(.asm-paw-bg,.paw-bg) {
+    opacity: var(--plugin-paw-opacity, var(--asm-paw-opacity, .06)) !important;
+    animation: none !important;
+  }
+}
+:is(.rps-widget,.plugin-payments-widget)[data-rps-show-footers="false"] div:has(> .rps-widget-footer):not(:has(> :not(.rps-widget-footer))) { display: none; }
+.rps-widget[data-rps-show-titles="false"][data-rps-show-subtitles="false"] .rps-widget-heading:not(:has(select,button,input)) { margin: 0; }
+/* Profile links remain ordinary links when modal presentation is disabled. */
+[data-rps-ui] .rps-animal-card { text-decoration: none; }
