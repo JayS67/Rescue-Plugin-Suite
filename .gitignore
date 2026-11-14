@@ -11,3 +11,6 @@ dist/
 release/
 releases/
 artifacts/
+
+# Local JavaScript build dependencies.
+node_modules/

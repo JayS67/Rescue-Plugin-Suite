@@ -148,6 +148,13 @@ final class Plugin_UI_Suite_SEO {
   }
 
   private static function fetch_adoptables() {
+    // Keep repeated title, canonical, social and schema hooks to one lookup per request.
+    static $animals = null;
+    if ($animals === null) $animals = self::load_adoptables();
+    return $animals;
+  }
+
+  private static function load_adoptables() {
     $cache = self::cache_get('asm_suite_seo_adoptables_v1');
     if (is_array($cache)) return $cache;
     $source = function_exists('plugin_suite_data_source') ? plugin_suite_data_source() : 'asm';
@@ -171,6 +178,13 @@ final class Plugin_UI_Suite_SEO {
   }
 
   private static function fetch_adopted() {
+    // Keep repeated title, canonical, social and schema hooks to one lookup per request.
+    static $animals = null;
+    if ($animals === null) $animals = self::load_adopted();
+    return $animals;
+  }
+
+  private static function load_adopted() {
     $cache = self::cache_get('asm_suite_seo_adopted_v1');
     if (is_array($cache)) return $cache;
     $source = function_exists('plugin_suite_data_source') ? plugin_suite_data_source() : 'asm';
@@ -258,11 +272,7 @@ final class Plugin_UI_Suite_SEO {
   }
 
   private static function preview_url($profile) {
-    if (!empty($profile['modal']) && !empty($_SERVER['REQUEST_URI'])) {
-      $uri = (string) wp_unslash($_SERVER['REQUEST_URI']);
-      if (strpos($uri, '/') === 0) return home_url($uri);
-    }
-    return !empty($profile['modal']) ? self::ui_modal_url($profile['animal'], !empty($profile['adopted'])) : self::profile_url($profile['animal'], !empty($profile['adopted']));
+    return self::profile_url($profile['animal'], !empty($profile['adopted']));
   }
 
   public static function title_parts($parts) {
@@ -305,9 +315,13 @@ final class Plugin_UI_Suite_SEO {
     $image = self::image_url($a);
     $seo_plugin_active = defined('WPSEO_VERSION') || defined('RANK_MATH_VERSION');
     if (!$seo_plugin_active) {
+      // Replace WordPress core's page canonical for animal/modal requests.
+      remove_action('wp_head', 'rel_canonical');
       echo "\n" . '<link rel="canonical" href="' . esc_url($url) . '">' . "\n";
       echo '<meta name="description" content="' . esc_attr($desc) . '">' . "\n";
     }
+    // Yoast and Rank Math receive the values through the filters registered above.
+    if ($seo_plugin_active) return;
     echo '<meta property="og:type" content="article">' . "\n";
     echo '<meta property="og:title" content="' . esc_attr($title) . '">' . "\n";
     echo '<meta property="og:description" content="' . esc_attr($desc) . '">' . "\n";
@@ -358,7 +372,7 @@ final class Plugin_UI_Suite_SEO {
     <main id="primary" class="site-main asm-animal-profile" style="max-width:1040px;margin:0 auto;padding:32px 20px;">
       <article>
         <nav aria-label="Breadcrumb" style="margin-bottom:18px;"><a href="<?php echo esc_url(home_url('/')); ?>">Home</a> <span aria-hidden="true">›</span> <span><?php echo esc_html($adopted ? 'Happy endings' : 'Cats for adoption'); ?></span></nav>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:32px;align-items:start;">
+        <div class="rps-profile-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:32px;align-items:start;">
           <div><?php if ($image): ?><img src="<?php echo esc_url($image); ?>" alt="<?php echo esc_attr($name . ($breed ? ', ' . $breed : '') . ($adopted ? ', adopted cat' : ', cat available for adoption')); ?>" width="900" height="900" style="width:100%;height:auto;aspect-ratio:1/1;object-fit:cover;border-radius:24px;" fetchpriority="high"><?php endif; ?></div>
           <div>
             <h1><?php echo esc_html($name); ?></h1>
@@ -374,7 +388,7 @@ final class Plugin_UI_Suite_SEO {
           </div>
         </div>
       </article>
-      <script type="application/ld+json"><?php echo wp_json_encode($schema, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE); ?></script>
+      <script type="application/ld+json"><?php echo wp_json_encode($schema, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?></script>
     </main>
     <?php
     get_footer();
@@ -394,14 +408,14 @@ final class Plugin_UI_Suite_SEO {
     if (has_shortcode($content, $adoptables_tag) || has_shortcode($content, 'plugin_adoptables_ui')) {
       $items = [];
       foreach (array_slice(self::fetch_adoptables(), 0, 50) as $i=>$a) {
-        $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::ui_modal_url($a,false),'name'=>self::animal_name($a)];
+        $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::profile_url($a,false),'name'=>self::animal_name($a)];
       }
       $schemas[] = ['@context'=>'https://schema.org','@type'=>'ItemList','name'=>'Cats available for adoption','itemListElement'=>$items];
     }
     if (has_shortcode($content, $adopted_tag) || has_shortcode($content, 'plugin_adopted_ui')) {
       $items = [];
       foreach (array_slice(self::fetch_adopted(), 0, 50) as $i=>$a) {
-        $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::ui_modal_url($a,true),'name'=>self::animal_name($a)];
+        $items[] = ['@type'=>'ListItem','position'=>$i+1,'url'=>self::profile_url($a,true),'name'=>self::animal_name($a)];
       }
       $schemas[] = ['@context'=>'https://schema.org','@type'=>'ItemList','name'=>'Adoption success stories','itemListElement'=>$items];
     }
@@ -415,7 +429,7 @@ final class Plugin_UI_Suite_SEO {
     if ($has_suite) {
       $schemas[] = [
         '@context'=>'https://schema.org', '@type'=>'NGO', 'name'=>get_bloginfo('name') ?: 'Animal rescue',
-        'url'=>home_url('/'), 'areaServed'=>['@type'=>'AdministrativeArea','name'=>'Greater Manchester'],
+        'url'=>home_url('/'),
         'knowsAbout'=>['Cat rescue','Cat adoption','Cat fostering','Animal welfare']
       ];
     }
@@ -427,7 +441,7 @@ final class Plugin_UI_Suite_SEO {
       }
     }
     foreach ($schemas as $schema) {
-      echo "\n<script type=\"application/ld+json\">" . wp_json_encode($schema, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) . "</script>\n";
+      echo "\n<script type=\"application/ld+json\">" . wp_json_encode($schema, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) . "</script>\n";
     }
   }
 
@@ -442,18 +456,18 @@ final class Plugin_UI_Suite_SEO {
       public function __construct() { $this->name='plugin-animals'; $this->object_type='plugin-animals'; }
       public function get_url_list($page_num, $object_subtype='') {
         $urls=[];
-        foreach (Plugin_UI_Suite_SEO::sitemap_animals() as $item) $urls[]=['loc'=>$item['url'],'lastmod'=>$item['lastmod']];
+        foreach (array_slice(Plugin_UI_Suite_SEO::sitemap_animals(), max(0, ((int)$page_num - 1)) * 2000, 2000) as $item) $urls[]=['loc'=>$item['url']];
         return $urls;
       }
-      public function get_max_num_pages($object_subtype='') { return 1; }
+      public function get_max_num_pages($object_subtype='') { return (int) ceil(count(Plugin_UI_Suite_SEO::sitemap_animals()) / 2000); }
     };
     $server->registry->add_provider('plugin-animals', $provider);
   }
 
   public static function sitemap_animals() {
-    $out=[]; $lastmod=current_time('c');
-    foreach (self::fetch_adoptables() as $a) $out[]=['url'=>self::ui_modal_url($a,false),'lastmod'=>$lastmod];
-    foreach (self::fetch_adopted() as $a) $out[]=['url'=>self::ui_modal_url($a,true),'lastmod'=>$lastmod];
+    $out=[];
+    foreach (self::fetch_adoptables() as $a) $out[]=['url'=>self::profile_url($a,false)];
+    foreach (self::fetch_adopted() as $a) $out[]=['url'=>self::profile_url($a,true)];
     return $out;
   }
 }

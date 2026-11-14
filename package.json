@@ -1,0 +1,13 @@
+{
+  "name": "rescue-plugin-suite",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.cjs -i assets/css/utilities.src.css -o assets/css/utilities.css --minify",
+    "test:widgets": "node tests/widgets-browser.cjs"
+  },
+  "devDependencies": {
+    "axe-core": "4.14.0",
+    "playwright": "1.65.1",
+    "tailwindcss": "3.4.19"
+  }
+}

@@ -39,6 +39,7 @@ final class Plugin_Forms_Shortcodes {
     }
 
     private static function render_form($form_id) {
+        if (class_exists('Plugin_UI_Suite_Plugin')) return Plugin_UI_Suite_Plugin::render_form_shortcode($form_id);
         $form_id = sanitize_text_field($form_id);
         $account = function_exists('plugin_asm_account') ? plugin_asm_account() : '';
 
@@ -50,7 +51,7 @@ final class Plugin_Forms_Shortcodes {
 
         ob_start();
         ?>
-        <section class="rescue-suite-form-wrap" aria-label="Online application form">
+        <section class="rescue-suite-form-wrap rps-widget" aria-label="Online application form">
             <noscript><p>This application form requires JavaScript. Please contact the rescue if you need help applying.</p></noscript>
             <div id="asm3-onlineform" aria-live="polite"></div>
             <script type="text/javascript" src="<?php echo esc_url($script_url); ?>"></script>

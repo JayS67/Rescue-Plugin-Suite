@@ -730,7 +730,7 @@ final class Plugin_Adoptables_UI_Shortcode {
   private static function enqueue_assets() {
     $opts = self::get_options();
 
-    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', [], PLUGIN_SUITE_VERSION);
+    wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
     wp_enqueue_script('rescue-plugin-suite-shared-modal', PLUGIN_SUITE_URL . 'assets/js/shared-modal.js', [], PLUGIN_SUITE_VERSION, true);
 
     if (trim((string)$opts['font_family']) === 'Roboto') {
@@ -742,21 +742,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       );
     }
 
-    wp_register_script(self::TAILWIND_HANDLE . '-config', '', [], null, true);
-    wp_enqueue_script(self::TAILWIND_HANDLE . '-config');
-    wp_add_inline_script(
-      self::TAILWIND_HANDLE . '-config',
-      'window.tailwind = window.tailwind || {}; window.tailwind.config = { corePlugins: { preflight: false } };',
-      'before'
-    );
-
-    wp_enqueue_script(
-      self::TAILWIND_HANDLE,
-      'https://cdn.tailwindcss.com',
-      [],
-      null,
-      true
-    );
+    wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
   }
 
   public static function render_shortcode($atts = [], $content = null) {
@@ -1179,7 +1165,7 @@ final class Plugin_Adoptables_UI_Shortcode {
 </style>
 
 <div id="asm-adoptables-widget"
-     class="min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-xl"
+     class="rps-widget min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-xl"
      data-asm-renderer-version="<?php echo esc_attr(PLUGIN_SUITE_VERSION); ?>"
      data-asm-rest-url="<?php echo esc_url(rest_url('plugin/v1/adoptables')); ?>"
      style="background:var(--asm-bg); <?php echo esc_attr($vars_css); ?>">
@@ -1205,27 +1191,27 @@ final class Plugin_Adoptables_UI_Shortcode {
       $dur  = (mt_rand(360, 520) / 100) . 's';
       $rot  = mt_rand(-25, 25);
 
-      echo '<div class="asm-paw-bg" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; transform: rotate('.$rot.'deg);">'
+      echo '<div class="asm-paw-bg" aria-hidden="true" style="top:'.$top.'%; left:'.$left.'%; animation-delay:'.$delay.'; animation-duration:'.$dur.'; transform: rotate('.$rot.'deg);">'
           . $paw_svg($size)
           . '</div>';
     }
   ?>
 
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-    <div class="text-center mb-6">
+  <div class="rps-widget-shell max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+    <div class="rps-widget-heading text-center mb-6"><p class="rps-eyebrow">Find your companion</p>
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-2">
         <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold" style="color:var(--asm-brand);">
           <?php echo esc_html($o['title_text']); ?>
         </h2>
       </div>
-      <p class="text-base sm:text-lg font-semibold" style="color:#64748b;">
+      <p class="text-base sm:text-lg font-semibold" style="color:#475569;">
         <?php echo esc_html($o['subtitle_text']); ?>
       </p>
-      <p id="asm-adoptables-status" class="mt-3 text-sm font-medium" role="status" aria-live="polite" style="color:#64748b; display:none;"></p>
+      <p id="asm-adoptables-status" class="mt-3 text-sm font-medium" role="status" aria-live="polite" style="color:#475569; display:none;"></p>
     </div>
 
     <?php if (!empty($o['show_top_navigation']) || !empty($o['enable_filters'])) : ?>
-    <div class="flex items-center justify-between gap-3 mb-5">
+    <div class="rps-widget-toolbar flex items-center justify-between gap-3 mb-5">
       <?php if (!empty($o['show_top_navigation'])) : ?>
         <button id="asm-prev"
                 class="shrink-0 inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-white shadow-md border-2 transition disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl"
@@ -1279,14 +1265,14 @@ final class Plugin_Adoptables_UI_Shortcode {
             <div class="p-4 sm:p-6 bg-white">
               <div class="bg-white/90 backdrop-blur-sm rounded-2xl border shadow-sm p-3 sm:p-4" style="border-color:var(--asm-brand);">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                  <div id="asm-filter-age-wrap" class="hidden"><label for="asm-filter-age" class="block text-xs font-bold mb-1" style="color:#64748b;"><?php echo esc_html($o['filter_age_label'] ?? 'Age'); ?></label><select id="asm-filter-age" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">All</option></select></div>
-                  <div id="asm-filter-sex-wrap" class="hidden"><label for="asm-filter-sex" class="block text-xs font-bold mb-1" style="color:#64748b;"><?php echo esc_html($o['filter_sex_label'] ?? 'Sex'); ?></label><select id="asm-filter-sex" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">All</option></select></div>
-                  <div id="asm-filter-breed-wrap" class="hidden sm:col-span-2"><label for="asm-filter-breed" class="block text-xs font-bold mb-1" style="color:#64748b;"><?php echo esc_html($o['filter_breed_label'] ?? 'Breed'); ?></label><select id="asm-filter-breed" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">All</option></select></div>
-                  <div><label for="asm-filter-indoor" class="block text-xs font-bold mb-1" style="color:#64748b;">Indoor only</label><select id="asm-filter-indoor" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="yes">Yes</option><option value="no">No</option></select></div>
-                  <div><label for="asm-filter-bonded" class="block text-xs font-bold mb-1" style="color:#64748b;">Bonded pair</label><select id="asm-filter-bonded" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="yes">Yes</option><option value="no">No</option></select></div>
-                  <div><label for="asm-filter-good-cats" class="block text-xs font-bold mb-1" style="color:#64748b;">Good with cats</label><select id="asm-filter-good-cats" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></div>
-                  <div><label for="asm-filter-good-dogs" class="block text-xs font-bold mb-1" style="color:#64748b;">Good with dogs</label><select id="asm-filter-good-dogs" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></div>
-                  <div><label for="asm-filter-good-children" class="block text-xs font-bold mb-1" style="color:#64748b;">Good with children</label><select id="asm-filter-good-children" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Over 5">Over 5</option><option value="Over 12">Over 12</option></select></div>
+                  <div id="asm-filter-age-wrap" class="hidden"><label for="asm-filter-age" class="block text-xs font-bold mb-1" style="color:#475569;"><?php echo esc_html($o['filter_age_label'] ?? 'Age'); ?></label><select id="asm-filter-age" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">All</option></select></div>
+                  <div id="asm-filter-sex-wrap" class="hidden"><label for="asm-filter-sex" class="block text-xs font-bold mb-1" style="color:#475569;"><?php echo esc_html($o['filter_sex_label'] ?? 'Sex'); ?></label><select id="asm-filter-sex" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">All</option></select></div>
+                  <div id="asm-filter-breed-wrap" class="hidden sm:col-span-2"><label for="asm-filter-breed" class="block text-xs font-bold mb-1" style="color:#475569;"><?php echo esc_html($o['filter_breed_label'] ?? 'Breed'); ?></label><select id="asm-filter-breed" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">All</option></select></div>
+                  <div><label for="asm-filter-indoor" class="block text-xs font-bold mb-1" style="color:#475569;">Indoor only</label><select id="asm-filter-indoor" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+                  <div><label for="asm-filter-bonded" class="block text-xs font-bold mb-1" style="color:#475569;">Bonded pair</label><select id="asm-filter-bonded" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+                  <div><label for="asm-filter-good-cats" class="block text-xs font-bold mb-1" style="color:#475569;">Good with cats</label><select id="asm-filter-good-cats" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></div>
+                  <div><label for="asm-filter-good-dogs" class="block text-xs font-bold mb-1" style="color:#475569;">Good with dogs</label><select id="asm-filter-good-dogs" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Selective">Selective</option></select></div>
+                  <div><label for="asm-filter-good-children" class="block text-xs font-bold mb-1" style="color:#475569;">Good with children</label><select id="asm-filter-good-children" class="w-full rounded-xl border px-3 py-2 bg-white" style="border-color:var(--asm-brand);"><option value="">No preference</option><option value="Yes">Yes</option><option value="No">No</option><option value="Unknown">Unknown</option><option value="Over 5">Over 5</option><option value="Over 12">Over 12</option></select></div>
                   <div class="sm:col-span-2 flex flex-col gap-3 pt-1">
                     <label id="asm-filter-pending-wrap" class="hidden text-sm font-semibold" style="color:#334155;"><input type="checkbox" id="asm-filter-hide-pending" value="1" /> <?php echo esc_html($o['filter_exclude_pending_label'] ?? 'Hide animals pending adoption'); ?></label>
                     <label id="asm-favourites-only-wrap" class="hidden text-sm font-semibold" style="color:#334155;"><input type="checkbox" id="asm-show-favourites-only" value="1" /> <?php echo esc_html($o['show_only_favourites_label'] ?? 'Show favourites only'); ?></label>
@@ -1333,7 +1319,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     </div>
 
     <div class="text-center mt-8">
-      <p class="text-sm sm:text-base font-medium px-2" style="color:#64748b;">
+      <p class="text-sm sm:text-base font-medium px-2" style="color:#475569;">
         <?php echo esc_html($o['footer_text']); ?>
       </p>
     </div>
@@ -1357,7 +1343,7 @@ final class Plugin_Adoptables_UI_Shortcode {
             </div>
             <div class="min-w-0">
               <div id="asm-modal-name" class="truncate" style="color:#334155;">Cat</div>
-              <div id="asm-modal-meta" class="truncate" style="color:#64748b;">—</div>
+              <div id="asm-modal-meta" class="truncate" style="color:#475569;">—</div>
             </div>
           </div>
 
@@ -1407,7 +1393,7 @@ final class Plugin_Adoptables_UI_Shortcode {
                 <button id="asm-modal-photo-prev" type="button" class="hidden absolute inline-flex items-center justify-center w-9 h-9 rounded-full border-2 bg-white/95 shadow-md" style="border-color:var(--asm-brand);" aria-label="Previous photo"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--asm-brand)" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button><img id="asm-modal-mainimg" src="" alt="" class="w-full h-full object-cover" loading="eager" decoding="sync" fetchpriority="high" /><button id="asm-modal-photo-next" type="button" class="hidden absolute inline-flex items-center justify-center w-9 h-9 rounded-full border-2 bg-white/95 shadow-md" style="border-color:var(--asm-brand);" aria-label="Next photo"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--asm-brand)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
               </div>
               <div id="asm-modal-thumbs" class="mt-3 flex gap-2 overflow-x-auto pb-1" data-layout-role="gallery"></div>
-              <div class="flex md:hidden items-center justify-center mt-4 select-none" id="asm-scroll-hint-mobile" style="color:#64748b;">
+              <div class="flex md:hidden items-center justify-center mt-4 select-none" id="asm-scroll-hint-mobile" style="color:#475569;">
                 <div class="flex items-center gap-2 text-sm font-semibold">
                   <span>Scroll to find out more</span>
                   <svg class="w-4 h-4 asm-scroll-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1435,35 +1421,35 @@ final class Plugin_Adoptables_UI_Shortcode {
 
                 <div id="asm-modal-info-cards" class="grid grid-cols-2 gap-3" data-layout-role="info_cards">
                   <div class="bg-white rounded-2xl p-3 border shadow-sm">
-                    <div class="text-xs font-bold" style="color:#64748b;">Shelter Code</div>
+                    <div class="text-xs font-bold" style="color:#475569;">Shelter Code</div>
                     <div id="asm-field-code" class="text-sm lg:text-base font-extrabold" style="color:#334155;">—</div>
                   </div>
                   <div class="bg-white rounded-2xl p-3 border shadow-sm">
-                    <div class="text-xs font-bold" style="color:#64748b;">Age</div>
+                    <div class="text-xs font-bold" style="color:#475569;">Age</div>
                     <div id="asm-field-age" class="text-sm lg:text-base font-extrabold" style="color:#334155;">—</div>
                   </div>
                   <div class="bg-white rounded-2xl p-3 border shadow-sm">
-                    <div class="text-xs font-bold" style="color:#64748b;">Sex</div>
+                    <div class="text-xs font-bold" style="color:#475569;">Sex</div>
                     <div id="asm-field-sex" class="text-sm lg:text-base font-extrabold" style="color:#334155;">—</div>
                   </div>
                   <div class="bg-white rounded-2xl p-3 border shadow-sm">
-                    <div class="text-xs font-bold" style="color:#64748b;">Breed</div>
+                    <div class="text-xs font-bold" style="color:#475569;">Breed</div>
                     <div id="asm-field-breed" class="text-sm lg:text-base font-extrabold" style="color:#334155;">—</div>
                   </div>
                 </div>
 
                 <div id="asm-modal-compatibility" data-layout-role="compatibility_cards" class="mt-4 grid grid-cols-2 gap-3">
-                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#64748b;">Good with cats</div><div id="asm-field-good-cats" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
-                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#64748b;">Good with dogs</div><div id="asm-field-good-dogs" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
-                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#64748b;">Good with children</div><div id="asm-field-good-children" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
-                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#64748b;">Special needs</div><div id="asm-field-special-needs" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
+                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#475569;">Good with cats</div><div id="asm-field-good-cats" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
+                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#475569;">Good with dogs</div><div id="asm-field-good-dogs" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
+                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#475569;">Good with children</div><div id="asm-field-good-children" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
+                  <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:#475569;">Special needs</div><div id="asm-field-special-needs" class="text-sm lg:text-base font-extrabold" style="color:#334155;">Unknown</div></div>
                 </div>
 
-                <div id="asm-tips" class="mt-4" data-layout-role="tips" style="color:#64748b;">
+                <div id="asm-tips" class="mt-4" data-layout-role="tips" style="color:#475569;">
                   <?php echo esc_html($o['tips_text']); ?>
                 </div>
 
-                <div class="hidden md:flex items-center justify-center mt-4 select-none" id="asm-scroll-hint" data-layout-role="scroll_hint" style="color:#64748b;">
+                <div class="hidden md:flex items-center justify-center mt-4 select-none" id="asm-scroll-hint" data-layout-role="scroll_hint" style="color:#475569;">
                   <div class="flex items-center gap-2 text-sm font-semibold">
                     <span>Scroll to find out more</span>
                     <svg class="w-4 h-4 asm-scroll-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1477,7 +1463,7 @@ final class Plugin_Adoptables_UI_Shortcode {
 
             <div id="asm-modal-desc-col" class="asm-modal-col p-4 sm:p-6 bg-white md:col-span-2 border-t">
               <div class="bg-white rounded-2xl p-4 border shadow-sm" data-layout-role="description">
-                <div class="text-xs font-bold mb-2" style="color:#64748b;">Description</div>
+                <div class="text-xs font-bold mb-2" style="color:#475569;">Description</div>
                 <div id="asm-field-desc" class="leading-relaxed" style="color:#334155;">—</div>
 
                 <div class="mt-4">
@@ -1488,7 +1474,7 @@ final class Plugin_Adoptables_UI_Shortcode {
                   <div id="asm-modal-global-text" class="leading-relaxed" style="color:#334155;"><?php echo esc_html(trim((string)$o['modal_global_text'])); ?></div>
                 </div>
 
-                <div id="asm-contact-footer" data-layout-role="contact_footer" class="mt-4 text-sm" style="color:#64748b;">Have a question? <?php if ($modal_contact_url): ?><a href="<?php echo $modal_contact_url; ?>" class="font-semibold underline" style="color:var(--asm-brand);">Contact Us</a><?php else: ?><span class="font-semibold" style="color:var(--asm-brand);">Contact Us</span><?php endif; ?></div>
+                <div id="asm-contact-footer" data-layout-role="contact_footer" class="mt-4 text-sm" style="color:#475569;">Have a question? <?php if ($modal_contact_url): ?><a href="<?php echo $modal_contact_url; ?>" class="font-semibold underline" style="color:var(--asm-brand);">Contact Us</a><?php else: ?><span class="font-semibold" style="color:var(--asm-brand);">Contact Us</span><?php endif; ?></div>
 
                 <?php
                   $styles = [
@@ -1521,7 +1507,7 @@ final class Plugin_Adoptables_UI_Shortcode {
               <div id="asm-apply-form-wrap" class="bg-white p-4 sm:p-6" aria-live="polite">
                 <style>#asm-apply-form-wrap .asm-apply-summary,#asm-apply-form-wrap .plugin-apply-summary,[id^="asm-apply-cat-"]{display:none !important;}</style>
                 <div id="asm-apply-form-mount"></div>
-                <p id="asm-apply-form-status" class="hidden" style="color:#64748b;font-weight:600;">Loading application form…</p>
+                <p id="asm-apply-form-status" class="hidden" style="color:#475569;font-weight:600;">Loading application form…</p>
               </div>
             </div>
 
@@ -1773,7 +1759,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     if(!el) return;
     el.style.display = msg ? "block" : "none";
     el.textContent = msg || "";
-    el.style.color = isError ? "#b91c1c" : "#64748b";
+    el.style.color = isError ? "#b91c1c" : "#475569";
   }
 
   function setLoading(isLoading){
@@ -1803,8 +1789,9 @@ final class Plugin_Adoptables_UI_Shortcode {
   }
 
   function currentDevice(){
-    if (window.matchMedia("(min-width: 1024px)").matches) return "d";
-    if (window.matchMedia("(min-width: 768px)").matches) return "t";
+    const width = Math.min(window.innerWidth, ROOT.getBoundingClientRect().width);
+    if (width >= 1024) return "d";
+    if (width >= 768) return "t";
     return "m";
   }
 
@@ -1883,7 +1870,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     const body = qs('asm-favourites-modal-body');
     if (!modal || !body) return;
     const cats = favouriteAnimals();
-    body.innerHTML = cats.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cats.map(a => { const id = getCatId(a); const name = safeText(a.ANIMALNAME ?? a.AnimalName); const breed = safeText(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1 ?? a.BreedName1); return `<button type="button" class="text-left rounded-2xl overflow-hidden border-2 bg-white shadow-sm hover:shadow-md" style="border-color:${ASM_WIDGET.brandColor};" data-open-fav="${escAttr(id)}"><div class="aspect-square bg-gray-100"><img src="${escAttr(proxyImageUrl(id,1))}" alt="${escAttr(name)}" class="w-full h-full object-cover" loading="eager" decoding="async" /></div><div class="p-3"><div class="font-extrabold" style="color:#334155;">${escHtml(name)}</div><div class="text-sm" style="color:#64748b;">${escHtml(breed)}</div></div></button>`; }).join('')}</div>` : `<div class="text-center"><p style="color:#64748b;margin:0 0 1rem;">No favourites saved yet.</p><button type="button" id="asm-favourites-empty-close" class="inline-flex items-center justify-center rounded-full border px-4 py-2 bg-white shadow-sm" style="border-color:${ASM_WIDGET.brandColor};color:#334155;">Close</button></div>`;
+    body.innerHTML = cats.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cats.map(a => { const id = getCatId(a); const name = safeText(a.ANIMALNAME ?? a.AnimalName); const breed = safeText(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1 ?? a.BreedName1); return `<button type="button" class="text-left rounded-2xl overflow-hidden border-2 bg-white shadow-sm hover:shadow-md" style="border-color:${ASM_WIDGET.brandColor};" data-open-fav="${escAttr(id)}"><div class="aspect-square bg-gray-100"><img src="${escAttr(proxyImageUrl(id,1))}" alt="${escAttr(name)}" class="w-full h-full object-cover" loading="eager" decoding="async" /></div><div class="p-3"><div class="font-extrabold" style="color:#334155;">${escHtml(name)}</div><div class="text-sm" style="color:#475569;">${escHtml(breed)}</div></div></button>`; }).join('')}</div>` : `<div class="text-center"><p style="color:#475569;margin:0 0 1rem;">No favourites saved yet.</p><button type="button" id="asm-favourites-empty-close" class="inline-flex items-center justify-center rounded-full border px-4 py-2 bg-white shadow-sm" style="border-color:${ASM_WIDGET.brandColor};color:#334155;">Close</button></div>`;
     body.querySelectorAll('[data-open-fav]').forEach(btn => btn.addEventListener('click', () => { const cat = (allCats || []).find(a => String(getCatId(a)) === String(btn.getAttribute('data-open-fav'))); if (cat) { closeFavouritesModal(); openModal(cat); } }));
     body.querySelector('#asm-favourites-empty-close')?.addEventListener('click', closeFavouritesModal);
     openDialog(modal, qs('asm-close-favourites-modal'));
@@ -1895,7 +1882,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     if (!modal || !body) return;
     const cats = favouriteAnimals().slice(0,4);
     const cols = cats.length >= 4 ? 'xl:grid-cols-4' : (cats.length >= 3 ? 'lg:grid-cols-3' : 'md:grid-cols-2');
-    body.innerHTML = cats.length >= 2 ? `<div class="grid grid-cols-1 ${cols} gap-4">${cats.map(a => { const id = getCatId(a); const name = safeText(a.ANIMALNAME ?? a.AnimalName); const breed = safeText(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1 ?? a.BreedName1); const age = safeText(a.ANIMALAGE ?? a.AnimalAge); const sex = safeText(a.SEXNAME ?? a.SexName ?? a.SEX); const code = safeText(a.CODE ?? a.ShelterCode ?? a.SHELTERCODE); return `<div class="rounded-2xl border-2 p-4 bg-white" style="border-color:${ASM_WIDGET.brandColor};"><div class="aspect-square rounded-xl overflow-hidden bg-gray-100 mb-3"><img src="${escAttr(proxyImageUrl(id,1))}" alt="${escAttr(name)}" class="w-full h-full object-cover" loading="eager" decoding="async" /></div><h4 class="text-lg font-extrabold mb-3" style="color:#334155;">${escHtml(name)}</h4><div class="space-y-2 text-sm"><div><strong>Breed:</strong> ${escHtml(breed)}</div><div><strong>Age:</strong> ${escHtml(age)}</div><div><strong>Sex:</strong> ${escHtml(sex)}</div><div><strong>Code:</strong> ${escHtml(code)}</div><div><strong>Bonded:</strong> ${hasBondedLabel(a) ? 'Yes' : 'No'}</div><div><strong>Indoor only:</strong> ${hasIndoorOnlyLabel(a) ? 'Yes' : 'No'}</div></div></div>`; }).join('')}</div>` : `<p style="color:#64748b;">Save at least two favourites to compare them.</p>`;
+    body.innerHTML = cats.length >= 2 ? `<div class="grid grid-cols-1 ${cols} gap-4">${cats.map(a => { const id = getCatId(a); const name = safeText(a.ANIMALNAME ?? a.AnimalName); const breed = safeText(a.BREEDNAME ?? a.BreedName ?? a.BREEDNAME1 ?? a.BreedName1); const age = safeText(a.ANIMALAGE ?? a.AnimalAge); const sex = safeText(a.SEXNAME ?? a.SexName ?? a.SEX); const code = safeText(a.CODE ?? a.ShelterCode ?? a.SHELTERCODE); return `<div class="rounded-2xl border-2 p-4 bg-white" style="border-color:${ASM_WIDGET.brandColor};"><div class="aspect-square rounded-xl overflow-hidden bg-gray-100 mb-3"><img src="${escAttr(proxyImageUrl(id,1))}" alt="${escAttr(name)}" class="w-full h-full object-cover" loading="eager" decoding="async" /></div><h4 class="text-lg font-extrabold mb-3" style="color:#334155;">${escHtml(name)}</h4><div class="space-y-2 text-sm"><div><strong>Breed:</strong> ${escHtml(breed)}</div><div><strong>Age:</strong> ${escHtml(age)}</div><div><strong>Sex:</strong> ${escHtml(sex)}</div><div><strong>Code:</strong> ${escHtml(code)}</div><div><strong>Bonded:</strong> ${hasBondedLabel(a) ? 'Yes' : 'No'}</div><div><strong>Indoor only:</strong> ${hasIndoorOnlyLabel(a) ? 'Yes' : 'No'}</div></div></div>`; }).join('')}</div>` : `<p style="color:#475569;">Save at least two favourites to compare them.</p>`;
     openDialog(modal, qs('asm-close-compare-modal'));
   }
   function closeCompareModal(){ const modal=qs('asm-compare-modal'); if(!modal)return; closeDialog(modal); }
@@ -2157,10 +2144,10 @@ final class Plugin_Adoptables_UI_Shortcode {
     const safeNameAttr = escAttr(name);
     const safeImgUrl = escAttr(cardImgUrl);
     const bits = {
-      image: `<div class="relative"><div class="asm-ad-imgwrap bg-gray-100 aspect-square w-full"><img src="${safeImgUrl}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="eager" decoding="async" fetchpriority="auto" /></div><div class="hidden sm:block absolute inset-x-0 bottom-0 p-1.5 sm:p-2"><div class="rounded-xl px-2 py-1.5 sm:px-3 sm:py-2 bg-white/85 backdrop-blur-sm shadow-sm border" style="border-color:${ASM_WIDGET.brandColor};"><div class="font-extrabold leading-tight truncate text-[13px] sm:text-base md:text-lg" style="color:#334155;">${safeName}</div><div class="font-semibold truncate text-[11px] sm:text-sm" style="color:#64748b;">${safeSex} • ${safeAge}</div></div></div></div>`,
+      image: `<div class="rps-card-media relative"><div class="asm-ad-imgwrap bg-gray-100 aspect-square w-full"><img src="${safeImgUrl}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" /></div></div>`,
       reservation_badge: reservation.show ? `<div class="absolute ${badgePos} px-2 py-1 rounded-full font-extrabold text-white shadow text-[10px] sm:text-sm lg:text-base" style="background:${ASM_WIDGET.brandColor}; max-width: calc(100% - 1rem);">${escHtml(reservation.label)}</div>` : ``,
-      name_meta: `<div class="asm-ad-card-pad sm:hidden"><div class="font-extrabold leading-tight truncate text-[15px]" style="color:#334155;">${safeName}</div><div class="font-semibold truncate text-[12px]" style="color:#64748b;">${safeSex} • ${safeAge}</div></div>`,
-      breed_line: `<div class="asm-ad-card-pad hidden sm:block"><div class="font-semibold truncate text-xs sm:text-sm lg:text-base" style="color:#64748b;">${safeBreed}</div></div>`,
+      name_meta: `<div class="rps-card-details asm-ad-card-pad"><h3 class="rps-card-name">${safeName}</h3><p class="rps-card-meta">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</p></div>`,
+      breed_line: `<div class="rps-card-footer asm-ad-card-pad"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Meet me <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></div>`,
       favourite_button: ASM_WIDGET.enableFavourites && ASM_WIDGET.favouriteButtonPosition !== 'hidden' ? `<button type="button" class="asm-fav-toggle absolute z-20 inline-flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-full border-2 bg-white/95 shadow asm-fav-${escAttr(ASM_WIDGET.favouriteButtonPosition.replace('_','-'))}" style="border-color:${ASM_WIDGET.brandColor}; color:${ASM_WIDGET.brandColor};" data-favid="${safeId}" aria-pressed="${isFav ? 'true' : 'false'}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}: ${safeNameAttr}">${favouriteIconSvg(isFav, "w-3.5 h-3.5 sm:w-5 sm:h-5")}</button>` : ``
     };
     const defaultOrder = ['image','reservation_badge','name_meta','breed_line','favourite_button'];
@@ -2169,7 +2156,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     // A stale legacy layout can contain only obsolete keys. Never turn that
     // configuration into an empty clickable shell; use the supported design.
     const cardParts = (order.length ? order : defaultOrder).map(key => bits[key] ?? '').join('');
-    return `<div class="asm-ad-card ${displayClass} group text-left bg-white shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] focus-within:ring-4 focus-within:ring-pink-200" style="position:relative;border-style:solid;border-color:var(--asm-card-border-color);border-width:var(--asm-card-border-width);" data-animalid="${safeId}" data-animal-name="${safeNameAttr}">${cardParts}<button type="button" class="asm-card-open absolute inset-0" data-animalid="${safeId}" aria-label="Open ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-modal" style="background:transparent;border:0;padding:0;margin:0;cursor:pointer;z-index:1;"></button></div>`;
+    return `<div class="rps-animal-card asm-ad-card ${displayClass} group text-left bg-white shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] focus-within:ring-4 focus-within:ring-pink-200" style="position:relative;border-style:solid;border-color:var(--asm-card-border-color);border-width:var(--asm-card-border-width);" data-animalid="${safeId}" data-animal-name="${safeNameAttr}">${cardParts}<button type="button" class="asm-card-open absolute inset-0" data-animalid="${safeId}" aria-label="Open ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-modal" style="background:transparent;border:0;padding:0;margin:0;cursor:pointer;z-index:1;"></button></div>`;
   }
 
 
@@ -2226,7 +2213,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     );
     grid.innerHTML = sourceCats.length
       ? slice.map(cardTemplate).join("")
-      : `<div class="col-span-full rounded-2xl border-2 bg-white p-6 text-center font-semibold" style="border-color:${ASM_WIDGET.brandColor};color:#64748b;">${filtersActive ? 'No animals found matching your filters.' : 'No animals are currently available.'}</div>`;
+      : `<div class="col-span-full rounded-2xl border-2 bg-white p-6 text-center font-semibold" style="border-color:${ASM_WIDGET.brandColor};color:#475569;">${filtersActive ? 'No animals found matching your filters.' : 'No animals are currently available.'}</div>`;
     grid.setAttribute("aria-busy", "false");
     setDiagnosticStage(`cards-inserted:${slice.length}:page:${pageIndex + 1}`);
 
@@ -2608,7 +2595,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       applyFormInitialising = true;
       if (status) {
         status.textContent = 'Loading application form…';
-        status.style.color = '#64748b';
+        status.style.color = '#475569';
         status.classList.remove('hidden');
       }
 	      const wrap = document.createElement('section');
@@ -3018,7 +3005,7 @@ final class Plugin_Adoptables_UI_Shortcode {
         true
       );
       const grid = qs("asm-grid");
-      if (grid) grid.innerHTML = '<div class="col-span-full rounded-2xl border-2 bg-white p-6 text-center font-semibold" style="border-color:' + ASM_WIDGET.brandColor + ';color:#64748b;">Unable to load adoptable animals. Please try again later.</div>';
+      if (grid) grid.innerHTML = '<div class="col-span-full rounded-2xl border-2 bg-white p-6 text-center font-semibold" style="border-color:' + ASM_WIDGET.brandColor + ';color:#475569;">Unable to load adoptable animals. Please try again later.</div>';
       const pageLabel = qs("asm-page-label");
       const pageLabelBottom = qs("asm-page-label-bottom");
       if (pageLabel) pageLabel.textContent = "Load failed.";

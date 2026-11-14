@@ -75,12 +75,12 @@ final class Plugin_UI_Suite_Registry {
     }
   }
   public static function render_tabs($active_slug) {
-    echo '<div class="plugin-suite-tabs">';
+    echo '<nav class="plugin-suite-tabs" aria-label="Suite settings">';
     foreach (self::navigation_items('tab') as $item) {
       $href = add_query_arg(['page'=>$item['parent_page'] ?? 'plugin-ui-suite','tab'=>$item['slug']], admin_url('options-general.php'));
-      printf('<a class="plugin-suite-tab %s" href="%s">%s</a>', $active_slug === $item['slug'] ? 'active' : '', esc_url($href), esc_html($item['label']));
+      printf('<a class="plugin-suite-tab %s" href="%s" %s>%s</a>', $active_slug === $item['slug'] ? 'active' : '', esc_url($href), $active_slug === $item['slug'] ? 'aria-current="page"' : '', esc_html($item['label']));
     }
-    echo '</div>';
+    echo '</nav>';
   }
   public static function settings_for_page($page) {
     return array_filter(self::all('settings'), function($setting) use ($page) {
