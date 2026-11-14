@@ -221,6 +221,10 @@ final class Plugin_UI_Suite_Plugin {
         'adopted_page_url' => '',
         'brand_color' => '#401268',
         'background_color' => '#fcf5fd',
+        'widget_transparent_background' => 0,
+        'widget_show_titles' => 1,
+        'widget_show_subtitles' => 1,
+        'widget_show_footers' => 1,
         'modal_divider_color' => '#d6d6d6',
         'text_primary_color' => '#374151',
         'text_muted_color' => '#6b7280',
@@ -579,6 +583,16 @@ final class Plugin_UI_Suite_Plugin {
     }, $output);
   }
 
+  /** Presentation flags belong only to outer widgets, never to dialogs. */
+  public static function widget_presentation_attributes() {
+    $global = self::get_settings()['global'];
+    $attributes = ['data-rps-ui'];
+    foreach (['transparent'=>'widget_transparent_background', 'show-titles'=>'widget_show_titles', 'show-subtitles'=>'widget_show_subtitles', 'show-footers'=>'widget_show_footers'] as $attribute => $key) {
+      $attributes[] = 'data-rps-' . $attribute . '="' . (!empty($global[$key]) ? 'true' : 'false') . '"';
+    }
+    return implode(' ', $attributes);
+  }
+
   public static function enqueue_frontend_assets() {
     $profile = get_query_var(Plugin_UI_Suite_SEO::ADOPTABLE_VAR) || get_query_var(Plugin_UI_Suite_SEO::ADOPTED_VAR);
     if (!$profile) {
@@ -656,13 +670,13 @@ final class Plugin_UI_Suite_Plugin {
   public static function render_form_shortcode($form_id) {
     $account = function_exists('plugin_asm_account') ? plugin_asm_account() : '';
     $form_id = preg_replace('/[^0-9]/', '', (string)$form_id);
-    if (!$account || !$form_id) return '<section class="rescue-suite-form-wrap rps-widget" aria-label="Online application form"><p>This form is temporarily unavailable. Please contact the rescue for help.</p></section>';
+    if (!$account || !$form_id) return '<section ' . self::widget_presentation_attributes() . ' class="rescue-suite-form-wrap rps-widget" aria-label="Online application form"><p>This form is temporarily unavailable. Please contact the rescue for help.</p></section>';
     $script_url = function_exists('plugin_asm_online_form_url') ? esc_url(plugin_asm_online_form_url($form_id)) : '';
     $form_tag = array_search($form_id, self::get_forms(), true);
     $title = $form_tag ? ucwords(str_replace(['_', '-'], ' ', $form_tag)) : 'Online application form';
     $title_id = wp_unique_id('rps-form-title-');
     ob_start(); ?>
-    <section class="rescue-suite-form-wrap rps-widget" aria-labelledby="<?php echo esc_attr($title_id); ?>"><header class="rps-form-heading"><p class="rps-eyebrow">Your next step</p><h2 id="<?php echo esc_attr($title_id); ?>"><?php echo esc_html($title); ?></h2><p>Complete the form below to get in touch with the rescue.</p></header><noscript><p>This application form requires JavaScript. Please contact the rescue if you need help applying.</p></noscript><div id="asm3-onlineform" aria-live="polite"></div><script type="text/javascript" src="<?php echo esc_url($script_url); ?>"></script></section>
+    <section <?php echo self::widget_presentation_attributes(); ?> class="rescue-suite-form-wrap rps-widget" aria-labelledby="<?php echo esc_attr($title_id); ?>"><header class="rps-form-heading"><p class="rps-eyebrow rps-widget-title">Your next step</p><h2 class="rps-widget-title" id="<?php echo esc_attr($title_id); ?>"><?php echo esc_html($title); ?></h2><p class="rps-widget-subtitle">Complete the form below to get in touch with the rescue.</p></header><noscript><p>This application form requires JavaScript. Please contact the rescue if you need help applying.</p></noscript><div id="asm3-onlineform" aria-live="polite"></div><script type="text/javascript" src="<?php echo esc_url($script_url); ?>"></script></section>
     <?php return ob_get_clean();
   }
 
@@ -696,10 +710,10 @@ final class Plugin_UI_Suite_Plugin {
     $adoptables_page_url = esc_url_raw($settings['global']['adoptables_page_url'] ?? '');
     $instance = wp_unique_id('rps-quiz-');
     ob_start(); ?>
-    <section id="<?php echo esc_attr($instance); ?>" class="rps-widget asm-adoption-quiz-widget" aria-labelledby="<?php echo esc_attr($instance); ?>-asm-quiz-title" style="--asm-quiz-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-quiz-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-quiz-bg); border:none; border-radius:24px; padding:20px; box-shadow:0 12px 28px rgba(15,23,42,.08);">
-      <p class="rps-eyebrow">A little about your home</p>
-      <h2 id="<?php echo esc_attr($instance); ?>-asm-quiz-title" style="margin:0;color:var(--asm-quiz-brand);font-size:2rem;line-height:1.15;"><?php echo esc_html($q['quiz_title_text'] ?? 'Find your match'); ?></h2>
-      <p style="margin:.5rem 0 1.25rem;color:#475569;"><?php echo esc_html($q['quiz_intro_text'] ?? 'Answer a few quick questions and we will suggest adoptable animals that may suit your home.'); ?></p>
+    <section <?php echo self::widget_presentation_attributes(); ?> id="<?php echo esc_attr($instance); ?>" class="rps-widget asm-adoption-quiz-widget" aria-labelledby="<?php echo esc_attr($instance); ?>-asm-quiz-title" style="--asm-quiz-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-quiz-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-quiz-bg); border:none; border-radius:24px; padding:20px; box-shadow:0 12px 28px rgba(15,23,42,.08);">
+      <p class="rps-eyebrow rps-widget-title">A little about your home</p>
+      <h2 class="rps-widget-title" id="<?php echo esc_attr($instance); ?>-asm-quiz-title" style="margin:0;color:var(--asm-quiz-brand);font-size:2rem;line-height:1.15;"><?php echo esc_html($q['quiz_title_text'] ?? 'Find your match'); ?></h2>
+      <p class="rps-widget-subtitle" style="margin:.5rem 0 1.25rem;color:#475569;"><?php echo esc_html($q['quiz_intro_text'] ?? 'Answer a few quick questions and we will suggest adoptable animals that may suit your home.'); ?></p>
       <form id="<?php echo esc_attr($instance); ?>-asm-quiz-questions" class="rps-quiz-fields">
         <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q1_text'] ?? 'What age would you prefer?'); ?></span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-age" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q1_either_label'] ?? 'No preference'); ?></option><option value="Under 1 year">Under 1 year</option><option value="1 to 3 years">1 to 3 years</option><option value="3 to 5 years">3 to 5 years</option><option value="5+ years">5+ years</option></select></label>
         <label style="display:block;"><span style="display:block;font-weight:700;color:#374151;margin-bottom:.35rem;"><?php echo esc_html($q['q2_text'] ?? 'Do you have a preference for sex?'); ?></span><select id="<?php echo esc_attr($instance); ?>-asm-quiz-sex" style="width:100%;padding:10px 12px;border-radius:14px;border:1px solid #d1d5db;"><option value="either"><?php echo esc_html($q['q2_either_label'] ?? 'No preference'); ?></option><option value="Female"><?php echo esc_html($q['q2_female_label'] ?? 'Female'); ?></option><option value="Male"><?php echo esc_html($q['q2_male_label'] ?? 'Male'); ?></option></select></label>
@@ -792,13 +806,13 @@ final class Plugin_UI_Suite_Plugin {
     $adoptables_page_url = esc_url_raw($settings['global']['adoptables_page_url'] ?? '');
     $instance = wp_unique_id('rps-featured-');
     ob_start(); ?>
-    <section id="<?php echo esc_attr($instance); ?>" class="rps-widget asm-featured-animal-widget" aria-labelledby="<?php echo esc_attr($instance); ?>-asm-featured-title" style="--asm-featured-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-featured-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-featured-bg); border:2px solid var(--asm-featured-brand); border-radius:24px; padding:20px;">
+    <section <?php echo self::widget_presentation_attributes(); ?> id="<?php echo esc_attr($instance); ?>" class="rps-widget asm-featured-animal-widget" aria-labelledby="<?php echo esc_attr($instance); ?>-asm-featured-title" style="--asm-featured-brand:<?php echo esc_attr($settings['adoptables']['brand_color'] ?? '#401268'); ?>; --asm-featured-bg:<?php echo esc_attr($settings['adoptables']['background_color'] ?? '#fcf5fd'); ?>; background:var(--asm-featured-bg); border:2px solid var(--asm-featured-brand); border-radius:24px; padding:20px;">
       <div class="rps-featured-layout">
         <div class="rps-featured-media"><div style="aspect-ratio:1/1;background:#f3f4f6;border-radius:20px;overflow:hidden;"><img id="<?php echo esc_attr($instance); ?>-asm-featured-image" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" /></div></div>
         <div class="rps-featured-content">
-          <div class="rps-eyebrow">Featured</div>
-          <h2 id="<?php echo esc_attr($instance); ?>-asm-featured-title" style="margin:.35rem 0 0;font-size:2rem;line-height:1.15;color:var(--asm-featured-brand);"><?php echo esc_html($title); ?></h2>
-          <p style="margin:.4rem 0 1rem;color:#475569;"><?php echo esc_html($subtitle); ?></p>
+          <div class="rps-eyebrow rps-widget-title">Featured</div>
+          <h2 class="rps-widget-title" id="<?php echo esc_attr($instance); ?>-asm-featured-title" style="margin:.35rem 0 0;font-size:2rem;line-height:1.15;color:var(--asm-featured-brand);"><?php echo esc_html($title); ?></h2>
+          <p class="rps-widget-subtitle" style="margin:.4rem 0 1rem;color:#475569;"><?php echo esc_html($subtitle); ?></p>
           <div id="<?php echo esc_attr($instance); ?>-asm-featured-name" style="font-size:1.5rem;font-weight:800;color:#111827;">Loading…</div>
           <div id="<?php echo esc_attr($instance); ?>-asm-featured-meta" style="margin:.4rem 0 1rem;color:#4b5563;">Please wait</div>
           <a id="<?php echo esc_attr($instance); ?>-asm-featured-link" href="#" style="display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:var(--asm-featured-brand);color:#fff;text-decoration:none;font-weight:700;"><?php echo esc_html($button); ?></a>
@@ -844,6 +858,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (self::get_forms() as $tag => $id) $tags[] = $tag;
     $tags[] = self::sanitize_shortcode_tag($settings['featured']['shortcode'] ?? ($settings['widgets']['featured_shortcode'] ?? 'featured_animal'));
     $tags[] = self::sanitize_shortcode_tag($settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz');
+    $tags = array_merge($tags, ['donation_widget', 'plugin_adoptables_ui', 'plugin_adopted_ui', 'plugin_adoption_form', 'plugin_volunteer_form', 'plugin_waiting_list_form', 'plugin_lost_cat_form']);
     return array_values(array_unique(array_filter($tags)));
   }
 
@@ -1012,6 +1027,9 @@ final class Plugin_UI_Suite_Plugin {
     if ($active_tab === 'global') {
       $g = $input['global'] ?? [];
       $style_behavior = $g['style_behavior'] ?? ($clean['global']['style_behavior'] ?? $defaults['global']['style_behavior']);
+      foreach (['widget_transparent_background','widget_show_titles','widget_show_subtitles','widget_show_footers'] as $key) {
+        if (array_key_exists($key, $g)) $clean['global'][$key] = empty($g[$key]) ? 0 : 1;
+      }
       $clean['global']['style_behavior'] = in_array($style_behavior, ['original_ui_defaults','global_style_first'], true) ? $style_behavior : $defaults['global']['style_behavior'];
       foreach (['brand_color','background_color','modal_divider_color','text_primary_color','text_muted_color'] as $k) $clean['global'][$k] = self::sanitise_hex($g[$k] ?? '', $clean['global'][$k] ?? $defaults['global'][$k]);
       $clean['global']['paw_opacity'] = self::sanitise_float_string($g['paw_opacity'] ?? '', $clean['global']['paw_opacity'] ?? $defaults['global']['paw_opacity'], 0, 0.25);
@@ -1022,7 +1040,7 @@ final class Plugin_UI_Suite_Plugin {
       $clean['global']['cache_adopted_seconds'] = self::sanitise_int($g['cache_adopted_seconds'] ?? '', $clean['global']['cache_adopted_seconds'] ?? $defaults['global']['cache_adopted_seconds'], 0, 600);
       $clean['global']['cache_stats_seconds'] = self::sanitise_int($g['cache_stats_seconds'] ?? '', $clean['global']['cache_stats_seconds'] ?? $defaults['global']['cache_stats_seconds'], 0, 600);
       if (array_key_exists('bypass_plugin_cache', $g) || array_key_exists('bypa' . 'plugin_cache', $g)) $clean['global']['bypass_plugin_cache'] = (!empty($g['bypass_plugin_cache']) || !empty($g['bypa' . 'plugin_cache'])) ? 1 : 0;
-      $clean['global']['delete_data_on_uninstall'] = !empty($g['delete_data_on_uninstall']) ? 1 : 0;
+      if (array_key_exists('delete_data_on_uninstall', $g)) $clean['global']['delete_data_on_uninstall'] = !empty($g['delete_data_on_uninstall']) ? 1 : 0;
       foreach (['adoptables_page_url','adopted_page_url'] as $k) $clean['global'][$k] = esc_url_raw($g[$k] ?? ($clean['global'][$k] ?? ''));
       foreach (['adoptables_style_source','adopted_style_source','stats_style_source'] as $k) {
         $style_source = $g[$k] ?? ($clean['global'][$k] ?? 'auto');
@@ -1069,32 +1087,35 @@ final class Plugin_UI_Suite_Plugin {
     } elseif (in_array($active_tab, ['adoptables','adopted','stats'], true)) {
       $clean[$active_tab] = self::sanitize_section($active_tab, $input[$active_tab] ?? [], $clean[$active_tab] ?? []);
       if (!empty($input['shortcodes']) && is_array($input['shortcodes'])) { $sc=$input['shortcodes']; foreach (['adoptables','adopted','statistics'] as $k) if (isset($sc[$k])) $clean['shortcodes'][$k] = self::sanitize_shortcode_tag($sc[$k]) ?: ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k]); }
+      if ($active_tab === 'stats' && isset($input['stats']['card_order']) && !isset($input['stats']['builder_card_order'])) $clean['stats']['builder_card_order'] = $clean['stats']['card_order'];
       if ($active_tab === 'stats' && !empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
     } elseif ($active_tab === 'featured') {
       $fi = $input['featured'] ?? [];
       $clean['featured']['shortcode'] = self::sanitize_shortcode_tag($fi['shortcode'] ?? ($clean['featured']['shortcode'] ?? ($clean['widgets']['featured_shortcode'] ?? $defaults['featured']['shortcode']))) ?: ($clean['featured']['shortcode'] ?? $defaults['featured']['shortcode']);
-      $clean['featured']['enabled'] = !empty($fi['enabled']) ? 1 : 0;
-      $clean['featured']['mode'] = in_array(($fi['mode'] ?? 'random'), ['random','newest','manual'], true) ? $fi['mode'] : 'random';
-      $clean['featured']['manual_id'] = preg_replace('/\D+/', '', (string)($fi['manual_id'] ?? ''));
-      foreach (['title_text','subtitle_text','button_text'] as $k) $clean['featured'][$k] = self::sanitise_text($fi[$k] ?? '', $defaults['featured'][$k]);
+      if (array_key_exists('enabled', $fi)) $clean['featured']['enabled'] = !empty($fi['enabled']) ? 1 : 0;
+      $clean['featured']['mode'] = in_array(($fi['mode'] ?? $clean['featured']['mode']), ['random','newest','manual'], true) ? ($fi['mode'] ?? $clean['featured']['mode']) : 'random';
+      $clean['featured']['manual_id'] = preg_replace('/\D+/', '', (string)($fi['manual_id'] ?? $clean['featured']['manual_id']));
+      foreach (['title_text','subtitle_text','button_text'] as $k) $clean['featured'][$k] = self::sanitise_text($fi[$k] ?? $clean['featured'][$k], $defaults['featured'][$k]);
       $clean['featured']['layout_order'] = sanitize_textarea_field($fi['layout_order'] ?? ($clean['featured']['layout_order'] ?? $defaults['featured']['layout_order']));
     } elseif ($active_tab === 'quiz') {
       $q = $input['quiz'] ?? [];
       $clean['quiz']['quiz_shortcode'] = self::sanitize_shortcode_tag($q['quiz_shortcode'] ?? ($clean['quiz']['quiz_shortcode'] ?? $defaults['quiz']['quiz_shortcode'])) ?: ($clean['quiz']['quiz_shortcode'] ?? $defaults['quiz']['quiz_shortcode']);
-      $clean['quiz']['quiz_enabled'] = !empty($q['quiz_enabled']) ? 1 : 0;
-      foreach (['quiz_title_text','quiz_intro_text','q1_text','q1_kitten_label','q1_adult_label','q1_senior_label','q1_either_label','q2_text','q2_female_label','q2_male_label','q2_either_label','q3_text','q3_yes_label','q3_no_label','results_title_text','results_empty_text','age_categories'] as $k) $clean['quiz'][$k] = self::sanitise_text($q[$k] ?? '', $defaults['quiz'][$k]);
-      $clean['quiz']['q3_hide'] = !empty($q['q3_hide']) ? 1 : 0;
+      if (array_key_exists('quiz_enabled', $q)) $clean['quiz']['quiz_enabled'] = !empty($q['quiz_enabled']) ? 1 : 0;
+      foreach (['quiz_title_text','quiz_intro_text','q1_text','q1_kitten_label','q1_adult_label','q1_senior_label','q1_either_label','q2_text','q2_female_label','q2_male_label','q2_either_label','q3_text','q3_yes_label','q3_no_label','results_title_text','results_empty_text','age_categories'] as $k) $clean['quiz'][$k] = self::sanitise_text($q[$k] ?? $clean['quiz'][$k], $defaults['quiz'][$k]);
+      if (array_key_exists('q3_hide', $q)) $clean['quiz']['q3_hide'] = !empty($q['q3_hide']) ? 1 : 0;
       $clean['quiz']['question_order'] = sanitize_textarea_field($q['question_order'] ?? ($clean['quiz']['question_order'] ?? $defaults['quiz']['question_order']));
       $clean['quiz']['answer_mappings'] = sanitize_textarea_field($q['answer_mappings'] ?? ($clean['quiz']['answer_mappings'] ?? $defaults['quiz']['answer_mappings']));
     } elseif ($active_tab === 'forms') {
       $fo = $input['forms'] ?? [];
       // The legacy forms account is no longer a connection source. Forms use
       // the same ASM Integration account as every other ASM consumer.
+      if (array_key_exists('items', $fo)) {
       $clean['forms']['items'] = [];
       $items = isset($fo['items']) && is_array($fo['items']) ? $fo['items'] : [];
       for ($i=0; $i<10; $i++) {
         $row = isset($items[$i]) && is_array($items[$i]) ? $items[$i] : [];
         $clean['forms']['items'][] = ['shortcode' => self::sanitize_shortcode_tag($row['shortcode'] ?? ''), 'form_id' => preg_replace('/[^0-9]/', '', (string)($row['form_id'] ?? ''))];
+      }
       }
       $clean['forms']['layout_order'] = sanitize_textarea_field($fo['layout_order'] ?? ($clean['forms']['layout_order'] ?? $defaults['forms']['layout_order']));
       $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes'] ?? ($clean['forms']['platform_support_notes'] ?? $defaults['forms']['platform_support_notes']));
@@ -1106,6 +1127,7 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['custom_api_url','custom_api_adoptables_url','custom_api_adoptions_url','custom_api_report_url','custom_api_incare_url','custom_api_image_url','shelterluv_base_url','shelterluv_adoptables_url','shelterluv_adoptions_url','shelterluv_report_url','shelterluv_incare_url','shelterluv_image_url','petpoint_base_url','petpoint_adoptables_url','petpoint_adoptions_url','petpoint_report_url','petpoint_incare_url','petpoint_image_url'] as $k) $clean['global'][$k] = esc_url_raw($g[$k] ?? ($clean['global'][$k] ?? ''));
       foreach (['custom_api_key','custom_api_auth_header','provider_profile','field_map','shelterluv_api_key','shelterluv_org_id','petpoint_username','petpoint_shelter_id','petpoint_adopted_report_id'] as $k) $clean['global'][$k] = sanitize_text_field($g[$k] ?? ($clean['global'][$k] ?? ''));
       if (array_key_exists('petpoint_password', $g) && $g['petpoint_password'] !== '') $clean['global']['petpoint_password'] = sanitize_text_field((string)$g['petpoint_password']);
+      if (array_key_exists('field_map', $g)) $clean['global']['field_map'] = sanitize_textarea_field($g['field_map']);
       $clean['proxy']['base_url'] = esc_url_raw($pr['base_url'] ?? ($clean['proxy']['base_url'] ?? $defaults['proxy']['base_url']));
       $clean['proxy']['account'] = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)($pr['account'] ?? ($clean['proxy']['account'] ?? '')));
       $clean['proxy']['username'] = sanitize_text_field((string)($pr['username'] ?? ($clean['proxy']['username'] ?? '')));
@@ -1146,7 +1168,14 @@ final class Plugin_UI_Suite_Plugin {
       $clean['proxy']['cache_adoptions_seconds'] = self::sanitise_int($pr['cache_adoptions_seconds'] ?? '', $clean['proxy']['cache_adoptions_seconds'] ?? $defaults['proxy']['cache_adoptions_seconds'], 0, 3600);
     }
     if (class_exists('Plugin_UI_Suite_Registry')) {
-      $clean = Plugin_UI_Suite_Registry::sanitize_registered_values($active_tab, $input, $clean);
+      // Built-in values have already passed their typed sanitizers above.
+      // Do not flatten layout/field-map newlines with the registry text fallback.
+      $extension_input = $input;
+      foreach ($defaults as $section => $fields) {
+        if (!is_array($fields) || !isset($extension_input[$section]) || !is_array($extension_input[$section])) continue;
+        foreach (array_keys($fields) as $key) unset($extension_input[$section][$key]);
+      }
+      $clean = Plugin_UI_Suite_Registry::sanitize_registered_values($active_tab, $extension_input, $clean);
     }
 
     self::create_snapshot('save');
@@ -1266,12 +1295,17 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function field_name($section,$key){ return 'suite['.$section.']['.$key.']'; }
-  private static function text_input($section,$key,$value,$class='regular-text'){ printf('<input type="text" name="%s" value="%s" class="%s" />', esc_attr(self::field_name($section,$key)), esc_attr($value), esc_attr($class)); }
-  private static function number_input($section,$key,$value,$min,$max,$step=1){ printf('<input type="number" name="%s" value="%s" min="%s" max="%s" step="%s" class="small-text" />', esc_attr(self::field_name($section,$key)), esc_attr($value), esc_attr($min), esc_attr($max), esc_attr($step)); }
-  private static function colour_input($section,$key,$value){ printf('<input type="color" name="%s" value="%s" /> <code>%s</code>', esc_attr(self::field_name($section,$key)), esc_attr($value), esc_html($value)); }
+  private static function field_label($section, $key) {
+    $key = preg_replace('/^fs_/', 'font_size_', (string)$key);
+    $key = preg_replace('/^fw_/', 'font_weight_', $key);
+    return ucwords(str_replace(['_', '-'], ' ', $section . ': ' . $key));
+  }
+  private static function text_input($section,$key,$value,$class='regular-text'){ printf('<input type="text" name="%s" value="%s" class="%s" aria-label="%s" data-rps-fallback-label="1" />', esc_attr(self::field_name($section,$key)), esc_attr($value), esc_attr($class), esc_attr(self::field_label($section,$key))); }
+  private static function number_input($section,$key,$value,$min,$max,$step=1){ printf('<input type="number" name="%s" value="%s" min="%s" max="%s" step="%s" class="small-text" aria-label="%s" data-rps-fallback-label="1" />', esc_attr(self::field_name($section,$key)), esc_attr($value), esc_attr($min), esc_attr($max), esc_attr($step), esc_attr(self::field_label($section,$key))); }
+  private static function colour_input($section,$key,$value){ printf('<input type="color" name="%s" value="%s" aria-label="%s" data-rps-fallback-label="1" /> <code>%s</code>', esc_attr(self::field_name($section,$key)), esc_attr($value), esc_attr(self::field_label($section,$key)), esc_html($value)); }
   private static function checkbox_input($section,$key,$checked,$label){ $name = self::field_name($section,$key); printf('<input type="hidden" name="%s" value="0" /><label><input type="checkbox" name="%s" value="1" %s /> %s</label>', esc_attr($name), esc_attr($name), checked(!empty($checked), true, false), esc_html($label)); }
-  private static function textarea_input($section,$key,$value,$rows=4){ printf('<textarea name="%s" rows="%d" class="large-text">%s</textarea>', esc_attr(self::field_name($section,$key)), (int)$rows, esc_textarea($value)); }
-  private static function select_input($section,$key,$value,$options){ printf('<select name="%s">', esc_attr(self::field_name($section,$key))); foreach($options as $ov=>$ol) printf('<option value="%s" %s>%s</option>', esc_attr($ov), selected((string)$value,(string)$ov,false), esc_html($ol)); echo '</select>'; }
+  private static function textarea_input($section,$key,$value,$rows=4){ printf('<textarea name="%s" rows="%d" class="large-text" aria-label="%s" data-rps-fallback-label="1">%s</textarea>', esc_attr(self::field_name($section,$key)), (int)$rows, esc_attr(self::field_label($section,$key)), esc_textarea($value)); }
+  private static function select_input($section,$key,$value,$options){ printf('<select name="%s" aria-label="%s" data-rps-fallback-label="1">', esc_attr(self::field_name($section,$key)), esc_attr(self::field_label($section,$key))); foreach($options as $ov=>$ol) printf('<option value="%s" %s>%s</option>', esc_attr($ov), selected((string)$value,(string)$ov,false), esc_html($ol)); echo '</select>'; }
   private static function icon_options(){ return ['heart'=>'Heart','home'=>'Home','syringe'=>'Syringe','stethoscope'=>'Stethoscope','map_pin'=>'Map Pin','shield'=>'Shield','tag'=>'Tag','scissors'=>'Scissors','handshake'=>'Handshake','house_heart'=>'House + Heart','users'=>'People','clipboard'=>'Clipboard','calendar'=>'Calendar','check'=>'Check','chart'=>'Chart','info'=>'Info','heartbeat'=>'Heartbeat','bandage'=>'Bandage','pill'=>'Pill','id_card'=>'ID Card','qr'=>'Scan / QR','shield_check'=>'Shield + Check','pawprints_a'=>'Paw Prints A','pawprints_b'=>'Paw Prints B','pawprints_c'=>'Paw Prints C','pawprints_d'=>'Paw Prints Cute','pawprints_e'=>'Paw Prints Bold']; }
   private static function sanitize_icon_slug($v){ $v=sanitize_key((string)$v); return array_key_exists($v,self::icon_options())?$v:'heart'; }
   private static function sortable_list($name,$values,$labels){
@@ -1280,10 +1314,10 @@ final class Plugin_UI_Suite_Plugin {
     foreach ($values as $v){ $v=sanitize_key((string)$v); if($v!=='' && isset($labels[$v]) && !in_array($v,$current,true)) $current[]=$v; }
     foreach (array_keys($labels) as $v){ if(!in_array($v,$current,true)) $current[]=$v; }
     $id = 'plugin-sortable-' . md5($name);
-    echo '<ul class="plugin-sortable" data-sortable-input="'.esc_attr($id).'" role="listbox" aria-label="Drag or use arrow keys to reorder layout items">';
-    foreach ($current as $v){ echo '<li draggable="true" tabindex="0" role="option" aria-grabbed="false" data-value="'.esc_attr($v).'"><span>'.esc_html($labels[$v]).'</span><span class="dashicons dashicons-move" aria-hidden="true"></span></li>'; }
+    echo '<ul class="plugin-sortable" data-sortable-input="'.esc_attr($id).'" role="list" aria-label="Layout order: use the Up and Down arrow keys to move an item">';
+    foreach ($current as $v){ echo '<li draggable="true" tabindex="0" role="listitem" aria-roledescription="reorderable item" aria-keyshortcuts="ArrowUp ArrowDown" data-value="'.esc_attr($v).'"><span>'.esc_html($labels[$v]).'</span><span class="dashicons dashicons-move" aria-hidden="true"></span></li>'; }
     echo '</ul>';
-    printf('<textarea id="%s" class="plugin-sortable-input" name="%s" rows="6" style="display:none;">%s</textarea><p class="description" data-sortable-status hidden></p>', esc_attr($id), esc_attr($name), esc_textarea(implode("
+    printf('<textarea id="%s" class="plugin-sortable-input" name="%s" rows="6" style="display:none;">%s</textarea><p class="description" data-sortable-status role="status" aria-live="polite" hidden></p>', esc_attr($id), esc_attr($name), esc_textarea(implode("
 ",$current)));
   }
   private static function preview_url($ui,$device='desktop'){ return wp_nonce_url(add_query_arg(['action'=>'plugin_ui_suite_preview','ui'=>$ui,'device'=>$device], admin_url('admin-post.php')), 'plugin_ui_suite_preview_'.$ui.'_'.$device); }
@@ -1325,10 +1359,17 @@ final class Plugin_UI_Suite_Plugin {
   private static function row($label,$html){
     static $row_id = 0;
     $id = 'rps-field-label-' . ++$row_id;
-    // The row heading names controls even when a field is not wrapped in a label.
-    $html = preg_replace_callback('/<(input|select|textarea)\\b[^>]*>/i', static function($match) use ($id) {
-      if (preg_match("/type=[\"'](?:hidden|checkbox|radio|submit|button)[\"']|aria-label(?:ledby)?=/i", $match[0])) return $match[0];
-      return preg_replace('/^<(input|select|textarea)/i', '<$1 aria-labelledby="' . $id . '"', $match[0]);
+    preg_match_all('/<(input|select|textarea)\\b[^>]*>/i', $html, $controls);
+    $visible = array_filter($controls[0], static function($control) { return !preg_match("/type=[\"'](?:hidden|checkbox|radio|submit|button)[\"']/i", $control); });
+    $single = count($visible) === 1;
+    $html = preg_replace_callback('/<(input|select|textarea)\\b[^>]*>/i', static function($match) use ($id, $single) {
+      $control = $match[0];
+      if (strpos($control, 'data-rps-fallback-label=') !== false) {
+        if (!$single) return $control;
+        $control = preg_replace('/\\s(?:aria-label|data-rps-fallback-label)="[^"]*"/i', '', $control);
+      }
+      if (preg_match("/type=[\"'](?:hidden|checkbox|radio|submit|button)[\"']|aria-label(?:ledby)?=/i", $control)) return $control;
+      return preg_replace('/^<(input|select|textarea)/i', '<$1 aria-labelledby="' . $id . '"', $control);
     }, $html);
     echo '<tr><th scope="row" id="'.esc_attr($id).'">'.$label.'</th><td>'.$html.'</td></tr>';
   }
@@ -1339,7 +1380,7 @@ final class Plugin_UI_Suite_Plugin {
     $tab = sanitize_key($_GET['tab'] ?? 'global');
     if (in_array($tab, ['registry','proxy'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
     if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
-    echo '<div class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p></details>';
+    echo '<div data-rps-ui class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p></details>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
     if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::render_tabs($tab);
@@ -1385,6 +1426,11 @@ final class Plugin_UI_Suite_Plugin {
     self::form_start('global');
     echo '<div class="plugin-suite-card"><h2>Shared styling</h2><p class="description">These styles can be reused by Adoptables, Adopted and Statistics so public displays feel consistent.</p><table class="form-table">';
     foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','modal_divider_color'=>'Modal divider colour','text_primary_color'=>'Primary text colour','text_muted_color'=>'Muted text colour'] as $k=>$label){ ob_start(); self::colour_input('global',$k,$s['global'][$k]); self::row($label, ob_get_clean()); }
+    echo '<tr><th scope="row">Widget presentation</th><td><p class="description">Applies to outer widgets only. Dialogs and animal profile pages stay readable. Transparent surfaces retain the configured paw pattern.</p>';
+    foreach (['widget_transparent_background'=>'Transparent widget background','widget_show_titles'=>'Show widget titles','widget_show_subtitles'=>'Show widget subtitles','widget_show_footers'=>'Show widget footer text'] as $key => $label) {
+      echo '<p>'; self::checkbox_input('global', $key, $s['global'][$key], $label); echo '</p>';
+    }
+    echo '</td></tr>';
     ob_start(); self::number_input('global','paw_opacity',$s['global']['paw_opacity'],0,0.25,0.01); self::row('Paw print opacity', ob_get_clean());
     ob_start(); self::number_input('global','paw_count',$s['global']['paw_count'],0,80); self::row('Paw print count', ob_get_clean());
     ob_start(); self::text_input('global','font_family',$s['global']['font_family']); self::row('Font family', ob_get_clean());
@@ -1427,7 +1473,6 @@ final class Plugin_UI_Suite_Plugin {
       self::row('Account name', '<input type="text" name="suite[proxy][account]" value="'.esc_attr($proxy['account'] ?? '').'" class="regular-text" /><p class="description">Active value: '.esc_html($configuration['account']['value'] ?? '').' (from '.esc_html($source_label('account')).').</p>');
       self::row('Username', '<input type="text" name="suite[proxy][username]" value="'.esc_attr($proxy['username'] ?? '').'" class="regular-text" autocomplete="off" /><p class="description">Active value is supplied by '.esc_html($source_label('username')).'.</p>');
       self::row('Password', '<input type="password" name="suite[proxy][password]" value="" class="regular-text" autocomplete="new-password" /><p class="description">'.(!empty($proxy['password']) ? 'Saved value present. ' : '').'Leave blank to keep the saved value. Active value is supplied by '.esc_html($source_label('password')).'.</p>');
-      self::row('API key', '<input type="password" name="suite[proxy][api_key]" value="" class="regular-text" autocomplete="new-password" /><p class="description">Optional; ASM service endpoints currently use account, username and password. '.(!empty($proxy['api_key']) ? 'A saved value is present. ' : '').'Leave blank to keep the saved value.</p>');
       self::row('Configuration precedence', '<p class="description">Environment variables (<code>ASM_BASE_URL</code>, <code>ASM_ACCOUNT</code>, <code>ASM_USERNAME</code>, <code>ASM_PASSWORD</code>, <code>ASM_API_KEY</code>) override <code>wp-config.php</code> constants, which override the saved Integration values. Secrets are masked and are never exposed to visitors.</p>');
       self::row('Documentation', '<a href="https://sheltermanager.com/site/en_asm3_help.html" target="_blank" rel="noopener">ASM API documentation</a>');
     } elseif ($sub === 'shelterluv') {
@@ -1440,21 +1485,30 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['custom_api_url'=>'Base URL','custom_api_auth_header'=>'Authentication header','custom_api_key'=>'API key'] as $key=>$label) self::row($label, '<input type="'.($key==='custom_api_key'?'password':($key==='custom_api_url'?'url':'text')).'" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />');
       foreach (['custom_api_adoptables_url'=>'Adoptables endpoint','custom_api_adoptions_url'=>'Adoptions endpoint','custom_api_report_url'=>'Report endpoint','custom_api_incare_url'=>'In-care endpoint','custom_api_image_url'=>'Image endpoint'] as $key=>$label) self::row($label, '<input type="url" name="suite[global]['.esc_attr($key).']" value="'.esc_attr($s['global'][$key] ?? '').'" class="regular-text code" />');
     }
-    ob_start(); self::select_input('global','provider_profile',$s['global']['provider_profile'] ?? '', array_map(function($v){ return $v['label']; }, self::provider_profile_templates())); self::row('Field mapping template', ob_get_clean());
+    self::row('Field mapping examples', self::provider_mapping_examples());
     self::row('Field mapping', '<textarea name="suite[global][field_map]" rows="6" class="large-text code">' . esc_textarea($s['global']['field_map'] ?: (self::provider_profile_templates()[$s['global']['provider_profile'] ?? '']['map'] ?? '')) . '</textarea>');
     self::row('Provider cache', '<p class="description">Animal and statistics feed cache times are plugin-wide so public displays stay consistent. Change them in General → General settings. Provider cache can be bypassed from there when testing.</p>');
     self::row('Status and health', '<strong>'.esc_html(($s['global']['data_source'] ?? 'asm') === str_replace('-', '_', $sub) ? 'Selected as live source' : 'Configured but not selected').'</strong><p class="description">Use Advanced Diagnostics in developer mode for raw endpoint payloads.</p>');
     echo '</table></div></div>'; self::form_end();
   }
 
+  private static function provider_mapping_examples() {
+    $html = '<details><summary>Show copy-and-paste field mapping examples</summary>';
+    foreach (self::provider_profile_templates() as $template) {
+      $html .= '<h3>'.esc_html($template['label']).'</h3><pre class="plugin-suite-mapping-example">'.esc_html($template['map']).'</pre>';
+    }
+    return $html . '<p class="description">Copy an example into Field mapping and adjust its source field names for your provider.</p></details>';
+  }
+
   private static function subtab_nav($tab, $items) {
     $current = sanitize_key($_GET['subtab'] ?? array_key_first($items));
-    echo '<div class="plugin-suite-subnav">';
+    if (!array_key_exists($current, $items)) $current = array_key_first($items);
+    echo '<nav class="plugin-suite-subnav" aria-label="'.esc_attr(ucwords(str_replace('-', ' ', $tab)).' settings sections').'">';
     foreach ($items as $key => $label) {
       $url = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$tab,'subtab'=>$key], admin_url('options-general.php'));
-      printf('<a class="%s" href="%s">%s</a>', $current === $key ? 'active' : '', esc_url($url), esc_html($label));
+      printf('<a class="%s" href="%s" %s>%s</a>', $current === $key ? 'active' : '', esc_url($url), $current === $key ? 'aria-current="page"' : '', esc_html($label));
     }
-    echo '</div>';
+    echo '</nav>';
     return $current;
   }
 
@@ -1489,7 +1543,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','modal_divider_color'=>'Modal divider colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('adoptables',$k,$o[$k]); self::row($label, ob_get_clean()); }
     foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_padding','Card padding (px)',0,120,1],['card_radius','Card corner radius (px)',0,120,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('adoptables',$r[0],$o[$r[0]]); else self::number_input('adoptables',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
     ob_start(); self::checkbox_input('adoptables','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
-    ob_start(); self::select_input('adoptables','display_style',$o['display_style'] ?? 'classic',['classic'=>'Classic','compact'=>'Compact','list'=>'List']); self::row('Display style', ob_get_clean());
+    ob_start(); self::select_input('adoptables','display_style',$o['display_style'] ?? 'classic',['classic'=>'Grid','list'=>'List']); self::row('Display style', ob_get_clean());
     echo '</table></div>';
 
     echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='text'?'active':'').'" data-subtab="text"><h2>Text</h2><table class="form-table">';
@@ -1544,7 +1598,7 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_adopted_tab($o, $g) {
     self::form_start('adopted');
-    $sub = self::subtab_nav('adopted', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','modal'=>'Modal','layout'=>'Layout builder','embed'=>'Embed']);
+    $sub = self::subtab_nav('adopted', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','modal'=>'Modal','embed'=>'Embed']);
     echo '<div class="plugin-suite-grid">';
 
     if($sub==='design') {
@@ -1580,13 +1634,9 @@ final class Plugin_UI_Suite_Plugin {
       ob_start(); self::text_input('adopted','adoptables_cta_button_text',$o['adoptables_cta_button_text'] ?? ''); self::row('Adoptables button text', ob_get_clean());
       self::row('Adoptables page URL', '<input type="url" name="' . esc_attr(self::field_name('adopted','adoptables_cta_url')) . '" value="' . esc_attr($o['adoptables_cta_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/adopt/')) . '" />');
       ob_start(); self::number_input('adopted','modal_max_width',$o['modal_max_width'] ?? 896,320,1600); self::row('Modal max width (px)', ob_get_clean());
-      ob_start(); self::select_input('adopted','date_label_halign',$o['date_label_halign'],['left'=>'Left','right'=>'Right']); self::row('Date label horizontal alignment', ob_get_clean());
-      ob_start(); self::select_input('adopted','date_label_valign',$o['date_label_valign'],['top'=>'Top','bottom'=>'Bottom']); self::row('Date label vertical alignment', ob_get_clean());
       echo '</table></div>';
     } elseif ($sub==='embed') {
       self::render_embed_card('adopted','Adopted', self::sanitize_shortcode_tag(self::get_settings()['shortcodes']['adopted'] ?? 'adopted'), 'Place adopted animals and success stories on your adopted page.'); self::preview_frame('adopted');
-    } else {
-      echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Adopted card layout</h2>'; self::sortable_list(self::field_name('adopted','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','date_badge'=>'Adoption date badge','name_meta'=>'Name and meta','story_excerpt'=>'Story excerpt','share_button'=>'Share button']); echo '<h2>Adopted modal layout</h2>'; self::sortable_list(self::field_name('adopted','builder_modal_order'), preg_split('/\R+/', (string)($o['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','name_meta'=>'Name and meta','adoption_date'=>'Adoption date','story'=>'Story','global_text'=>'Global text','share_button'=>'Share button']); echo '</div>';
     }
 
     echo '</div>';
@@ -1595,7 +1645,7 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_stats_tab($o, $g) {
     self::form_start('stats');
-    $sub = self::subtab_nav('stats', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','cards'=>'Cards','layout'=>'Layout builder','embed'=>'Embed']);
+    $sub = self::subtab_nav('stats', ['design'=>'Design','text'=>'Text','responsive'=>'Responsive','typography'=>'Typography','cards'=>'Cards','embed'=>'Embed']);
     echo '<div class="plugin-suite-grid">';
 
     if($sub==='design') {
@@ -1603,7 +1653,7 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('stats',$k,$o[$k]); self::row($label, ob_get_clean()); }
       foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_radius','Card corner radius (px)',0,200,1],['card_padding','Card padding (px)',0,200,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('stats',$r[0],$o[$r[0]]); else self::number_input('stats',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
       ob_start(); self::checkbox_input('stats','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
-      ob_start(); self::select_input('stats','layout_mode',$o['layout_mode'],['grid'=>'Grid','one_row'=>'One row on tablet / PC']); self::row('Layout mode', ob_get_clean());
+      ob_start(); self::select_input('stats','layout_mode',$o['layout_mode'],['grid'=>'Comfortable','one_row'=>'Compact on tablet / desktop']); self::row('Card density', ob_get_clean());
       echo '</table></div>';
     } elseif($sub==='text') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Text</h2><table class="form-table">';
@@ -1611,7 +1661,7 @@ final class Plugin_UI_Suite_Plugin {
       echo '</table></div>';
     } elseif($sub==='responsive') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Responsive</h2><table class="form-table">';
-      foreach ([['Mobile columns / rows','cols_mobile','rows_mobile'],['Tablet columns / rows','cols_tablet','rows_tablet'],['PC columns / rows','cols_desktop','rows_desktop']] as $r){ ob_start(); echo '<div class="plugin-suite-inline">'; self::number_input('stats',$r[1],$o[$r[1]],1,12); self::number_input('stats',$r[2],$o[$r[2]],1,12); echo '</div>'; self::row($r[0], ob_get_clean()); }
+      foreach (['cols_mobile'=>'Mobile columns','cols_tablet'=>'Tablet columns','cols_desktop'=>'Desktop columns'] as $key=>$label) { ob_start(); self::number_input('stats',$key,$o[$key],1,12); self::row($label, ob_get_clean()); }
       foreach ([['Card width M / T / PC','card_w_mobile','card_w_tablet','card_w_desktop'],['Card height M / T / PC','card_h_mobile','card_h_tablet','card_h_desktop']] as $r){ ob_start(); echo '<div class="plugin-suite-inline">'; self::number_input('stats',$r[1],$o[$r[1]],0,1600); self::number_input('stats',$r[2],$o[$r[2]],0,1600); self::number_input('stats',$r[3],$o[$r[3]],0,1600); echo '</div>'; self::row($r[0], ob_get_clean()); }
       echo '</table></div>';
     } elseif($sub==='typography') {
@@ -1619,13 +1669,11 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['heading'=>'Heading','subheading'=>'Subheading','paragraph'=>'Paragraph'] as $slug=>$label){ echo '<tr><td>'.esc_html($label).'</td><td>'; self::number_input('stats','fs_'.$slug.'_mobile',$o['fs_'.$slug.'_mobile'],10,80); echo '</td><td>'; self::number_input('stats','fs_'.$slug.'_tablet',$o['fs_'.$slug.'_tablet'],10,80); echo '</td><td>'; self::number_input('stats','fs_'.$slug.'_desktop',$o['fs_'.$slug.'_desktop'],10,80); echo '</td></tr>'; }
       echo '</tbody></table></div>';
     } elseif($sub==='cards') {
-      echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Cards</h2><table class="form-table">'; ob_start(); self::textarea_input('stats','card_order',$o['card_order'],7); self::row('Card order', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>Card</th><th>Heading</th><th>Caption</th><th>Icon</th></tr></thead><tbody>';
+      echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Cards</h2><table class="form-table">'; ob_start(); self::sortable_list(self::field_name('stats','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? $o['card_order']), -1, PREG_SPLIT_NO_EMPTY), ['brought'=>'Brought In','adopted'=>'Adopted','vaccinated'=>'Vaccinated','neutered'=>'Neutered','chipped'=>'Microchipped','in_care'=>'In Our Care']); self::row('Card order', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>Card</th><th>Heading</th><th>Caption</th><th>Icon</th></tr></thead><tbody>';
       foreach (['brought','adopted','vaccinated','neutered','chipped','in_care'] as $card){ echo '<tr><td><code>'.esc_html($card).'</code></td><td>'; self::text_input('stats','label_'.$card,$o['label_'.$card]); echo '</td><td>'; self::text_input('stats','caption_'.$card,$o['caption_'.$card]); echo '</td><td>'; self::select_input('stats','icon_'.$card,$o['icon_'.$card], self::icon_options()); echo '</td></tr>'; }
       echo '</tbody></table></div>';
     } elseif ($sub==='embed') {
       self::render_embed_card('stats','Statistics', self::sanitize_shortcode_tag(self::get_settings()['shortcodes']['statistics'] ?? 'stats'), 'Place rescue impact statistics on your website.'); self::preview_frame('stats');
-    } else {
-      echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Statistics card order</h2>'; self::sortable_list(self::field_name('stats','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? $o['card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['brought'=>'Brought In','adopted'=>'Adopted','vaccinated'=>'Vaccinated','neutered'=>'Neutered','chipped'=>'Microchipped','in_care'=>'In Our Care']); echo '</div>';
     }
 
     echo '</div>';
@@ -1646,17 +1694,15 @@ final class Plugin_UI_Suite_Plugin {
 
   private static function render_embed_card($module, $label, $tag, $description) {
     $name = in_array($module, ['adoptables','adopted','stats'], true) ? 'suite[shortcodes][' . ($module === 'stats' ? 'statistics' : $module) . ']' : self::field_name($module, 'shortcode');
-    echo '<div class="plugin-suite-card"><h2>Embed</h2><p class="description">'.esc_html($description).'</p><table class="form-table"><tr><th>Shortcode</th><td><input type="text" name="'.esc_attr($name).'" class="regular-text code" value="'.esc_attr($tag).'" /> <button type="button" class="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'['.esc_js($tag).']\')">Copy shortcode</button><p class="description">Use <code>['.esc_html($tag).']</code> on a page, post or page-builder shortcode block.</p></td></tr></table><h3>Parameters</h3><p class="description">This embed works without required parameters. Configure display, wording and behaviour in the module settings above, then paste the shortcode wherever the feature should appear.</p><h3>Example</h3><p><code>['.esc_html($tag).']</code></p></div>';
+    echo '<div class="plugin-suite-card"><h2>Embed</h2><p class="description">'.esc_html($description).'</p><table class="form-table"><tr><th>Shortcode</th><td><input type="text" aria-label="'.esc_attr($label . ' shortcode').'" name="'.esc_attr($name).'" class="regular-text code" value="'.esc_attr($tag).'" /> <button type="button" class="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'['.esc_js($tag).']\')">Copy shortcode</button><p class="description">Use <code>['.esc_html($tag).']</code> on a page, post or page-builder shortcode block.</p></td></tr></table><h3>Parameters</h3><p class="description">This embed works without required parameters. Configure display, wording and behaviour in the module settings above, then paste the shortcode wherever the feature should appear.</p><h3>Example</h3><p><code>['.esc_html($tag).']</code></p></div>';
   }
 
   private static function render_featured_tab($settings) {
     $f = self::featured_settings($settings);
     self::form_start('featured');
-    $sub = self::subtab_nav('featured', ['dashboard'=>'Dashboard','layouts'=>'Layouts','appearance'=>'Appearance','filters'=>'Filters','embed'=>'Embed','analytics'=>'Analytics','help'=>'Help']);
+    $sub = self::subtab_nav('featured', ['dashboard'=>'Dashboard','appearance'=>'Appearance','filters'=>'Filters','embed'=>'Embed','analytics'=>'Analytics','help'=>'Help']);
     echo '<div class="plugin-suite-grid">';
-    if ($sub === 'layouts') {
-      echo '<div class="plugin-suite-card"><h2>Featured Animal layout</h2>'; self::sortable_list(self::field_name('featured','layout_order'), preg_split('/\R+/', (string)($f['layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','meta'=>'Animal details','button'=>'View button']); echo '</div>'; self::preview_frame_custom('featured','Featured Animal preview');
-    } elseif ($sub === 'appearance') {
+    if ($sub === 'appearance') {
       echo '<div class="plugin-suite-card"><h2>Appearance</h2><p class="description">Featured Animal inherits Adoptables colours and button styling so website displays stay consistent.</p></div>'; self::preview_frame_custom('featured','Featured Animal preview');
     } elseif ($sub === 'filters') {
       echo '<div class="plugin-suite-card"><h2>Animal selection</h2><table class="form-table">'; ob_start(); self::select_input('featured','mode',$f['mode'],['random'=>'Random available animal','newest'=>'Newest intake','manual'=>'Specific animal ID']); self::row('Selection method', ob_get_clean()); ob_start(); self::text_input('featured','manual_id',$f['manual_id']); self::row('Animal ID', ob_get_clean()); echo '</table></div>';
@@ -1675,7 +1721,7 @@ final class Plugin_UI_Suite_Plugin {
   private static function render_quiz_tab($settings) {
     $q = $settings['quiz'];
     self::form_start('quiz');
-    $sub = self::subtab_nav('quiz', ['settings'=>'Settings','questions'=>'Questions','mapping'=>'Answer mapping','preview'=>'Preview scoring']);
+    $sub = self::subtab_nav('quiz', ['settings'=>'Settings','questions'=>'Questions','preview'=>'Preview matches']);
     echo '<div class="plugin-suite-grid">';
     if($sub==='settings') {
       echo '<div class="plugin-suite-card"><h2>Quiz settings</h2><table class="form-table">';
@@ -1685,18 +1731,13 @@ final class Plugin_UI_Suite_Plugin {
     } elseif($sub==='questions') {
       echo '<div class="plugin-suite-card"><h2>Questions</h2><table class="form-table">';
       foreach (['q1_text'=>'Question 1 text','q2_text'=>'Question 2 text','q3_text'=>'Question 3 text'] as $k=>$label){ ob_start(); self::text_input('quiz',$k,$q[$k]); self::row($label, ob_get_clean()); }
-      ob_start(); self::textarea_input('quiz','age_categories',$q['age_categories'] ?? '',5); self::row('Age categories', ob_get_clean());
-      ob_start(); echo '<p class="description">One category per line in the format <code>Label|min|max</code> using years. Leave max blank for no upper limit.</p>'; self::row('Age category format', ob_get_clean());
-      foreach (['q2_female_label'=>'Female label','q2_male_label'=>'Male label','q2_either_label'=>'Question 2 no preference label','q3_yes_label'=>'Indoor only yes label','q3_no_label'=>'Question 3 no preference label'] as $k=>$label){ ob_start(); self::text_input('quiz',$k,$q[$k]); self::row($label, ob_get_clean()); }
+      foreach (['q1_either_label'=>'Age no preference label','q2_female_label'=>'Female label','q2_male_label'=>'Male label','q2_either_label'=>'Question 2 no preference label','q3_yes_label'=>'Indoor only yes label','q3_no_label'=>'Question 3 no preference label'] as $k=>$label){ ob_start(); self::text_input('quiz',$k,$q[$k]); self::row($label, ob_get_clean()); }
       ob_start(); self::checkbox_input('quiz','q3_hide',$q['q3_hide'],'Hide indoor-only question'); self::row('Question 3 visibility', ob_get_clean());
       echo '</table></div>';
-    } elseif($sub==='mapping') {
-      echo '<div class="plugin-suite-card"><h2>Visual answer mapping</h2><p class="description">Map each answer key to a rescue management field and weight. Format: answer_key|field|weight.</p><textarea class="large-text code" rows="8" name="'.esc_attr(self::field_name('quiz','answer_mappings')).'">'.esc_textarea($q['answer_mappings'] ?? '').'</textarea></div>';
-      echo '<div class="plugin-suite-card"><h2>Question order</h2>'; self::sortable_list(self::field_name('quiz','question_order'), preg_split('/\R+/', (string)($q['question_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['age'=>'Age preference','sex'=>'Sex preference','indoor'=>'Indoor-only','bonded'=>'Bonded pair','good_cats'=>'Good with cats','good_dogs'=>'Good with dogs','good_children'=>'Good with children']); echo '</div>';
     } elseif($sub==='preview') {
-      echo '<div class="plugin-suite-card"><h2>Scoring preview</h2><p class="description">The preview below uses the saved shortcode renderer so administrators can test question order and answer mappings before publishing.</p></div>'; self::preview_frame_custom('quiz','Match Quiz preview');
+      echo '<div class="plugin-suite-card"><h2>Scoring preview</h2><p class="description">The preview uses the saved wording and visibility settings with the built-in matching rules. Test the results with your configured animal feed before publishing.</p></div>'; self::preview_frame_custom('quiz','Match Quiz preview');
     } else {
-      echo '<div class="plugin-suite-card"><h2>Quiz builder</h2><p class="description">Use Questions to edit wording, Mapping to connect answers to rescue-management fields, and Preview scoring to test the quiz.</p></div>';
+      echo '<div class="plugin-suite-card"><h2>Quiz builder</h2><p class="description">Use Questions to edit wording and Preview matches to test the quiz. Matching uses the built-in animal fields and scoring rules.</p></div>';
     }
     echo '</div>';
     self::form_end();
@@ -1705,9 +1746,9 @@ final class Plugin_UI_Suite_Plugin {
   private static function render_forms_tab($settings) {
     self::form_start('forms'); $items=$settings['forms']['items'];
     echo '<div class="plugin-suite-grid"><div class="plugin-suite-card" style="grid-column:span 2;"><h2>Forms</h2><p class="description">ASM forms use the account and service URL configured in <a href="'.esc_url(self::admin_page_url('data-source').'&subtab=asm').'">Integrations → ASM</a>. This prevents forms and animal widgets from connecting to different ASM accounts.</p><table class="plugin-suite-table"><thead><tr><th>#</th><th>Shortcode</th><th>Form ID</th><th>Use</th></tr></thead><tbody>';
-    for($i=0;$i<10;$i++){ $row=$items[$i] ?? ['shortcode'=>'','form_id'=>'']; $tag=self::sanitize_shortcode_tag($row['shortcode'] ?? ''); echo '<tr><td>'.($i+1).'</td><td><input type="text" name="suite[forms][items]['.$i.'][shortcode]" value="'.esc_attr($row['shortcode'] ?? '').'" class="regular-text" /></td><td><input type="text" name="suite[forms][items]['.$i.'][form_id]" value="'.esc_attr($row['form_id'] ?? '').'" class="small-text" /></td><td>'.($tag?'<code>['.esc_html($tag).']</code>':'').'</td></tr>'; }
+    for($i=0;$i<10;$i++){ $row=$items[$i] ?? ['shortcode'=>'','form_id'=>'']; $tag=self::sanitize_shortcode_tag($row['shortcode'] ?? ''); echo '<tr><td>'.($i+1).'</td><td><input type="text" aria-label="Form '.($i+1).' shortcode" name="suite[forms][items]['.$i.'][shortcode]" value="'.esc_attr($row['shortcode'] ?? '').'" class="regular-text" /></td><td><input type="text" aria-label="Form '.($i+1).' ASM form ID" name="suite[forms][items]['.$i.'][form_id]" value="'.esc_attr($row['form_id'] ?? '').'" class="small-text" /></td><td>'.($tag?'<code>['.esc_html($tag).']</code>':'').'</td></tr>'; }
     echo '</tbody></table></div>';
-    echo '<div class="plugin-suite-card" style="grid-column:span 2;"><h2>Platform limitations</h2><textarea class="large-text code" rows="6" name="'.esc_attr(self::field_name('forms','platform_support_notes')).'">'.esc_textarea($settings['forms']['platform_support_notes'] ?? '').'</textarea><p class="description">Format: platform|plain-English support or limitation note. These notes keep platform-specific behaviour explicit for administrators.</p></div>';
+    echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Form platform support</h2><p>ASM forms are embedded using the shared ASM integration. Hosted forms from other providers should be linked from your website. Third-party iframe content retains its provider’s styles; the suite logs application intent, not applicant answers.</p></div>';
     $global = $settings['global'] ?? [];
     echo '<div class="plugin-suite-card" style="grid-column:span 2;"><h2>Application / enquiry integrations</h2><p class="description">Embedded ASM or third-party forms submit inside their own systems. The suite does not capture applicant answers; it records privacy-safe application intent events when visitors open the application flow.</p><table class="form-table">';
     ob_start(); self::checkbox_input('global','enquiry_log_enabled',$global['enquiry_log_enabled'] ?? 1,'Log application intent events'); self::row('Enquiry event log', ob_get_clean());
@@ -1721,36 +1762,6 @@ final class Plugin_UI_Suite_Plugin {
     self::form_end();
   }
 
-  private static function render_layout_tab($settings) {
-    self::form_start('layout');
-    $sub = self::subtab_nav('layout', ['adoptables'=>'Adoptables','adopted'=>'Adopted','statistics'=>'Statistics','donation'=>'Donation Widget','forms'=>'Forms','quiz'=>'Match Quiz','featured'=>'Featured Animal','species'=>'Species']);
-    echo '<div class="plugin-suite-grid">';
-    if ($sub === 'adoptables') {
-      echo '<div class="plugin-suite-card"><h2>Adoptables card layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name and meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button']); echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Adoptables modal layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_modal_order'), preg_split('/\R+/', (string)($settings['adoptables']['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','badges'=>'Badges','info_cards'=>'Info cards','tips'=>'Tips','description'=>'Description','global_text'=>'Global text','contact_footer'=>'Contact footer','custom_buttons'=>'Custom buttons']); echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Adoptables header actions</h2>'; self::sortable_list(self::field_name('adoptables','builder_header_actions'), preg_split('/\R+/', (string)($settings['adoptables']['builder_header_actions'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['apply'=>'Apply','favourite'=>'Favourite','share'=>'Share','close'=>'Close']); echo '</div>'; self::preview_frame('adoptables');
-    } elseif ($sub === 'adopted') {
-      echo '<div class="plugin-suite-card"><h2>Adopted card layout</h2>'; self::sortable_list(self::field_name('adopted','builder_card_order'), preg_split('/\R+/', (string)($settings['adopted']['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','date_badge'=>'Adoption date badge','name_meta'=>'Name and meta','story_excerpt'=>'Story excerpt','share_button'=>'Share button']); echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Adopted modal layout</h2>'; self::sortable_list(self::field_name('adopted','builder_modal_order'), preg_split('/\R+/', (string)($settings['adopted']['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','name_meta'=>'Name and meta','adoption_date'=>'Adoption date','story'=>'Story','global_text'=>'Global text','share_button'=>'Share button']); echo '</div>'; self::preview_frame('adopted');
-    } elseif ($sub === 'statistics') {
-      echo '<div class="plugin-suite-card"><h2>Statistics card order</h2>'; self::sortable_list(self::field_name('stats','builder_card_order'), preg_split('/\R+/', (string)($settings['stats']['builder_card_order'] ?? $settings['stats']['card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['brought'=>'Brought In','adopted'=>'Adopted','vaccinated'=>'Vaccinated','neutered'=>'Neutered','chipped'=>'Microchipped','in_care'=>'In Our Care']); echo '</div>'; self::preview_frame('stats');
-    } elseif ($sub === 'donation') {
-      echo '<div class="plugin-suite-card"><h2>Donation widget builder</h2><p class="description">Donation Widget layout controls are now edited in Payments → Donation Widget inside this settings screen.</p></div>'; 
-    } elseif ($sub === 'forms') {
-      echo '<div class="plugin-suite-card"><h2>Forms layout</h2>'; self::sortable_list(self::field_name('forms','layout_order'), preg_split('/\R+/', (string)($settings['forms']['layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['intro'=>'Intro text','form_embed'=>'Form embed','privacy_note'=>'Privacy note','submit_guidance'=>'Submission guidance']); echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Platform support notes</h2><textarea class="large-text code" rows="6" name="'.esc_attr(self::field_name('forms','platform_support_notes')).'">'.esc_textarea($settings['forms']['platform_support_notes'] ?? '').'</textarea><p class="description">Format: platform|plain-English limitation or support note.</p></div>';
-    } elseif ($sub === 'quiz') {
-      echo '<div class="plugin-suite-card"><h2>Match Quiz question order</h2>'; self::sortable_list(self::field_name('quiz','question_order'), preg_split('/\R+/', (string)($settings['quiz']['question_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['age'=>'Age preference','sex'=>'Sex preference','indoor'=>'Indoor-only','bonded'=>'Bonded pair','good_cats'=>'Good with cats','good_dogs'=>'Good with dogs','good_children'=>'Good with children']); echo '</div>';
-      echo '<div class="plugin-suite-card"><h2>Answer mapping</h2><textarea class="large-text code" rows="8" name="'.esc_attr(self::field_name('quiz','answer_mappings')).'">'.esc_textarea($settings['quiz']['answer_mappings'] ?? '').'</textarea><p class="description">Format: answer_key|rescue management field|weight.</p></div>'; self::preview_frame_custom('quiz','Quiz preview');
-    } elseif ($sub === 'species') {
-      echo '<div class="plugin-suite-card"><h2>Species support</h2><table class="form-table">'; self::row('Available species','<textarea class="large-text code" rows="4" name="'.esc_attr(self::field_name('global','supported_species')).'">'.esc_textarea($settings['global']['supported_species'] ?? '').'</textarea>'); self::row('Enabled species','<textarea class="large-text code" rows="4" name="'.esc_attr(self::field_name('global','enabled_species')).'">'.esc_textarea($settings['global']['enabled_species'] ?? '').'</textarea><p class="description">Use slugs such as cats, dogs, rabbits, birds, horses, small_animals, reptiles and other.</p>'); echo '</table></div>';
-    } else {
-      echo '<div class="plugin-suite-card"><h2>Featured Animal layout</h2>'; self::sortable_list(self::field_name('featured','layout_order'), preg_split('/\R+/', (string)(self::featured_settings($settings)['layout_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','title'=>'Title','meta'=>'Animal details','button'=>'View button']); echo '</div>'; self::preview_frame_custom('featured','Featured Animal preview');
-    }
-    echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Builder tools</h2><p class="description">Drag items to reorder. Save changes to persist. Clear a layout field and save to reset to defaults.</p></div></div>';
-    self::form_end();
-  }
-
   private static function get_proxy_settings($settings = null) {
     if (!is_array($settings)) $settings = self::get_settings();
     $defaults = self::default_settings()['proxy'];
@@ -1759,14 +1770,7 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function module_versions() {
-    return [
-      'suite_core' => PLUGIN_SUITE_VERSION,
-      'adoptables' => '15',
-      'adopted' => '18',
-      'statistics' => '11',
-      'forms' => '1.0.0',
-      'proxy' => '1.3.6',
-    ];
+    return array_fill_keys(['suite_core','adoptables','adopted','statistics','forms','proxy','payments'], PLUGIN_SUITE_VERSION);
   }
 
   private static function record_version_event($event) {
@@ -2240,6 +2244,11 @@ final class Plugin_UI_Suite_Plugin {
 
   public static function render_last_good_admin_notice() {
     if (!current_user_can('manage_options')) return;
+    $post = get_queried_object();
+    if (!$post || empty($post->post_content)) return;
+    $has_suite = false;
+    foreach (self::all_suite_shortcodes() as $tag) { if (has_shortcode($post->post_content, $tag)) { $has_suite = true; break; } }
+    if (!$has_suite) return;
     $notice = get_transient('asm_suite_last_good_served_notice');
     if (!$notice) return;
     delete_transient('asm_suite_last_good_served_notice');
@@ -2547,7 +2556,7 @@ final class Plugin_UI_Suite_Plugin {
     self::row('Image endpoint', '<input type="url" name="suite[global][custom_api_image_url]" value="' . esc_attr($global['custom_api_image_url'] ?? '') . '" class="regular-text code" placeholder="https://example.org/api/animal-image" />');
     self::row('Auth header', '<input type="text" name="suite[global][custom_api_auth_header]" value="' . esc_attr($global['custom_api_auth_header'] ?? 'X-API-Key') . '" class="regular-text" />');
     self::row('Custom API key', '<input type="password" name="suite[global][custom_api_key]" value="' . esc_attr($global['custom_api_key'] ?? '') . '" class="regular-text" autocomplete="new-password" /><p class="description">The suite sends the key in the header above and also as api_key for feeds that prefer a query parameter.</p>');
-    ob_start(); self::select_input('global','provider_profile',$global['provider_profile'] ?? '', array_map(function($v){ return $v['label']; }, self::provider_profile_templates())); self::row('Provider template', ob_get_clean() . '<p class="description">Use as a copy/paste guide for the field mapper below.</p>');
+    self::row('Field mapping examples', self::provider_mapping_examples());
     ob_start(); self::checkbox_input('global','preview_mode',$global['preview_mode'] ?? 0,'Allow admins to preview another source with ?asm_suite_source=custom_api, shelterluv, petpoint or asm'); self::row('Safe preview mode', ob_get_clean());
     self::row('Field mapper', '<textarea name="suite[global][field_map]" rows="6" class="large-text code" placeholder="ANIMALNAME=name,pet_name&#10;CODE=shelter_code,reference&#10;ANIMALCOMMENTS=bio,description">' . esc_textarea($global['field_map'] ?: (self::provider_profile_templates()[$global['provider_profile'] ?? '']['map'] ?? '')) . '</textarea><p class="description">Optional. One mapping per line: suite field = provider field(s). Applies to Custom API, Shelterluv and PetPoint normalisation.</p>');
     echo '</table></div>';

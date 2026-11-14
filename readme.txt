@@ -1,3 +1,12 @@
+=== Rescue Plugin Suite ===
+Stable tag: 15.1.2
+
+15.1.2
+- Hardened native WordPress manual and automatic updates.
+- Scoped widget assets and scroll changes to avoid host-theme side effects.
+- Added transparent outer surfaces and title/subtitle/footer visibility controls.
+- Audited settings and removed non-functional controls while preserving stored customisations.
+
 14.0.25
 - Added mobile Safari-focused image rendering safeguards for adoptable/adopted cards and modals.
 - Added critical modal fallback styles so direct-linked animal modals do not flash unstyled before utility CSS is ready.

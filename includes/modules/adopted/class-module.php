@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
- * Version: 1.1.14
+ * Version: 15.1.2
  * Author: Jordan Sutton | Webstax
  */
 
@@ -713,7 +713,7 @@ final class Plugin_Adopted_UI_Shortcode {
 
     ob_start();
     ?>
-<section id="asm-successstories-widget" aria-labelledby="asm-plugin-heading"
+<section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> id="asm-successstories-widget" aria-labelledby="asm-plugin-heading"
      class="rps-widget w-full relative overflow-hidden rounded-2xl"
      style="background:var(--plugin-bg); <?php echo esc_attr($vars_css); ?>">
 
@@ -747,12 +747,12 @@ final class Plugin_Adopted_UI_Shortcode {
   ?>
 
   <div class="rps-widget-shell max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-    <div class="rps-widget-heading text-center mb-6"><p class="rps-eyebrow">A new chapter</p>
+    <div class="rps-widget-heading text-center mb-6"><p class="rps-eyebrow rps-widget-title">A new chapter</p>
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-2">
-        <h2 id="asm-plugin-heading" class="leading-tight" style="color:var(--plugin-brand);"><?php echo esc_html($o['title_text']); ?></h2>
+        <h2 id="asm-plugin-heading" class="rps-widget-title leading-tight" style="color:var(--plugin-brand);"><?php echo esc_html($o['title_text']); ?></h2>
       </div>
 
-      <p id="asm-plugin-subheading" style="color:var(--plugin-muted);"><?php echo esc_html($o['subtitle_text']); ?></p>
+      <p class="rps-widget-subtitle" id="asm-plugin-subheading" style="color:var(--plugin-muted);"><?php echo esc_html($o['subtitle_text']); ?></p>
 
       <div class="mt-4 flex justify-center">
         <select id="asm-plugin-year" aria-label="Adoption stories year"
@@ -844,11 +844,11 @@ final class Plugin_Adopted_UI_Shortcode {
     </div>
 
     <div class="text-center mt-8">
-      <p id="asm-plugin-footer" class="px-2" style="color:var(--plugin-muted);"><?php echo esc_html($o['footer_text']); ?></p>
+      <p class="rps-widget-footer rps-widget-footer" id="asm-plugin-footer" class="px-2" style="color:var(--plugin-muted);"><?php echo esc_html($o['footer_text']); ?></p>
     </div>
   </div>
 
-  <div id="asm-plugin-modal" class="hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-plugin-modal-name" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
+  <div data-rps-ui id="asm-plugin-modal" class="hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-plugin-modal-name" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
     <div id="asm-plugin-modal-backdrop" class="absolute inset-0 bg-black/50"></div>
     <div id="asm-plugin-modal-viewport" class="absolute inset-0 overflow-y-auto p-4 sm:p-6" style="min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;">
       <div id="asm-plugin-modal-panel" class="bg-white rounded-2xl shadow-2xl border-2 overflow-hidden flex flex-col" style="border-color:var(--plugin-brand);">
@@ -947,20 +947,20 @@ final class Plugin_Adopted_UI_Shortcode {
   #asm-plugin-modal,
   #asm-plugin-modal * { <?php echo $font_css; ?> }
 
-  @keyframes pawPrint {
+  @keyframes rps-adopted-paw {
     0%   { opacity: 0; transform: scale(0.5) rotate(-15deg); }
     50%  { opacity: var(--plugin-paw-opacity, 0.08); transform: scale(1) rotate(0deg); }
     100% { opacity: 0; transform: scale(1.2) rotate(15deg); }
   }
-  #asm-successstories-widget .asm-paw-bg { position:absolute; opacity:0; animation:pawPrint 4s ease-in-out infinite; pointer-events:none; }
+  #asm-successstories-widget .asm-paw-bg { position:absolute; opacity:0; animation:rps-adopted-paw 4s ease-in-out infinite; pointer-events:none; }
 
   @media (hover: none) and (pointer: coarse) { #asm-successstories-widget .asm-card:hover { transform:none !important; box-shadow:none !important; } #asm-successstories-widget.asm-ready { transition:none; } }
   @media (max-width: 640px) { #asm-successstories-widget .asm-paw-bg { display:none; } }
-  @keyframes asmSsArrowBounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(4px);} }
+  @keyframes rps-adopted-arrow { 0%,100%{transform:translateY(0);} 50%{transform:translateY(4px);} }
   #asm-plugin-modal-scroll-hint { display:none; }
   #asm-plugin-modal-scroll-hint.asm-plugin-story-scroll-hint-visible { display:flex; }
-  .asm-plugin-scroll-arrow { width:1rem !important; height:1rem !important; animation:asmSsArrowBounce 1.2s ease-in-out infinite; }
-  .asm-plugin-story-divider { border-top:1px solid rgba(100,116,139,.28); height:0; margin:.35rem 0; }
+  #asm-plugin-modal .asm-plugin-scroll-arrow { width:1rem !important; height:1rem !important; animation:rps-adopted-arrow 1.2s ease-in-out infinite; }
+  #asm-plugin-modal .asm-plugin-story-divider { border-top:1px solid rgba(100,116,139,.28); height:0; margin:.35rem 0; }
   #asm-plugin-modal-global-text { padding:.25rem 0; }
 
   /* Typography hooks */
@@ -969,9 +969,9 @@ final class Plugin_Adopted_UI_Shortcode {
   #asm-plugin-footer { font-size: var(--plugin-fs-ft-m); font-weight: var(--plugin-fw-ft); }
   #asm-plugin-page-label, #asm-plugin-page-label-bottom { font-size: var(--plugin-fs-pl-m); font-weight: var(--plugin-fw-pl); }
 
-  .plugin-card-name { font-size: var(--plugin-fs-cn-m); font-weight: var(--plugin-fw-cn); }
-  .plugin-card-meta { font-size: var(--plugin-fs-cm-m); font-weight: var(--plugin-fw-cm); }
-  .plugin-badge { font-size: var(--plugin-fs-bd-m); font-weight: var(--plugin-fw-bd); }
+  #asm-successstories-widget .plugin-card-name { font-size: var(--plugin-fs-cn-m); font-weight: var(--plugin-fw-cn); }
+  #asm-successstories-widget .plugin-card-meta { font-size: var(--plugin-fs-cm-m); font-weight: var(--plugin-fw-cm); }
+  #asm-successstories-widget .plugin-badge { font-size: var(--plugin-fs-bd-m); font-weight: var(--plugin-fw-bd); }
 
   @media (min-width: 768px){
     #asm-plugin-heading { font-size: var(--plugin-fs-h-t); }
@@ -979,9 +979,9 @@ final class Plugin_Adopted_UI_Shortcode {
     #asm-plugin-footer { font-size: var(--plugin-fs-ft-t); }
     #asm-plugin-page-label, #asm-plugin-page-label-bottom { font-size: var(--plugin-fs-pl-t); }
 
-    .plugin-card-name { font-size: var(--plugin-fs-cn-t); }
-    .plugin-card-meta { font-size: var(--plugin-fs-cm-t); }
-    .plugin-badge { font-size: var(--plugin-fs-bd-t); }
+    #asm-successstories-widget .plugin-card-name { font-size: var(--plugin-fs-cn-t); }
+    #asm-successstories-widget .plugin-card-meta { font-size: var(--plugin-fs-cm-t); }
+    #asm-successstories-widget .plugin-badge { font-size: var(--plugin-fs-bd-t); }
   }
   @media (min-width: 1024px){
     #asm-plugin-heading { font-size: var(--plugin-fs-h-d); }
@@ -989,9 +989,9 @@ final class Plugin_Adopted_UI_Shortcode {
     #asm-plugin-footer { font-size: var(--plugin-fs-ft-d); }
     #asm-plugin-page-label, #asm-plugin-page-label-bottom { font-size: var(--plugin-fs-pl-d); }
 
-    .plugin-card-name { font-size: var(--plugin-fs-cn-d); }
-    .plugin-card-meta { font-size: var(--plugin-fs-cm-d); }
-    .plugin-badge { font-size: var(--plugin-fs-bd-d); }
+    #asm-successstories-widget .plugin-card-name { font-size: var(--plugin-fs-cn-d); }
+    #asm-successstories-widget .plugin-card-meta { font-size: var(--plugin-fs-cm-d); }
+    #asm-successstories-widget .plugin-badge { font-size: var(--plugin-fs-bd-d); }
   }
 
   #asm-plugin-modal{ position:fixed !important; inset:0 !important; z-index:2147483647 !important; isolation:isolate; }
@@ -1061,10 +1061,10 @@ final class Plugin_Adopted_UI_Shortcode {
   }
   @media (max-width:767px){ #asm-plugin-modal-panel{ height:calc(100dvh - 24px); max-height:calc(100dvh - 24px); } #asm-plugin-modal-animal-nav span{ display:none; } #asm-plugin-modal-animal-nav button{ width:44px; padding-left:0; padding-right:0; } }
   @media (min-width:640px){ #asm-plugin-modal-share{ width:auto; padding-left:.75rem; padding-right:.75rem; } #asm-plugin-modal-share-text{ display:inline; } }
-  .asm-card{ width:100%; margin-left:auto; margin-right:auto; border-radius: var(--plugin-card-radius) !important; }
-  @media (max-width: 767px){ .asm-card{ max-width: calc(100% * var(--plugin-scale-m, 1)); } }
-  @media (min-width: 768px) and (max-width: 1023px){ .asm-card{ max-width: calc(100% * var(--plugin-scale-t, 1)); } }
-  @media (min-width: 1024px){ .asm-card{ max-width: calc(100% * var(--plugin-scale-d, 1)); } }
+  #asm-successstories-widget .asm-card{ width:100%; margin-left:auto; margin-right:auto; border-radius: var(--plugin-card-radius) !important; }
+  @media (max-width: 767px){ #asm-successstories-widget .asm-card{ max-width: calc(100% * var(--plugin-scale-m, 1)); } }
+  @media (min-width: 768px) and (max-width: 1023px){ #asm-successstories-widget .asm-card{ max-width: calc(100% * var(--plugin-scale-t, 1)); } }
+  @media (min-width: 1024px){ #asm-successstories-widget .asm-card{ max-width: calc(100% * var(--plugin-scale-d, 1)); } }
 </style>
 
 <script>
@@ -1074,31 +1074,11 @@ final class Plugin_Adopted_UI_Shortcode {
 
   const ADOPTED_MODAL = document.getElementById("asm-plugin-modal");
   if (ADOPTED_MODAL && ADOPTED_MODAL.parentNode !== document.body) document.body.appendChild(ADOPTED_MODAL);
-  let modalPageScrollY = 0;
-  let modalPageLocked = false;
   function lockModalPage(){
-    if (modalPageLocked) return;
-    modalPageLocked = true;
-    modalPageScrollY = window.scrollY || window.pageYOffset || 0;
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${modalPageScrollY}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.width = '100%';
-    document.body.style.overflow = 'hidden';
+    if (window.RescuePluginSuite) window.RescuePluginSuite.lockScroll('adopted', true);
   }
   function unlockModalPage(){
-    if (!modalPageLocked) return;
-    modalPageLocked = false;
-    document.documentElement.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.left = '';
-    document.body.style.right = '';
-    document.body.style.width = '';
-    document.body.style.overflow = '';
-    window.scrollTo(0, modalPageScrollY);
+    if (window.RescuePluginSuite) window.RescuePluginSuite.unlockScroll('adopted');
   }
   function modalIsOpen(){
     const modal = qs('asm-plugin-modal');
@@ -1153,6 +1133,7 @@ final class Plugin_Adopted_UI_Shortcode {
   ]); ?>;
 
   const CFG = {
+    profileBase: <?php echo wp_json_encode(home_url('/happy-endings/')); ?>,
     proxyBase: "/wp-json/plugin/v1",
     brandColor: getComputedStyle(ROOT).getPropertyValue("--plugin-brand").trim() || "#ff647e",
     textColor: getComputedStyle(ROOT).getPropertyValue("--plugin-text").trim() || "#334155",
@@ -1362,12 +1343,12 @@ final class Plugin_Adopted_UI_Shortcode {
       : `<div class="w-full h-full flex items-center justify-center text-4xl">🐾</div>`;
 
     return `
-      <button type="button" class="rps-animal-card asm-card group text-left bg-white w-full" data-animalid="${safeId}"
+      <a href="${escAttr(CFG.profileBase)}${encodeURIComponent(animalId)}/" class="rps-animal-card asm-card group text-left bg-white w-full" data-animalid="${safeId}"
            style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);" ${CFG.enableModals ? `aria-label="View adoption story for ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-plugin-modal"` : ''}>
         <span class="rps-card-media relative block"><span class="bg-gray-100 aspect-square w-full block" style="line-height:0;overflow:hidden;">${imageBlock}</span></span>
         <span class="rps-card-details block"><span class="rps-card-name plugin-card-name block">${safeName}</span><span class="rps-card-meta plugin-card-meta block">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</span></span>
         <span class="rps-card-footer"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Our story <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></span>
-      </button>
+      </a>
     `;
   }
 
@@ -1780,13 +1761,14 @@ final class Plugin_Adopted_UI_Shortcode {
     if (grid) {
       grid.addEventListener('click', (e) => {
         const card = e.target && e.target.closest ? e.target.closest('[data-animalid]') : null;
-        if (!card || !grid.contains(card)) return;
+        if (!card || !grid.contains(card) || !CFG.enableModals || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
         lastModalTrigger = card;
         openCardById(card.getAttribute('data-animalid'));
       });
 
       grid.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (!CFG.enableModals || (e.key !== 'Enter' && e.key !== ' ')) return;
         const card = e.target && e.target.closest ? e.target.closest('[data-animalid]') : null;
         if (!card || !grid.contains(card)) return;
         e.preventDefault();

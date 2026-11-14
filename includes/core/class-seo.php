@@ -232,6 +232,16 @@ final class Plugin_UI_Suite_SEO {
     $adopted = isset($_GET['adopted']) ? sanitize_text_field(wp_unslash($_GET['adopted'])) : '';
     if ($cat === '' && $adopted === '') return null;
     $is_adopted = $adopted !== '';
+    // WordPress itself uses ?cat= for category queries. Only suite display pages
+    // may turn a query parameter into animal metadata.
+    if (!is_singular()) return null;
+    $post = get_queried_object();
+    $content = $post && isset($post->post_content) ? $post->post_content : '';
+    $settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : [];
+    $tag = $settings['shortcodes'][$is_adopted ? 'adopted' : 'adoptables'] ?? ($is_adopted ? 'adopted' : 'adoptables');
+    $legacy = $is_adopted ? 'plugin_adopted_ui' : 'plugin_adoptables_ui';
+    $block = $is_adopted ? 'asm-suite/adopted' : 'asm-suite/adoptables';
+    if (!has_shortcode($content, $tag) && !has_shortcode($content, $legacy) && !(function_exists('has_block') && has_block($block, $content))) return null;
     $wanted_raw = $is_adopted ? $adopted : $cat;
     $wanted = self::slug_part($wanted_raw);
     if ($wanted === '') return null;
@@ -369,7 +379,7 @@ final class Plugin_UI_Suite_SEO {
     status_header(200);
     get_header();
     ?>
-    <main id="primary" class="site-main asm-animal-profile" style="max-width:1040px;margin:0 auto;padding:32px 20px;">
+    <main data-rps-ui id="primary" class="site-main asm-animal-profile" style="max-width:1040px;margin:0 auto;padding:32px 20px;">
       <article>
         <nav aria-label="Breadcrumb" style="margin-bottom:18px;"><a href="<?php echo esc_url(home_url('/')); ?>">Home</a> <span aria-hidden="true">›</span> <span><?php echo esc_html($adopted ? 'Happy endings' : 'Cats for adoption'); ?></span></nav>
         <div class="rps-profile-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:32px;align-items:start;">

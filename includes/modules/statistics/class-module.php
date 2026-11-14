@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Statistics
  * Description: Adds the statistics UI via shortcode [stats] with settings.
- * Version: 12
+ * Version: 15.1.2
  * Author: Jordan Sutton | Webstax
  */
 
@@ -813,7 +813,7 @@ add_shortcode('stats', function () {
 
   ob_start();
   ?>
-  <section class="plugin-stats-ui-wrap rps-widget" aria-labelledby="<?php echo esc_attr($instance); ?>_main_title" aria-describedby="<?php echo esc_attr($instance); ?>_description" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
+  <section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> class="plugin-stats-ui-wrap rps-widget" aria-labelledby="<?php echo esc_attr($instance); ?>_main_title" aria-describedby="<?php echo esc_attr($instance); ?>_description" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
     <p class="rps-sr-only" id="<?php echo esc_attr($instance); ?>_description">Rescue impact statistics showing animal welfare outcomes for the selected year. Choose a year to update the totals. Each card gives a total and describes the outcome it measures.</p>
     <style>
       /* Scoped only */
@@ -826,17 +826,17 @@ add_shortcode('stats', function () {
       #<?php echo esc_attr($instance); ?> { opacity:1; visibility:visible; }
       #<?php echo esc_attr($instance); ?>.plugin-ready { opacity:1; visibility:visible; transition:opacity .18s ease-out; }
 
-      @keyframes plugin_countUp { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
-      @keyframes plugin_float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
+      @keyframes rps-stats-count { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
+      @keyframes rps-stats-float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
 
       /* Paw animation uses configurable opacity and keeps per-paw rotation (via CSS var) */
-      @keyframes plugin_pawPrint {
+      @keyframes rps-stats-paw {
         0%   { opacity: 0; transform: rotate(var(--plugin-paw-rot, 0deg)) scale(0.5); }
         50%  { opacity: var(--plugin-paw-opacity, 0.08); transform: rotate(var(--plugin-paw-rot, 0deg)) scale(1); }
         100% { opacity: 0; transform: rotate(var(--plugin-paw-rot, 0deg)) scale(1.2); }
       }
 
-      #<?php echo esc_attr($instance); ?> .counter-card { animation: plugin_countUp 0.6s ease-out forwards; opacity: 1; }
+      #<?php echo esc_attr($instance); ?> .counter-card { animation: rps-stats-count 0.6s ease-out forwards; opacity: 1; }
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(1){animation-delay:.1s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(2){animation-delay:.2s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(3){animation-delay:.3s}
@@ -844,8 +844,8 @@ add_shortcode('stats', function () {
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(5){animation-delay:.5s}
       #<?php echo esc_attr($instance); ?> .counter-card:nth-child(6){animation-delay:.6s}
 
-      #<?php echo esc_attr($instance); ?> .icon-float { animation: plugin_float 3s ease-in-out infinite; }
-      #<?php echo esc_attr($instance); ?> .paw-bg { position:absolute; opacity:0; animation:plugin_pawPrint 4s ease-in-out infinite; pointer-events:none; }
+      #<?php echo esc_attr($instance); ?> .icon-float { animation: rps-stats-float 3s ease-in-out infinite; }
+      #<?php echo esc_attr($instance); ?> .paw-bg { position:absolute; opacity:0; animation:rps-stats-paw 4s ease-in-out infinite; pointer-events:none; }
 
       @media (hover:none) and (pointer:coarse) {
         #<?php echo esc_attr($instance); ?> .counter-card:hover { transform:none !important; box-shadow:none !important; }
@@ -944,7 +944,7 @@ add_shortcode('stats', function () {
       <?php endif; ?>
     </style>
 
-    <div class="min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-2xl"
+    <div class="rps-widget-backdrop min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-2xl"
          style="background:<?php echo esc_attr($opts['background_color']); ?>;">
 
       <!-- Decorative paw prints (match Adoptables/Adopted) -->
@@ -976,16 +976,16 @@ add_shortcode('stats', function () {
       ?>
 
       <div class="rps-widget-shell max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 relative z-10">
-        <div class="rps-widget-heading text-center mb-8 sm:mb-10"><p class="rps-eyebrow">Together, we make a difference</p>
+        <div class="rps-widget-heading text-center mb-8 sm:mb-10"><p class="rps-eyebrow rps-widget-title">Together, we make a difference</p>
           <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                        <h2 class="plugin-heading leading-tight"
+                        <h2 class="rps-widget-title plugin-heading leading-tight"
                 id="<?php echo esc_attr($instance); ?>_main_title"
                 style="color:<?php echo esc_attr($opts['brand_color']); ?>;">
               <?php echo esc_html($opts['title_text']); ?>
             </h2>
           </div>
 
-          <p class="plugin-subheading font-semibold"
+          <p class="rps-widget-subtitle plugin-subheading font-semibold"
              id="<?php echo esc_attr($instance); ?>_year_label"
              style="color:#475569;">
             <?php echo esc_html($opts['year_label_prefix']); ?> —
@@ -1044,7 +1044,7 @@ add_shortcode('stats', function () {
         </div>
 
         <div class="text-center mt-8 sm:mt-10">
-          <p class="plugin-paragraph font-medium px-2" style="color:#475569;">
+          <p class="rps-widget-footer plugin-paragraph font-medium px-2" style="color:#475569;">
             <?php echo esc_html($opts['footer_text']); ?>
           </p>
         </div>

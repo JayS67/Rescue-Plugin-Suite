@@ -18,6 +18,7 @@
     var continueButton = widget.querySelector('[data-payment-continue]');
     var feeRecovery = widget.querySelector('[data-payment-fee-recovery]');
     var total = widget.querySelector('[data-payment-total]');
+    var giftAid = widget.querySelector('[data-payment-gift-aid]');
     var currentType = widget.dataset.defaultType === 'recurring' ? 'recurring' : 'one_off';
     var selected = {
       one_off: { amount: '', source: '', description: '' },
@@ -103,7 +104,7 @@
 
       if (impact) impact.textContent = state.description || '';
       if (error) error.textContent = message;
-      if (continueButton) continueButton.disabled = !valid;
+      if (continueButton) continueButton.disabled = !valid || !!(giftAid && giftAid.required && !giftAid.checked);
       if (total) total.textContent = valid ? 'Total: ' + formatMoney(amountWithFees(state.amount)) : '';
     }
 
@@ -165,6 +166,8 @@
     });
 
     if (feeRecovery) feeRecovery.addEventListener('change', update);
+
+    if (giftAid) giftAid.addEventListener('change', update);
 
     if (continueButton) {
       continueButton.addEventListener('click', function () {

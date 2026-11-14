@@ -53,3 +53,12 @@ for (const expected of ['asm-ad-card', '<img ', 'Mittens', 'Female', '2 years', 
   if (!markup.includes(expected)) throw new Error(`Rendered card is missing: ${expected}`);
 }
 console.log('Adoptables card renderer regression test passed');
+
+if (!markup.includes('<a href="/cats/42/"') || markup.includes('aria-haspopup="dialog"')) {
+  throw new Error('Disabled modals must leave a working profile link without dialog semantics.');
+}
+context.ASM_WIDGET.enableModals = true;
+if (!context.renderCard({ ANIMALID:'42', ANIMALNAME:'Mittens' }).includes('aria-haspopup="dialog"')) {
+  throw new Error('Enabled modals must announce the dialog interaction.');
+}
+console.log('Animal cards preserve useful navigation with modals disabled');

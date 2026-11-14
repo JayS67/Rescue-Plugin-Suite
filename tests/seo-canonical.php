@@ -22,7 +22,7 @@ function wp_strip_all_tags($value) { return strip_tags($value); }
 function wp_trim_words($value, ...$args) { return $value; }
 function remove_action($hook, $callback) { global $removed; $removed[] = $callback; }
 function is_singular() { return true; }
-function get_queried_object() { return (object)['post_content'=>'[adoptables]']; }
+function get_queried_object() { global $host_only; return (object)['post_content'=>!empty($host_only) ? 'Ordinary host article' : '[adoptables][adopted]']; }
 function has_shortcode($content, $tag) { return strpos($content, '[' . $tag . ']') !== false; }
 function wp_json_encode($value, $flags = 0) { return json_encode($value, $flags); }
 function get_permalink($post) { return home_url('/adopt/'); }
@@ -44,13 +44,17 @@ $urls = Plugin_UI_Suite_SEO::sitemap_animals();
 ok($urls[0]['url'] === $canonical && !isset($urls[0]['lastmod']), 'Sitemap uses profile URLs without fabricated modification dates');
 ok($reads === 2, 'Repeated metadata and sitemap lookups read each animal collection once');
 ob_start(); Plugin_UI_Suite_SEO::page_level_schema(); $schema = ob_get_clean();
-ok(substr_count($schema, '</script>') === 1 && strpos($schema, '\\u003C') !== false, 'Feed text cannot terminate JSON-LD script elements');
+ok(substr_count($schema, '</script>') === 2 && strpos($schema, '\\u003C') !== false, 'Feed text cannot terminate JSON-LD script elements');
 $queries = [];
 $_GET = ['adopted'=>'42'];
 ok(Plugin_UI_Suite_SEO::filter_canonical('original') === 'https://rescue.example/happy-endings/42-mittens/', 'Adopted modal variants canonicalise to the adopted profile');
 $_GET = ['cat'=>'mittens-script-script-alert-1-script'];
 ok(Plugin_UI_Suite_SEO::filter_canonical('original') === $canonical, 'Name-based shared modal links select the same canonical');
 $_GET = ['cat'=>'42'];
+$host_only = true;
+$queries = []; $_GET = ['cat'=>'42'];
+ok(Plugin_UI_Suite_SEO::filter_canonical('host-canonical') === 'host-canonical', 'Unrelated host pages keep their own metadata even with WordPress cat parameters');
+$host_only = false; $queries[Plugin_UI_Suite_SEO::ADOPTABLE_VAR] = '42-mittens';
 define('WPSEO_VERSION', 'test');
 ob_start(); Plugin_UI_Suite_SEO::head_metadata(); $head = ob_get_clean();
 ok($head === '', 'Active SEO plugins own canonical and social tags without duplicate suite output');

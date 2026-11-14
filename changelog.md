@@ -1,3 +1,12 @@
+## 15.1.2
+
+- Preserve WordPress error handling and rollback during plugin upgrades.
+- Isolate widget utility styles and restore host scroll state after dialogs close.
+- Add transparent widget backgrounds while retaining paw patterns and opaque dialogs.
+- Add title, subtitle and footer visibility controls across public widgets.
+- Remove misleading settings and preserve values when saving individual settings tabs.
+- Improve accessible field names, navigation and regression coverage.
+
 ## 15.0.8-beta
 
 - Made the GitHub updater the sole authoritative native WordPress update source and persistently inject its verified response entry when WordPress reads `update_plugins`.

@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adoptables
  * Description: Provides [adoptables] shortcode for the adoptable/adopted widget with scoped styling and settings.
- * Version: 1.1.12
+ * Version: 15.1.2
  * Author: Jordan Sutton | Webstax
  */
 
@@ -869,23 +869,23 @@ final class Plugin_Adoptables_UI_Shortcode {
     max-width:100%;
     max-height:100%;
   }
-  .asm-scroll-arrow { width:1rem !important; height:1rem !important; }
+  #asm-modal .asm-scroll-arrow { width:1rem !important; height:1rem !important; }
 
-  @keyframes float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
-  @keyframes pawPrint {
+  @keyframes rps-adoptables-float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
+  @keyframes rps-adoptables-paw {
     0%   { opacity: 0; transform: scale(0.5) rotate(-15deg); }
     50%  { opacity: var(--asm-paw-opacity, 0.08); transform: scale(1) rotate(0deg); }
     100% { opacity: 0; transform: scale(1.2) rotate(15deg); }
   }
 
-  .asm-icon-float { animation: float 3s ease-in-out infinite; }
-  .asm-paw-bg { position:absolute; opacity:0; animation:pawPrint 4s ease-in-out infinite; pointer-events:none; }
+  :is(#asm-adoptables-widget,#asm-modal) .asm-icon-float { animation: rps-adoptables-float 3s ease-in-out infinite; }
+  #asm-adoptables-widget .asm-paw-bg { position:absolute; opacity:0; animation:rps-adoptables-paw 4s ease-in-out infinite; pointer-events:none; }
 
-  @keyframes asmArrowBounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(4px);} }
-  .asm-scroll-arrow { animation: asmArrowBounce 1.2s ease-in-out infinite; }
+  @keyframes rps-adoptables-arrow { 0%,100%{transform:translateY(0);} 50%{transform:translateY(4px);} }
+  #asm-modal .asm-scroll-arrow { animation: rps-adoptables-arrow 1.2s ease-in-out infinite; }
 
   @media (hover: none) and (pointer: coarse) {
-    .asm-ad-card:hover { transform: none !important; box-shadow: none !important; }
+    #asm-adoptables-widget .asm-ad-card:hover { transform: none !important; box-shadow: none !important; }
     #asm-adoptables-widget.asm-ready { transition:none; }
   }
 
@@ -940,7 +940,7 @@ final class Plugin_Adoptables_UI_Shortcode {
 
   #asm-modal-header-actions{ display:flex; align-items:center; gap:.5rem; flex-shrink:0; }
   #asm-modal-header-actions button,
-  .asm-modal-nav,
+  #asm-modal .asm-modal-nav,
   #asm-modal-photo-prev,
   #asm-modal-photo-next{
     display:inline-flex;
@@ -1143,10 +1143,10 @@ final class Plugin_Adoptables_UI_Shortcode {
   @media (min-width: 1024px){ #asm-adoptables-widget .asm-ad-card{ max-width: calc(100% * var(--asm-scale-d, 1)); } }
 
 
-  .asm-modal-animal-nav{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px;pointer-events:auto;width:100%;}
-  .asm-modal-nav{position:static;transform:none;z-index:2147483648;pointer-events:auto;min-width:160px;}
+  #asm-modal .asm-modal-animal-nav{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px;pointer-events:auto;width:100%;}
+  #asm-modal .asm-modal-nav{position:static;transform:none;z-index:2147483648;pointer-events:auto;min-width:160px;}
 
-  .asm-modal-divider{
+  #asm-modal .asm-modal-divider{
     height: var(--asm-divider-thickness, 2px);
     background: var(--asm-divider-color, var(--asm-brand));
     border-radius: var(--asm-divider-radius, 999px);
@@ -1157,14 +1157,14 @@ final class Plugin_Adoptables_UI_Shortcode {
   #asm-modal-prev-animal,#asm-modal-next-animal{z-index:30;}
   #asm-modal-photo-prev{left:12px;top:50%;transform:translateY(-50%);}
   #asm-modal-photo-next{right:12px;top:50%;transform:translateY(-50%);}
-  .asm-fav-top-left{left:8px;top:8px;right:auto;bottom:auto;}
-  .asm-fav-top-right{right:8px;top:8px;left:auto;bottom:auto;}
-  .asm-fav-bottom-left{left:8px;bottom:8px;right:auto;top:auto;}
-  .asm-fav-bottom-right{right:8px;bottom:8px;left:auto;top:auto;}
-  .asm-modal-animal-nav .asm-modal-nav[disabled]{opacity:.45;cursor:not-allowed;}
+  #asm-adoptables-widget .asm-fav-top-left{left:8px;top:8px;right:auto;bottom:auto;}
+  #asm-adoptables-widget .asm-fav-top-right{right:8px;top:8px;left:auto;bottom:auto;}
+  #asm-adoptables-widget .asm-fav-bottom-left{left:8px;bottom:8px;right:auto;top:auto;}
+  #asm-adoptables-widget .asm-fav-bottom-right{right:8px;bottom:8px;left:auto;top:auto;}
+  #asm-modal .asm-modal-animal-nav .asm-modal-nav[disabled]{opacity:.45;cursor:not-allowed;}
 </style>
 
-<div id="asm-adoptables-widget"
+<div <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> id="asm-adoptables-widget"
      class="rps-widget min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-xl"
      data-asm-renderer-version="<?php echo esc_attr(PLUGIN_SUITE_VERSION); ?>"
      data-asm-rest-url="<?php echo esc_url(rest_url('plugin/v1/adoptables')); ?>"
@@ -1198,13 +1198,13 @@ final class Plugin_Adoptables_UI_Shortcode {
   ?>
 
   <div class="rps-widget-shell max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
-    <div class="rps-widget-heading text-center mb-6"><p class="rps-eyebrow">Find your companion</p>
+    <div class="rps-widget-heading text-center mb-6"><p class="rps-eyebrow rps-widget-title">Find your companion</p>
       <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-2">
-        <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold" style="color:var(--asm-brand);">
+        <h2 class="rps-widget-title text-2xl sm:text-3xl md:text-4xl font-extrabold" style="color:var(--asm-brand);">
           <?php echo esc_html($o['title_text']); ?>
         </h2>
       </div>
-      <p class="text-base sm:text-lg font-semibold" style="color:#475569;">
+      <p class="rps-widget-subtitle text-base sm:text-lg font-semibold" style="color:#475569;">
         <?php echo esc_html($o['subtitle_text']); ?>
       </p>
       <p id="asm-adoptables-status" class="mt-3 text-sm font-medium" role="status" aria-live="polite" style="color:#475569; display:none;"></p>
@@ -1249,7 +1249,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     </div>
     <?php endif; ?>
 
-    <div id="asm-filters-wrap" class="fixed inset-0 z-[2147483646] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-filters-title" tabindex="-1">
+    <div data-rps-ui id="asm-filters-wrap" class="fixed inset-0 z-[2147483646] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-filters-title" tabindex="-1">
       <div id="asm-filters-backdrop" class="absolute inset-0 bg-black/50"></div>
       <div class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6"
            style="min-height:100dvh; padding-top: max(env(safe-area-inset-top), 16px); padding-bottom: max(env(safe-area-inset-bottom), 16px);">
@@ -1319,13 +1319,13 @@ final class Plugin_Adoptables_UI_Shortcode {
     </div>
 
     <div class="text-center mt-8">
-      <p class="text-sm sm:text-base font-medium px-2" style="color:#475569;">
+      <p class="rps-widget-footer text-sm sm:text-base font-medium px-2" style="color:#475569;">
         <?php echo esc_html($o['footer_text']); ?>
       </p>
     </div>
   </div>
 
-  <div id="asm-modal" class="fixed inset-0 z-[2147483647] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-modal-name" aria-describedby="asm-field-desc" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
+  <div data-rps-ui id="asm-modal" class="fixed inset-0 z-[2147483647] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-modal-name" aria-describedby="asm-field-desc" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
     <div id="asm-modal-backdrop" class="absolute inset-0 bg-black/50"></div>
 
     <div id="asm-modal-viewport" class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6"
@@ -1505,7 +1505,7 @@ final class Plugin_Adoptables_UI_Shortcode {
 
             <div id="asm-modal-form-col" class="asm-modal-col p-0 bg-white md:col-span-2 hidden">
               <div id="asm-apply-form-wrap" class="bg-white p-4 sm:p-6" aria-live="polite">
-                <style>#asm-apply-form-wrap .asm-apply-summary,#asm-apply-form-wrap .plugin-apply-summary,[id^="asm-apply-cat-"]{display:none !important;}</style>
+                <style>#asm-apply-form-wrap .asm-apply-summary,#asm-apply-form-wrap .plugin-apply-summary,#asm-apply-form-wrap [id^="asm-apply-cat-"]{display:none !important;}</style>
                 <div id="asm-apply-form-mount"></div>
                 <p id="asm-apply-form-status" class="hidden" style="color:#475569;font-weight:600;">Loading application form…</p>
               </div>
@@ -1529,12 +1529,12 @@ final class Plugin_Adoptables_UI_Shortcode {
     </div>
   </div>
 
-  <div id="asm-favourites-modal" class="fixed inset-0 z-[2147483646] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-favourites-modal-title" tabindex="-1">
+  <div data-rps-ui id="asm-favourites-modal" class="fixed inset-0 z-[2147483646] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-favourites-modal-title" tabindex="-1">
     <div class="absolute inset-0 bg-black/50" id="asm-favourites-backdrop"></div>
     <div class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6"><div class="bg-white rounded-2xl shadow-2xl border-2 w-full max-w-3xl max-h-[80vh] overflow-hidden" style="border-color:var(--asm-brand);"><div class="flex items-center justify-between px-4 sm:px-6 py-4 border-b"><h3 id="asm-favourites-modal-title" class="text-lg sm:text-xl font-extrabold" style="color:#334155;"><?php echo esc_html($o['favourites_modal_title'] ?? 'Saved favourites'); ?></h3><button id="asm-close-favourites-modal" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-xl border-2 bg-white hover:shadow-md" style="border-color:var(--asm-brand);" aria-label="Close"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--asm-brand)" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div id="asm-favourites-modal-body" class="p-4 sm:p-6 overflow-y-auto" style="max-height:calc(80vh - 72px);"></div></div></div>
   </div>
 
-  <div id="asm-compare-modal" class="fixed inset-0 z-[2147483646] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-compare-modal-title" tabindex="-1">
+  <div data-rps-ui id="asm-compare-modal" class="fixed inset-0 z-[2147483646] hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-compare-modal-title" tabindex="-1">
     <div class="absolute inset-0 bg-black/50" id="asm-compare-backdrop"></div>
     <div class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6"><div class="bg-white rounded-2xl shadow-2xl border-2 w-full max-w-5xl max-h-[84vh] overflow-hidden" style="border-color:var(--asm-brand);"><div class="flex items-center justify-between px-4 sm:px-6 py-4 border-b"><h3 id="asm-compare-modal-title" class="text-lg sm:text-xl font-extrabold" style="color:#334155;"><?php echo esc_html($o['compare_modal_title'] ?? 'Compare favourites'); ?></h3><button id="asm-close-compare-modal" type="button" class="inline-flex items-center justify-center w-10 h-10 rounded-xl border-2 bg-white hover:shadow-md" style="border-color:var(--asm-brand);" aria-label="Close"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--asm-brand)" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div id="asm-compare-modal-body" class="p-4 sm:p-6 overflow-y-auto" style="max-height:calc(84vh - 72px);"></div></div></div>
   </div>
@@ -1605,7 +1605,8 @@ final class Plugin_Adoptables_UI_Shortcode {
     favouritesLabel: <?php echo wp_json_encode((string)($o['favourites_label_text'] ?? 'Favourites')); ?>,
     favouriteButtonPosition: <?php echo wp_json_encode((string)($o['favourite_button_position'] ?? 'top_left')); ?>,
     enableCompareTool: <?php echo !empty($o['enable_compare_tool']) ? 'true' : 'false'; ?>,
-    enableModals: <?php echo !empty($o['enable_modals']) || !empty($o['enable_adoptables_modals']) ? 'true' : 'false'; ?>,
+    profileBase: <?php echo wp_json_encode(home_url('/cats/')); ?>,
+    enableModals: <?php echo (array_key_exists('enable_modals', $o) ? !empty($o['enable_modals']) : !empty($o['enable_adoptables_modals'])) ? 'true' : 'false'; ?>,
     compareButtonText: <?php echo wp_json_encode((string)($o['compare_button_text'] ?? 'Compare favourites')); ?>,
     displayStyle: <?php echo wp_json_encode((string)($o['display_style'] ?? 'classic')); ?>,
     builderCardOrder: <?php echo wp_json_encode(array_values(array_filter(array_map('trim', preg_split('/\R+/', (string)($o['builder_card_order'] ?? '')))))); ?>,
@@ -2054,7 +2055,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     if (!exists) dialogStack.push({ el: dialog, trigger });
     dialog.classList.remove('hidden');
     dialog.setAttribute('aria-hidden','false');
-    document.body.style.overflow='hidden';
+    if (window.RescuePluginSuite) window.RescuePluginSuite.lockScroll('adoptables');
     window.setTimeout(() => {
       const target = initialFocus || focusableEls(dialog)[0] || dialog;
       if (target && typeof target.focus === 'function') target.focus({ preventScroll: true });
@@ -2066,7 +2067,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     dialog.setAttribute('aria-hidden','true');
     const idx = dialogStack.findIndex(entry => entry.el === dialog);
     const entry = idx >= 0 ? dialogStack.splice(idx, 1)[0] : null;
-    if (!anyDialogOpen()) document.body.style.overflow='';
+    if (!anyDialogOpen() && window.RescuePluginSuite) window.RescuePluginSuite.unlockScroll('adoptables');
     if (restoreFocus && entry && entry.trigger && document.contains(entry.trigger) && typeof entry.trigger.focus === 'function') {
       window.setTimeout(() => entry.trigger.focus({ preventScroll: true }), 0);
     }
@@ -2156,7 +2157,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     // A stale legacy layout can contain only obsolete keys. Never turn that
     // configuration into an empty clickable shell; use the supported design.
     const cardParts = (order.length ? order : defaultOrder).map(key => bits[key] ?? '').join('');
-    return `<div class="rps-animal-card asm-ad-card ${displayClass} group text-left bg-white shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] focus-within:ring-4 focus-within:ring-pink-200" style="position:relative;border-style:solid;border-color:var(--asm-card-border-color);border-width:var(--asm-card-border-width);" data-animalid="${safeId}" data-animal-name="${safeNameAttr}">${cardParts}<button type="button" class="asm-card-open absolute inset-0" data-animalid="${safeId}" aria-label="Open ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-modal" style="background:transparent;border:0;padding:0;margin:0;cursor:pointer;z-index:1;"></button></div>`;
+    return `<div class="rps-animal-card asm-ad-card ${displayClass} group text-left bg-white shadow-md overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02] focus-within:ring-4 focus-within:ring-pink-200" style="position:relative;border-style:solid;border-color:var(--asm-card-border-color);border-width:var(--asm-card-border-width);" data-animalid="${safeId}" data-animal-name="${safeNameAttr}">${cardParts}<a href="${escAttr(ASM_WIDGET.profileBase || '/cats/')}${encodeURIComponent(id)}/" class="asm-card-open absolute inset-0" data-animalid="${safeId}" aria-label="Open ${safeNameAttr}" ${ASM_WIDGET.enableModals ? 'aria-haspopup="dialog" aria-controls="asm-modal"' : ''} style="background:transparent;border:0;padding:0;margin:0;cursor:pointer;z-index:1;"></a></div>`;
   }
 
 
@@ -2244,10 +2245,11 @@ final class Plugin_Adoptables_UI_Shortcode {
       }
       const openBtn = card.querySelector(".asm-card-open[data-animalid]");
       if (openBtn) {
-        openBtn.addEventListener("click", () => {
+        openBtn.addEventListener("click", (event) => {
+          if (!ASM_WIDGET.enableModals || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
           const id = openBtn.getAttribute("data-animalid");
           const a = sourceCats.find(x => String(x.ID ?? x.ANIMALID ?? x.animalid ?? x.AnimalID) === String(id));
-          if(a && ASM_WIDGET.enableModals) openModal(a);
+          if(a && ASM_WIDGET.enableModals) { event.preventDefault(); openModal(a); }
         });
       }
     });

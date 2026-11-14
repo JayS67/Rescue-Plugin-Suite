@@ -104,3 +104,22 @@ RPS_CHROMIUM=/usr/bin/chromium RPS_SCREENSHOT_DIR=/tmp/rps-review npm run test:w
 Current-instance review passed these checks with fixture animal images and data. Live
 ASM form delivery, payment checkout and production speed metrics require the respective
 configured services and were not exercised by this visual review.
+
+## 15.1.2 controls and isolation
+
+General → Shared styling now includes transparent outer surfaces and separate title,
+subtitle and footer visibility switches. Hidden titles remain available to assistive
+technology for named widget regions. Cards and dialogs keep readable backgrounds; paw
+patterns remain on transparent surfaces. Only widgets receive presentation flags.
+
+Utility CSS and its variable defaults now require `data-rps-ui` on a suite root. The
+build's selector pass scopes both roots and descendants and prefixes utility animations.
+Modal roots carry the marker when moved into `body`. Native host headings, buttons,
+layout classes, hidden overrides and pre-existing scroll styles are covered by
+`tests/site-isolation.cjs`. Ordinary pages should request no suite assets.
+
+Additional tests: `tests/presentation-browser.cjs` (runtime fixture admin credentials via
+environment variables), `tests/settings-usability.php`, `tests/settings-save.php`,
+`tests/payment-settings.php`, `tests/update-preferences.php`, and
+`tests/updater-native-lifecycle.php`. The native lifecycle test is explicitly destructive
+and refuses to run without `RPS_UPDATER_TESTS=1`; use only a disposable installation.
