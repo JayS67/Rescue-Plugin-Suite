@@ -1,7 +1,7 @@
 === Rescue Plugin Suite ===
-Stable tag: 15.2.2
+Stable tag: 15.2.3
 
-15.2.2
+15.2.3
 - Prominent edge-to-edge photographs in rounded square frames across animal card designs.
 - Photo-led blog gallery, generous list images and consistent card/footer spacing.
 - No empty status slots, thumbnail rails or placeholder metadata.

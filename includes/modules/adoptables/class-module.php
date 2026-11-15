@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adoptables
  * Description: Provides [adoptables] shortcode for the adoptable/adopted widget with scoped styling and settings.
- * Version: 15.2.2
+ * Version: 15.2.3
  * Author: Jordan Sutton | Webstax
  */
 

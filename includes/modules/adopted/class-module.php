@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
- * Version: 15.2.2
+ * Version: 15.2.3
  * Author: Jordan Sutton | Webstax
  */
 
