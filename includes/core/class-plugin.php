@@ -149,16 +149,22 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function activate() {
-    $merged = self::merge_with_defaults(self::default_settings(), self::load_saved_settings());
+    $merged = self::get_settings();
     update_option(self::OPT_KEY, $merged, false);
     update_option(self::WIZARD_KEY, 1, false);
     self::record_version_event('activated');
     self::sync_legacy_options($merged);
     self::ensure_webhook_retry_schedule();
+    if (class_exists('Plugin_Rescue_Shop_Module')) Plugin_Rescue_Shop_Module::activate();
     if (class_exists('Plugin_UI_Suite_SEO')) Plugin_UI_Suite_SEO::rewrite_rules();
     flush_rewrite_rules(false);
   }
 
+
+  public static function deactivate() {
+    wp_clear_scheduled_hook(self::WEBHOOK_CRON_HOOK);
+    if (class_exists('Plugin_Rescue_Shop_Module')) Plugin_Rescue_Shop_Module::deactivate();
+  }
 
   private static function register_core_framework_metadata() {
     if (!class_exists('Plugin_UI_Suite_Registry')) return;
@@ -171,6 +177,7 @@ final class Plugin_UI_Suite_Plugin {
       'diagnostics'=>['name'=>'Diagnostics','description'=>'Plugin health centre, support information and environment checks.','icon'=>'sos'],
       'stats'=>['name'=>'Statistics','description'=>'Impact statistics display settings.','icon'=>'chart-bar'],
       'forms'=>['name'=>'Forms','description'=>'Application and enquiry form routing.','icon'=>'feedback'],
+      'shop'=>['name'=>'Rescue Shop','description'=>'Products, orders, digital gifts and shop settings.','icon'=>'cart'],
       'payments'=>['name'=>'Payments','description'=>'Donation behaviour, widget, campaigns, Gift Aid and reporting.','icon'=>'money-alt'],
     ] as $id=>$module) Plugin_UI_Suite_Registry::register_module($id, $module);
     foreach (self::default_settings() as $module=>$fields) {
@@ -209,7 +216,7 @@ final class Plugin_UI_Suite_Plugin {
       'updates'=>'Check the installed version and choose whether automatic updates are enabled.',
       'finished'=>'Review the checklist and save your setup.',
     ] as $i=>$description) Plugin_UI_Suite_Registry::register('setup_steps', $i, ['module'=>'global','title'=>ucwords(str_replace('-',' ', $i)),'description'=>$description,'order'=>count(Plugin_UI_Suite_Registry::all('setup_steps'))+1]);
-    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','featured'=>'Featured Animal','stats'=>'Statistics','payments'=>'Donations','quiz'=>'Match Quiz','forms'=>'Forms','diagnostics'=>'Diagnostics','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','featured'=>'Featured Animal','stats'=>'Statistics','payments'=>'Donations','shop'=>'Rescue Shop','quiz'=>'Match Quiz','forms'=>'Forms','diagnostics'=>'Diagnostics','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
     if (Plugin_UI_Suite_Registry::developer_mode_enabled()) foreach (['proxy'=>'Developer Tools','registry'=>'Registry'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>'global','order'=>90 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
     Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'top_level'=>true,'icon'=>'dashicons-heart','position'=>58,'order'=>10]);
   }
@@ -221,6 +228,7 @@ final class Plugin_UI_Suite_Plugin {
     require_once PLUGIN_SUITE_PATH . 'includes/modules/adopted/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/statistics/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/payments/class-module.php';
+    require_once PLUGIN_SUITE_PATH . 'includes/modules/shop/class-module.php';
   }
 
   public static function default_settings() {
@@ -230,6 +238,8 @@ final class Plugin_UI_Suite_Plugin {
         'cache_adoptables_seconds' => 60,
         'cache_adopted_seconds' => 120,
         'cache_stats_seconds' => 60,
+        'stats_data_mode' => 'built_in',
+        'asm_reservation_report_enabled' => 0,
         'bypass_plugin_cache' => 0,
         'delete_data_on_uninstall' => 0,
         'adoptables_page_url' => '',
@@ -337,11 +347,13 @@ final class Plugin_UI_Suite_Plugin {
         'enable_compare_tool' => 1, 'compare_button_text' => 'Compare favourites', 'favourites_modal_title' => 'Saved favourites', 'compare_modal_title' => 'Compare favourites',
         'enable_modals' => 1,
         'display_style' => 'classic',
+        'layout_preset' => 'grid', 'card_design' => 'classic', 'visitor_view_switch' => 0,
         'builder_card_order' => "image\nreservation_badge\nname_meta\nbreed_line\nfavourite_button",
         'builder_modal_order' => "gallery\nbadges\ninfo_cards\ntips\ndescription\nglobal_text\ncontact_footer\ncustom_buttons",
         'builder_header_actions' => "apply\nfavourite\nshare\nclose",
       ],
       'adopted' => [
+        'layout_preset' => 'grid', 'card_design' => 'classic', 'visitor_view_switch' => 0,
         'brand_color' => '#401268', 'background_color' => '#fcf5fd', 'text_primary_color' => '#374151', 'text_muted_color' => '#6b7280',
         'paw_opacity' => '0.15', 'paw_count' => 50, 'title_text' => 'Found My Furever Home',
         'subtitle_text' => 'Recently adopted cats - the newest happy endings first',
@@ -361,7 +373,7 @@ final class Plugin_UI_Suite_Plugin {
         'fw_card_name' => 800, 'fw_card_meta' => 600, 'fw_badge' => 800,
         'enable_modals' => 1, 'enable_deep_links' => 1, 'share_button_text' => 'Share', 'share_copied_text' => 'Link copied',
         'modal_global_text' => 'Every adoption changes a life. Thank you for supporting rescue work. 🐾',
-        'adoptables_cta_enabled' => 0,
+        'adoptables_cta_enabled' => 1,
         'adoptables_cta_text' => 'Looking for your next best friend?',
         'adoptables_cta_button_text' => 'View animals for adoption',
         'adoptables_cta_url' => '',
@@ -369,6 +381,7 @@ final class Plugin_UI_Suite_Plugin {
         'builder_modal_order' => "gallery\nname_meta\nadoption_date\nstory\nglobal_text\nshare_button",
       ],
       'stats' => [
+        'layout_preset' => 'tiles',
         'brand_color' => '#401268', 'background_color' => '#fcf5fd', 'min_year' => 2026, 'paw_opacity' => '0.15', 'paw_count' => 50,
         'title_text' => 'Our Rescue Impact', 'year_label_prefix' => "This Year's Statistics -",
         'footer_text' => 'Every number represents a life changed. Thank you for supporting rescue work. 🐾', 'font_family' => '',
@@ -524,7 +537,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) return;
     $defaults = self::default_settings();
     $saved = self::load_saved_settings();
-    $merged = self::merge_with_defaults($defaults, $saved);
+    $merged = self::get_settings();
     if ($saved !== $merged) update_option(self::OPT_KEY, $merged, false);
     self::sync_legacy_options($merged);
   }
@@ -532,6 +545,12 @@ final class Plugin_UI_Suite_Plugin {
   public static function get_settings() {
     $saved = self::load_saved_settings();
     $settings = self::merge_with_defaults(self::default_settings(), $saved);
+    // Preserve older installations' list/compact choices until a new preset is saved.
+    foreach (['adoptables','adopted'] as $module) {
+      if (!isset($saved[$module]['layout_preset']) && isset($saved[$module]['display_style'])) $settings[$module]['layout_preset'] = ($saved[$module]['display_style'] ?? '') === 'list' ? 'list' : 'grid';
+      if (!isset($saved[$module]['card_design']) && ($saved[$module]['display_style'] ?? '') === 'compact') $settings[$module]['card_design'] = 'compact';
+    }
+    if (!isset($saved['stats']['layout_preset']) && isset($saved['stats']['layout_mode'])) $settings['stats']['layout_preset'] = ($settings['stats']['layout_mode'] ?? '') === 'one_row' ? 'compact' : 'tiles';
     if (isset($saved['widgets']) && is_array($saved['widgets'])) {
       $settings['featured'] = self::featured_settings(['featured'=>$settings['featured'] ?? [], 'widgets'=>$saved['widgets']]);
     }
@@ -606,6 +625,34 @@ final class Plugin_UI_Suite_Plugin {
       $attributes[] = 'data-rps-' . $attribute . '="' . (!empty($global[$key]) ? 'true' : 'false') . '"';
     }
     return implode(' ', $attributes);
+  }
+
+  public static function enqueue_widget_layout_assets() {
+    wp_enqueue_style('rescue-plugin-suite-widget-layouts', PLUGIN_SUITE_URL . 'assets/css/widget-layouts.css', ['rescue-plugin-suite-frontend'], PLUGIN_SUITE_VERSION);
+    wp_enqueue_script('rescue-plugin-suite-widget-layouts', PLUGIN_SUITE_URL . 'assets/js/widget-layouts.js', [], PLUGIN_SUITE_VERSION, true);
+  }
+
+  /** Layout data is limited to a public widget root, never a body-appended modal. */
+  public static function widget_layout_attributes($module) {
+    if (!in_array($module, ['adoptables','adopted','stats'], true)) return '';
+    self::enqueue_widget_layout_assets();
+    $options = self::get_settings()[$module];
+    $allowed = $module === 'stats' ? ['tiles','compact','band'] : ['grid','list','blog'];
+    $preset = in_array($options['layout_preset'] ?? '', $allowed, true) ? $options['layout_preset'] : $allowed[0];
+    $attributes = 'data-rps-layout="' . esc_attr($preset) . '"';
+    if ($module !== 'stats') {
+      $design = in_array($options['card_design'] ?? '', ['classic','compact','thumbnail'], true) ? $options['card_design'] : 'classic';
+      $attributes .= ' data-rps-card-design="' . esc_attr($design) . '" data-rps-view="' . ($preset === 'list' ? 'list' : 'grid') . '" data-rps-view-switch="' . (!empty($options['visitor_view_switch']) ? 'true' : 'false') . '"';
+    }
+    return $attributes;
+  }
+
+  public static function render_widget_view_switch($module) {
+    if (!in_array($module, ['adoptables','adopted'], true)) return;
+    $options = self::get_settings()[$module];
+    if (empty($options['visitor_view_switch'])) return;
+    $list = ($options['layout_preset'] ?? '') === 'list';
+    echo '<div class="rps-view-switch" role="group" aria-label="Animal display view"><span>View</span><button type="button" data-rps-select-view="grid" aria-pressed="' . ($list ? 'false' : 'true') . '">Grid</button><button type="button" data-rps-select-view="list" aria-pressed="' . ($list ? 'true' : 'false') . '">List</button></div>';
   }
 
   public static function enqueue_frontend_assets() {
@@ -873,7 +920,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (self::get_forms() as $tag => $id) $tags[] = $tag;
     $tags[] = self::sanitize_shortcode_tag($settings['featured']['shortcode'] ?? ($settings['widgets']['featured_shortcode'] ?? 'featured_animal'));
     $tags[] = self::sanitize_shortcode_tag($settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz');
-    $tags = array_merge($tags, ['donation_widget', 'plugin_adoptables_ui', 'plugin_adopted_ui', 'plugin_adoption_form', 'plugin_volunteer_form', 'plugin_waiting_list_form', 'plugin_lost_cat_form']);
+    $tags = array_merge($tags, ['rescue_shop','rescue_shop_product','rescue_shop_basket','straysafe_shop','straysafe_shop_product','straysafe_shop_basket', 'donation_widget', 'plugin_adoptables_ui', 'plugin_adopted_ui', 'plugin_adoption_form', 'plugin_volunteer_form', 'plugin_waiting_list_form', 'plugin_lost_cat_form']);
     return array_values(array_unique(array_filter($tags)));
   }
 
@@ -885,7 +932,7 @@ final class Plugin_UI_Suite_Plugin {
     $tags = self::all_suite_shortcodes();
     if (empty($settings['global']['bypass_plugin_cache']) && !isset($_GET['cat']) && !isset($_GET['adopted'])) {
       // Form and donation pages carry nonces; keep their page-cache safeguards.
-      $tags = array_merge(array_keys(self::get_forms()), ['donation_widget']);
+      $tags = array_merge(array_keys(self::get_forms()), ['donation_widget','rescue_shop','rescue_shop_product','rescue_shop_basket','straysafe_shop','straysafe_shop_product','straysafe_shop_basket']);
     }
     foreach ($tags as $tag) {
       if (has_shortcode($post->post_content, $tag)) {
@@ -903,6 +950,7 @@ final class Plugin_UI_Suite_Plugin {
       'adoptables'=>['label'=>'Widgets', 'slug'=>'plugin-ui-suite-widgets', 'tabs'=>['adoptables','adopted','featured','stats','quiz']],
       'forms'=>['label'=>'Forms', 'slug'=>'plugin-ui-suite-forms', 'tabs'=>['forms']],
       'payments'=>['label'=>'Donations', 'slug'=>'plugin-ui-suite-donations', 'tabs'=>['payments']],
+      'shop'=>['label'=>'Rescue Shop', 'slug'=>'plugin-ui-suite-shop', 'tabs'=>['shop']],
       'diagnostics'=>['label'=>'Diagnostics', 'slug'=>'plugin-ui-suite-diagnostics', 'tabs'=>['diagnostics','proxy','registry']],
       'updates'=>['label'=>'Updates', 'slug'=>'plugin-ui-suite-updates', 'tabs'=>['updates']],
       'help'=>['label'=>'Help Centre', 'slug'=>'plugin-ui-suite-help', 'tabs'=>['help']],
@@ -1010,7 +1058,7 @@ final class Plugin_UI_Suite_Plugin {
     return ['paw_opacity'];
   }
   private static function bool_keys($section) {
-    return $section === 'adoptables' ? ['cats_only','show_top_navigation','show_reservation_label','show_pending_reservation_label','show_other_reservation_label','enable_deep_links','enable_apply_button','card_border_enabled','enable_filters','enable_filter_age','enable_filter_sex','enable_filter_breed','enable_exclude_pending_filter','detect_bonded_from_description','detect_indoor_only_from_description','enable_modal_slideshow_controls','enable_favourites','enable_compare_tool','enable_modals','enable_adoptables_modals'] : (($section === 'adopted') ? ['show_top_navigation','card_border_enabled','enable_modals','enable_deep_links','adoptables_cta_enabled'] : (($section === 'stats') ? ['card_border_enabled'] : []));
+    return $section === 'adoptables' ? ['cats_only','show_top_navigation','show_reservation_label','show_pending_reservation_label','show_other_reservation_label','enable_deep_links','enable_apply_button','card_border_enabled','enable_filters','enable_filter_age','enable_filter_sex','enable_filter_breed','enable_exclude_pending_filter','detect_bonded_from_description','detect_indoor_only_from_description','enable_modal_slideshow_controls','enable_favourites','enable_compare_tool','enable_modals','enable_adoptables_modals','visitor_view_switch'] : (($section === 'adopted') ? ['show_top_navigation','card_border_enabled','enable_modals','enable_deep_links','adoptables_cta_enabled','visitor_view_switch'] : (($section === 'stats') ? ['card_border_enabled'] : []));
   }
   private static function textarea_keys($section) {
     $map = ['adoptables' => ['footer_text','modal_global_text','fallback_description','builder_card_order','builder_modal_order','builder_header_actions'], 'adopted' => ['footer_text','modal_global_text','builder_card_order','builder_modal_order'], 'stats' => ['footer_text','card_order','builder_card_order']];
@@ -1018,7 +1066,7 @@ final class Plugin_UI_Suite_Plugin {
   }
   private static function select_keys($section) {
     $map = ['adoptables' => ['reservation_label_halign','reservation_label_valign','display_style','favourite_button_position'], 'adopted' => ['date_label_halign','date_label_valign','display_style'], 'stats' => ['layout_mode']];
-    return $map[$section] ?? [];
+    return array_merge($map[$section] ?? [], in_array($section, ['adoptables','adopted','stats'], true) ? ['layout_preset'] : [], in_array($section, ['adoptables','adopted'], true) ? ['card_design'] : []);
   }
   private static function icon_keys($section) { return $section === 'stats' ? ['icon_brought','icon_adopted','icon_vaccinated','icon_neutered','icon_chipped','icon_in_care'] : []; }
 
@@ -1035,7 +1083,9 @@ final class Plugin_UI_Suite_Plugin {
       elseif ($section === 'adopted' && $key === 'adoptables_cta_url') $out[$key] = esc_url_raw($input[$key] ?? '');
       elseif (in_array($key, self::select_keys($section), true)) {
         $val = sanitize_key($input[$key] ?? $defaults[$key]);
-        if ($section === 'adoptables' && $key === 'reservation_label_halign') $out[$key] = in_array($val, ['left','right'], true) ? $val : $defaults[$key];
+        if ($key === 'layout_preset') $out[$key] = in_array($val, $section === 'stats' ? ['tiles','compact','band'] : ['grid','list','blog'], true) ? $val : $defaults[$key];
+        elseif ($key === 'card_design') $out[$key] = in_array($val, ['classic','compact','thumbnail'], true) ? $val : $defaults[$key];
+        elseif ($section === 'adoptables' && $key === 'reservation_label_halign') $out[$key] = in_array($val, ['left','right'], true) ? $val : $defaults[$key];
         elseif ($section === 'adoptables' && $key === 'reservation_label_valign') $out[$key] = in_array($val, ['top','bottom'], true) ? $val : $defaults[$key];
         elseif ($section === 'adoptables' && $key === 'display_style') $out[$key] = in_array($val, ['classic','compact','list'], true) ? $val : $defaults[$key];
         elseif ($section === 'adoptables' && $key === 'favourite_button_position') $out[$key] = in_array($val, ['top_left','top_right','bottom_left','bottom_right','hidden'], true) ? $val : $defaults[$key];
@@ -1136,6 +1186,10 @@ final class Plugin_UI_Suite_Plugin {
     } elseif (in_array($active_tab, ['adoptables','adopted','stats'], true)) {
       $clean[$active_tab] = self::sanitize_section($active_tab, $input[$active_tab] ?? [], $clean[$active_tab] ?? []);
       if (!empty($input['shortcodes']) && is_array($input['shortcodes'])) { $sc=$input['shortcodes']; foreach (['adoptables','adopted','statistics'] as $k) if (isset($sc[$k])) $clean['shortcodes'][$k] = self::sanitize_shortcode_tag($sc[$k]) ?: ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k]); }
+      if ($active_tab === 'stats' && isset($input['global']['stats_data_mode'])) {
+        $mode = sanitize_key($input['global']['stats_data_mode']);
+        $clean['global']['stats_data_mode'] = in_array($mode, ['built_in','custom_report'], true) ? $mode : 'built_in';
+      }
       if ($active_tab === 'stats' && isset($input['stats']['card_order']) && !isset($input['stats']['builder_card_order'])) $clean['stats']['builder_card_order'] = $clean['stats']['card_order'];
       if ($active_tab === 'stats' && !empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
     } elseif ($active_tab === 'featured') {
@@ -1170,6 +1224,7 @@ final class Plugin_UI_Suite_Plugin {
       $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes'] ?? ($clean['forms']['platform_support_notes'] ?? $defaults['forms']['platform_support_notes']));
     } elseif ($active_tab === 'data-source') {
       $g = $input['global'] ?? [];
+      if (array_key_exists('asm_reservation_report_enabled', $g)) $clean['global']['asm_reservation_report_enabled'] = empty($g['asm_reservation_report_enabled']) ? 0 : 1;
       $pr = $input['proxy'] ?? [];
       $source = sanitize_key($g['data_source'] ?? ($clean['global']['data_source'] ?? 'asm'));
       $clean['global']['data_source'] = in_array($source, ['asm','custom_api','shelterluv','petpoint'], true) ? $source : 'asm';
@@ -1428,8 +1483,8 @@ final class Plugin_UI_Suite_Plugin {
     $settings = self::get_settings();
     $tab = sanitize_key($_GET['tab'] ?? 'global');
     if (in_array($tab, ['registry','proxy'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
-    if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
-    echo '<div data-rps-ui class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p></details>';
+    if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','shop','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
+    echo '<div data-rps-ui class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code> <code>[rescue_shop]</code> <code>[rescue_shop_basket]</code></p></details>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
     if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::render_tabs($tab);
@@ -1441,6 +1496,7 @@ final class Plugin_UI_Suite_Plugin {
     elseif ($tab === 'stats') self::render_stats_tab($settings['stats'], $settings['global']);
     elseif ($tab === 'featured') self::render_featured_tab($settings);
     elseif ($tab === 'payments' && class_exists('Plugin_Payments_Module')) Plugin_Payments_Module::render_admin_page(true);
+    elseif ($tab === 'shop' && class_exists('Plugin_Rescue_Shop_Module')) Plugin_Rescue_Shop_Module::render_admin_page();
     elseif ($tab === 'quiz') self::render_quiz_tab($settings);
     elseif ($tab === 'forms') self::render_forms_tab($settings);
     elseif ($tab === 'proxy') self::render_proxy_tab($settings);
@@ -1522,6 +1578,7 @@ final class Plugin_UI_Suite_Plugin {
       self::row('Account name', '<input type="text" name="suite[proxy][account]" value="'.esc_attr($proxy['account'] ?? '').'" class="regular-text" /><p class="description">Active value: '.esc_html($configuration['account']['value'] ?? '').' (from '.esc_html($source_label('account')).').</p>');
       self::row('Username', '<input type="text" name="suite[proxy][username]" value="'.esc_attr($proxy['username'] ?? '').'" class="regular-text" autocomplete="off" /><p class="description">Active value is supplied by '.esc_html($source_label('username')).'.</p>');
       self::row('Password', '<input type="password" name="suite[proxy][password]" value="" class="regular-text" autocomplete="new-password" /><p class="description">'.(!empty($proxy['password']) ? 'Saved value present. ' : '').'Leave blank to keep the saved value. Active value is supplied by '.esc_html($source_label('password')).'.</p>');
+      ob_start(); self::checkbox_input('global','asm_reservation_report_enabled',$s['global']['asm_reservation_report_enabled'] ?? 0,'Use the optional Active Reservations Proxy report'); self::row('Advanced reservation details', ob_get_clean() . '<p class="description">Leave disabled to use ASM’s built-in reservation flags without a custom report. Enable only if the optional report is installed and you need its richer pending-adoption labels.</p>');
       self::row('Configuration precedence', '<p class="description">Environment variables (<code>ASM_BASE_URL</code>, <code>ASM_ACCOUNT</code>, <code>ASM_USERNAME</code>, <code>ASM_PASSWORD</code>, <code>ASM_API_KEY</code>) override <code>wp-config.php</code> constants, which override the saved Integration values. Secrets are masked and are never exposed to visitors.</p>');
       self::row('Documentation', '<a href="https://sheltermanager.com/site/en_asm3_help.html" target="_blank" rel="noopener">ASM API documentation</a>');
     } elseif ($sub === 'shelterluv') {
@@ -1571,6 +1628,14 @@ final class Plugin_UI_Suite_Plugin {
     echo '</tbody></table>';
   }
 
+  private static function render_widget_layout_controls($module, $options) {
+    $layouts = $module === 'stats' ? ['tiles'=>'Comfortable tiles','compact'=>'Compact tiles','band'=>'Impact band'] : ['grid'=>'Grid cards','list'=>'List rows','blog'=>'Blog / story cards'];
+    ob_start(); self::select_input($module, 'layout_preset', $options['layout_preset'] ?? array_key_first($layouts), $layouts); self::row('Layout style', ob_get_clean());
+    if ($module === 'stats') return;
+    ob_start(); self::select_input($module, 'card_design', $options['card_design'] ?? 'classic', ['classic'=>'Classic photo card','compact'=>'Compact photo card','thumbnail'=>'Compact thumbnail row']); self::row('Card design', ob_get_clean());
+    ob_start(); self::checkbox_input($module, 'visitor_view_switch', $options['visitor_view_switch'] ?? 0, 'Let visitors switch between grid and list views'); self::row('Visitor view selector', ob_get_clean() . '<p class="description">Your selected layout is the default. Visitor choices last for this browser session and do not change site settings.</p>');
+  }
+
   private static function render_adoptables_tab($o, $g) {
     self::form_start('adoptables');
     $items = [
@@ -1592,7 +1657,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','modal_divider_color'=>'Modal divider colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('adoptables',$k,$o[$k]); self::row($label, ob_get_clean()); }
     foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_padding','Card padding (px)',0,120,1],['card_radius','Card corner radius (px)',0,120,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('adoptables',$r[0],$o[$r[0]]); else self::number_input('adoptables',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
     ob_start(); self::checkbox_input('adoptables','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
-    ob_start(); self::select_input('adoptables','display_style',$o['display_style'] ?? 'classic',['classic'=>'Grid','list'=>'List']); self::row('Display style', ob_get_clean());
+    self::render_widget_layout_controls('adoptables', $o);
     echo '</table></div>';
 
     echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='text'?'active':'').'" data-subtab="text"><h2>Text</h2><table class="form-table">';
@@ -1652,6 +1717,7 @@ final class Plugin_UI_Suite_Plugin {
 
     if($sub==='design') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Design</h2><table class="form-table">';
+      self::render_widget_layout_controls('adopted', $o);
       foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','text_primary_color'=>'Primary text colour','text_muted_color'=>'Muted text colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('adopted',$k,$o[$k]); self::row($label, ob_get_clean()); }
       foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('adopted',$r[0],$o[$r[0]]); else self::number_input('adopted',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
       ob_start(); self::checkbox_input('adopted','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
@@ -1678,10 +1744,13 @@ final class Plugin_UI_Suite_Plugin {
       ob_start(); self::checkbox_input('adopted','enable_deep_links',$o['enable_deep_links'] ?? 1,'Enable direct links and sharing to each adopted cat modal'); self::row('Deep links and share', ob_get_clean());
       foreach (['share_button_text'=>'Share button text','share_copied_text'=>'Share copied text'] as $k=>$label){ ob_start(); self::text_input('adopted',$k,$o[$k] ?? ''); self::row($label, ob_get_clean()); }
       ob_start(); self::textarea_input('adopted','modal_global_text',$o['modal_global_text'] ?? '',5); self::row('Modal text below story', ob_get_clean() . '<p class="description">Shown below the story section in adopted modals.</p>');
-      ob_start(); self::checkbox_input('adopted','adoptables_cta_enabled',$o['adoptables_cta_enabled'] ?? 0,'Show an adoptables link section in adopted modals'); self::row('Adoptables link section', ob_get_clean());
+      ob_start(); self::checkbox_input('adopted','adoptables_cta_enabled',$o['adoptables_cta_enabled'] ?? 1,'Show an adoptables link section in adopted modals'); self::row('Adoptables link section', ob_get_clean());
       ob_start(); self::text_input('adopted','adoptables_cta_text',$o['adoptables_cta_text'] ?? ''); self::row('Adoptables link text', ob_get_clean());
       ob_start(); self::text_input('adopted','adoptables_cta_button_text',$o['adoptables_cta_button_text'] ?? ''); self::row('Adoptables button text', ob_get_clean());
-      self::row('Adoptables page URL', '<input type="url" name="' . esc_attr(self::field_name('adopted','adoptables_cta_url')) . '" value="' . esc_attr($o['adoptables_cta_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/adopt/')) . '" />');
+      $cta_destination = class_exists('Plugin_Adopted_UI_Shortcode') ? Plugin_Adopted_UI_Shortcode::resolve_adoptables_page_url($o) : '';
+      $cta_help = '<p class="description">Optional override. Leave blank to use the General Adoptables UI page URL, or automatically find a published page containing the Adoptables widget.</p>';
+      if (!empty($o['adoptables_cta_enabled']) && $cta_destination === '') $cta_help .= '<p class="description">No published Adoptables page was found. Publish a page containing the Adoptables widget or set its URL here; the button stays hidden until a destination is available.</p>';
+      self::row('Adoptables page URL', '<input type="url" name="' . esc_attr(self::field_name('adopted','adoptables_cta_url')) . '" value="' . esc_attr($o['adoptables_cta_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr($cta_destination) . '" />' . $cta_help);
       ob_start(); self::number_input('adopted','modal_max_width',$o['modal_max_width'] ?? 896,320,1600); self::row('Modal max width (px)', ob_get_clean());
       echo '</table></div>';
     } elseif ($sub==='embed') {
@@ -1702,7 +1771,8 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('stats',$k,$o[$k]); self::row($label, ob_get_clean()); }
       foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_radius','Card corner radius (px)',0,200,1],['card_padding','Card padding (px)',0,200,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('stats',$r[0],$o[$r[0]]); else self::number_input('stats',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
       ob_start(); self::checkbox_input('stats','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
-      ob_start(); self::select_input('stats','layout_mode',$o['layout_mode'],['grid'=>'Comfortable','one_row'=>'Compact on tablet / desktop']); self::row('Card density', ob_get_clean());
+      self::render_widget_layout_controls('stats', $o);
+      ob_start(); self::select_input('global','stats_data_mode',$g['stats_data_mode'] ?? 'built_in',['built_in'=>'Built-in system data (recommended)','custom_report'=>'Optional custom reports (advanced)']); self::row('Impact statistics source', ob_get_clean() . '<p class="description">ASM uses its built-in monthly statistics and animals-in-care endpoints. Treatment totals need an optional report and display as unavailable when the system does not supply them. Custom report mode uses Summary By Year and Cats In Care Now. Other systems use configured statistics feeds or available adoption records.</p>');
       echo '</table></div>';
     } elseif($sub==='text') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Text</h2><table class="form-table">';
@@ -1819,7 +1889,7 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function module_versions() {
-    return array_fill_keys(['suite_core','adoptables','adopted','statistics','forms','proxy','payments'], PLUGIN_SUITE_VERSION);
+    return array_fill_keys(['suite_core','adoptables','adopted','statistics','forms','proxy','payments','shop'], PLUGIN_SUITE_VERSION);
   }
 
   private static function record_version_event($event) {

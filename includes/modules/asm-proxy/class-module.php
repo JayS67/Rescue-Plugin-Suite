@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Data Proxy
  * Description: Proxies rescue management JSON endpoints so credentials never reach browsers and animal images are served safely.
- * Version: 15.1.2
+ * Version: 15.2.0
  */
 
 if (!defined('ABSPATH')) exit;
@@ -645,10 +645,10 @@ function plugin_provider_incare($provider) {
   $res = plugin_provider_request($provider, $cfg['incare_url'], $query);
   if (is_wp_error($res)) return plugin_asm_error_response($res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
-  if (is_numeric($data)) $count = (int)$data;
+  if (is_numeric($data)) $count = plugin_suite_impact_count($data);
   elseif (is_array($data)) {
-    if (isset($data['count']) || isset($data['in_care']) || isset($data['total'])) $count = (int)($data['count'] ?? $data['in_care'] ?? $data['total']);
-    else $count = count(plugin_provider_items($data, 'animals')) ?: count(plugin_provider_items($data, 'adoptables'));
+    if (isset($data['count']) || isset($data['in_care']) || isset($data['total'])) $count = plugin_suite_impact_count($data['count'] ?? $data['in_care'] ?? $data['total']);
+    else $count = null;
   } else return new WP_REST_Response(['error' => 'Unexpected ' . ucfirst($provider) . ' response'], 500);
   $out = ['count' => $count];
   plugin_suite_cache_set($cache_key, $out, plugin_suite_cache_ttl('cache_incare_seconds', 60));
@@ -675,29 +675,166 @@ function plugin_suite_response_data($response) {
   return $response;
 }
 
+function plugin_suite_impact_mode() {
+  $settings = plugin_suite_settings();
+  return ($settings['global']['stats_data_mode'] ?? 'built_in') === 'custom_report' ? 'custom_report' : 'built_in';
+}
+
+function plugin_suite_impact_year(WP_REST_Request $req) {
+  $current = (int)wp_date('Y');
+  $settings = plugin_suite_settings();
+  $stats = $settings['stats'] ?? get_option('plugin_stats_ui_options', []);
+  $minimum = max(2000, min($current, (int)($stats['min_year'] ?? 2000)));
+  $year = $req->get_param('year');
+  return $year === null || $year === '' ? $current : max($minimum, min($current, (int)$year));
+}
+
+function plugin_suite_empty_impact_row($year, $source, $note = '') {
+  return ['year' => (int)$year, 'cats_brought_in' => null, 'cats_adopted' => null,
+    'cats_vaccinated' => null, 'cats_neutered' => null, 'cats_chipped' => null,
+    'source' => $source, 'note' => $note];
+}
+
+function plugin_suite_impact_count($value) {
+  return is_numeric($value) && (float)$value >= 0 && (float)$value <= PHP_INT_MAX && floor((float)$value) === (float)$value ? (int)$value : null;
+}
+
+/** Sum the documented SAC count tree, rejecting malformed or incomplete data. */
+function plugin_asm_sum_count_tree($tree) {
+  if (!is_array($tree) || !$tree) return null;
+  $total = 0;
+  foreach ($tree as $value) {
+    $count = is_array($value) ? plugin_asm_sum_count_tree($value) : plugin_suite_impact_count($value);
+    if ($count === null) return null;
+    $total += $count;
+  }
+  return $total;
+}
+
+/** ASM's built-in Shelter Animals Count endpoint, without installing SQL reports. */
+function plugin_asm_monthly_impact($data, $month, $year) {
+  $row = is_array($data) && isset($data[0]) && is_array($data[0]) ? $data[0] : null;
+  if (!$row || (int)($row['recordMonth'] ?? 0) !== $month || (int)($row['recordYear'] ?? 0) !== $year || ($row['species'] ?? '') !== 'feline') return null;
+  $intake = 0;
+  $adoptions = 0;
+  foreach (['adult', 'ageUnknown', 'upToFiveMonths'] as $age) {
+    $group = $row['liveIntake'][$age] ?? [];
+    $intake_counts = [];
+    foreach (['otherIntakes', 'ownerIntendedEuthanasia', 'relinquishedbyOwner', 'seizedOrImpounded', 'strayAtLarge'] as $field) $intake_counts[] = $group[$field] ?? null;
+    foreach (['inState', 'international', 'outOfState'] as $field) $intake_counts[] = $group['transferredinFromAgency'][$field] ?? null;
+    $group_total = plugin_asm_sum_count_tree($intake_counts);
+    if ($group_total === null) return null;
+    $intake += $group_total;
+    $count = $row['outComes']['liveOutcomes'][$age]['adoption'] ?? null;
+    $count = plugin_suite_impact_count($count);
+    if ($count === null) return null;
+    $adoptions += $count;
+  }
+  return ['cats_brought_in' => $intake, 'cats_adopted' => $adoptions];
+}
+
+function plugin_asm_impact_cache_context() {
+  return md5(plugin_asm_base_url() . '|' . plugin_asm_account() . '|' . plugin_asm_user() . '|' . plugin_asm_pass());
+}
+
+function plugin_asm_builtin_summary(WP_REST_Request $req) {
+  $year = plugin_suite_impact_year($req);
+  $current_year = (int)wp_date('Y');
+  $last_month = $year === $current_year ? (int)wp_date('n') : 12;
+  $ttl = plugin_suite_cache_ttl('cache_stats_seconds', 60);
+  $context = plugin_asm_impact_cache_context() . '_ttl' . $ttl;
+  $key = 'plugin_asm_impact_year_v1_' . $context . '_' . $year . '_' . $last_month;
+  $cached = plugin_suite_cache_get($key);
+  if ($cached !== false) return $cached;
+  $note = 'Vaccination, neutering and microchip totals are not supplied by the standard system statistics.';
+  $summary = plugin_suite_empty_impact_row($year, 'asm_monthly_stats', $note);
+  $summary['cats_brought_in'] = 0;
+  $summary['cats_adopted'] = 0;
+  $started = microtime(true);
+  for ($month = 1; $month <= $last_month; $month++) {
+    $month_key = 'plugin_asm_impact_month_v1_' . $context . '_' . $year . '_' . $month;
+    $counts = plugin_suite_cache_get($month_key);
+    if ($counts === false) {
+      // Bound the whole cold request, rather than waiting twelve full HTTP timeouts.
+      // Completed months stay cached, allowing a later refresh to resume safely.
+      $remaining = 20 - (microtime(true) - $started);
+      $res = $remaining < 0.25 ? new WP_Error('asm_stats_budget', 'Statistics refresh is taking longer than expected.') : plugin_asm_http_get(['method' => 'json_monthly_stats', 'username' => plugin_asm_user(), 'password' => plugin_asm_pass(), 'month' => $month, 'year' => $year, 'species' => 'feline'], ['timeout' => min(5, $remaining)]);
+      $counts = is_wp_error($res) ? null : plugin_asm_monthly_impact(json_decode(wp_remote_retrieve_body($res), true), $month, $year);
+      if ($counts === null) {
+        // A partial year's sum is not an annual total. Keep unknown values unknown.
+        $unavailable = [plugin_suite_empty_impact_row($year, 'unavailable', 'Yearly statistics are unavailable from the connected system.')];
+        plugin_suite_cache_set($key, $unavailable, 30);
+        return $unavailable;
+      }
+      $current_month = $year === $current_year && $month === $last_month;
+      plugin_suite_cache_set($month_key, $counts, $ttl === 0 ? 0 : ($current_month ? $ttl : 86400));
+    }
+    $summary['cats_brought_in'] += $counts['cats_brought_in'];
+    $summary['cats_adopted'] += $counts['cats_adopted'];
+  }
+  $out = [$summary];
+  plugin_suite_cache_set($key, $out, $ttl === 0 ? 0 : ($year === $current_year ? $ttl : 86400));
+  return $out;
+}
+
+function plugin_asm_builtin_incare() {
+  $key = 'plugin_asm_incare_builtin_v1_' . plugin_asm_impact_cache_context();
+  $cached = plugin_suite_cache_get($key);
+  if ($cached !== false) return $cached;
+  $unavailable = static function() use ($key) {
+    $out = ['count' => null, 'source' => 'unavailable'];
+    plugin_suite_cache_set($key, $out, 30);
+    return $out;
+  };
+  // Default ASM responses strip personal information. Only the aggregate is retained or exposed.
+  $res = plugin_asm_http_get(['method' => 'json_shelter_animals', 'username' => plugin_asm_user(), 'password' => plugin_asm_pass()], ['timeout' => 5]);
+  $animals = is_wp_error($res) ? null : json_decode(wp_remote_retrieve_body($res), true);
+  $count = 0;
+  if (!is_array($animals) || !plugin_suite_array_is_list($animals)) return $unavailable();
+  foreach ($animals as $animal) {
+    if (!is_array($animal)) return $unavailable();
+    $species = $animal['SPECIESID'] ?? $animal['SpeciesID'] ?? null;
+    $name = strtolower(trim((string)($animal['SPECIESNAME'] ?? $animal['SpeciesName'] ?? '')));
+    if ($species === null && $name === '') return $unavailable();
+    if ((string)$species === '2' || in_array($name, ['cat', 'cats', 'feline'], true)) $count++;
+  }
+  $out = ['count' => $count, 'source' => 'asm_shelter_animals'];
+  plugin_suite_cache_set($key, $out, plugin_suite_cache_ttl('cache_incare_seconds', 60));
+  return $out;
+}
+
 function plugin_suite_year_from_row(array $row) {
-  foreach (['MOVEMENTDATE','MovementDate','ADOPTIONDATE','AdoptionDate','DATEADOPTED','DateAdopted','MOSTRECENTADOPTIONDATE','MostRecentAdoptionDate','adoption_date','date_adopted','adopted_at'] as $key) {
+  foreach (['MOVEMENTDATE','MovementDate','ADOPTIONDATE','AdoptionDate','DATEADOPTED','DateAdopted','MOSTRECENTADOPTIONDATE','MostRecentAdoptionDate','ACTIVEMOVEMENTDATE','ActiveMovementDate','adoption_date','date_adopted','adopted_at'] as $key) {
     if (empty($row[$key])) continue;
-    $ts = strtotime((string)$row[$key]);
-    if ($ts) return (int)date('Y', $ts);
-    if (preg_match('/(19|20)\d{2}/', (string)$row[$key], $m)) return (int)$m[0];
+    // Read the explicit calendar year without shifting time zones or guessing D/M vs M/D.
+    if (preg_match('/^(\d{4})[-\/]/', trim((string)$row[$key]), $m) || preg_match('/^\d{1,2}[-\/]\d{1,2}[-\/](\d{4})(?:\D|$)/', trim((string)$row[$key]), $m)) return (int)$m[1];
   }
   return 0;
 }
 
 function plugin_suite_summary_from_adoptions_array(array $rows) {
   $counts = [];
+  $seen = [];
   foreach ($rows as $row) {
     if (!is_array($row)) continue;
     $year = plugin_suite_year_from_row($row);
     if ($year <= 0) continue;
+    $species = $row['SPECIESID'] ?? $row['SpeciesID'] ?? null;
+    if ($species !== null && (int)$species !== 2) continue;
+    $species_name = strtolower(trim((string)($row['SPECIESNAME'] ?? $row['SpeciesName'] ?? '')));
+    if ($species === null && $species_name !== '' && !in_array($species_name, ['cat', 'cats', 'feline'], true)) continue;
+    $id = $row['ANIMALID'] ?? $row['AnimalID'] ?? $row['ID'] ?? null;
+    if ($id !== null && isset($seen[$year . ':' . $id])) continue;
+    if ($id !== null) $seen[$year . ':' . $id] = true;
     if (!isset($counts[$year])) $counts[$year] = 0;
     $counts[$year]++;
   }
   krsort($counts);
   $out = [];
   foreach ($counts as $year => $count) {
-    $out[] = ['YEAR' => (int)$year, 'Year' => (int)$year, 'ADOPTIONS' => (int)$count, 'Adoptions' => (int)$count, 'TOTAL' => (int)$count, 'Total' => (int)$count];
+    $row = plugin_suite_empty_impact_row($year, 'adoption_records', 'Adoption totals count the available adoption records. Intake and health totals are not supplied by this connection.');
+    $row['cats_adopted'] = (int)$count;
+    $out[] = $row;
   }
   return $out;
 }
@@ -705,20 +842,21 @@ function plugin_suite_summary_from_adoptions_array(array $rows) {
 function plugin_suite_fallback_report($source, $title, WP_REST_Request $req) {
   $title = trim((string)$title);
   if ($title === 'Cats In Care Now') {
-    if ($source === 'custom_api') $response = plugin_custom_api_adoptables();
-    elseif (in_array($source, ['shelterluv','petpoint'], true)) $response = plugin_provider_adoptables($source);
-    else return null;
-    $animals = plugin_suite_response_data($response);
-    if (is_array($animals)) return [['cats_in_care' => count($animals), 'CATS_IN_CARE' => count($animals), 'source' => 'derived_from_adoptables']];
+    // An adoptable feed excludes animals not yet ready for adoption, so it is not an in-care count.
+    return [['cats_in_care' => null, 'source' => 'unavailable']];
   }
   if ($title === 'Summary By Year') {
     $fallback_req = new WP_REST_Request('GET', '/plugin/v1/adoptions');
-    $fallback_req->set_param('years', $req->get_param('years') ?: 20);
+    $fallback_req->set_param('year', plugin_suite_impact_year($req));
+    $fallback_req->set_param('speciesid', 2);
     if ($source === 'custom_api') $response = plugin_custom_api_adoptions($fallback_req);
     elseif (in_array($source, ['shelterluv','petpoint'], true)) $response = plugin_provider_adoptions($source, $fallback_req);
     else return null;
     $adoptions = plugin_suite_response_data($response);
-    if (is_array($adoptions)) return plugin_suite_summary_from_adoptions_array($adoptions);
+    if (is_array($adoptions) && plugin_suite_array_is_list($adoptions)) {
+      $rows = plugin_suite_summary_from_adoptions_array($adoptions);
+      return $rows ?: [plugin_suite_empty_impact_row(plugin_suite_impact_year($req), 'unavailable', 'No dated adoption records were supplied for this year.')];
+    }
   }
   if ($title === 'Active Reservations Proxy') return [];
   return null;
@@ -726,16 +864,11 @@ function plugin_suite_fallback_report($source, $title, WP_REST_Request $req) {
 
 function plugin_asm_fallback_report($title, WP_REST_Request $req) {
   if ($title === 'Cats In Care Now') {
-    $response = rest_do_request(new WP_REST_Request('GET', '/plugin/v1/adoptables'));
-    $animals = plugin_suite_response_data($response);
-    if (is_array($animals)) return [['cats_in_care' => count($animals), 'CATS_IN_CARE' => count($animals), 'source' => 'derived_from_adoptables']];
+    $result = plugin_asm_builtin_incare();
+    return [['cats_in_care' => $result['count'], 'source' => $result['source']]];
   }
   if ($title === 'Summary By Year') {
-    $fallback_req = new WP_REST_Request('GET', '/plugin/v1/adoptions');
-    $fallback_req->set_param('years', $req->get_param('years') ?: 20);
-    $response = rest_do_request($fallback_req);
-    $adoptions = plugin_suite_response_data($response);
-    if (is_array($adoptions)) return plugin_suite_summary_from_adoptions_array($adoptions);
+    return plugin_asm_builtin_summary($req);
   }
   if ($title === 'Active Reservations Proxy') return [];
   return null;
@@ -853,8 +986,9 @@ function plugin_custom_api_report(WP_REST_Request $req) {
   $title = trim((string)$req->get_param('title'));
   if ($title === '') return new WP_REST_Response(['error' => 'title required'], 400);
   $query = ['title' => $title];
+  if ($req->get_param('year') !== null && $req->get_param('year') !== '') $query['year'] = plugin_suite_impact_year($req);
   if ($cfg['api_key'] !== '') $query['api_key'] = $cfg['api_key'];
-  $cache_key = 'plugin_custom_api_report_v2_' . md5($cfg['report_url'] . '|' . wp_json_encode($query));
+  $cache_key = 'plugin_custom_api_report_v3_' . md5($cfg['report_url'] . '|' . wp_json_encode($query));
   $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return rest_ensure_response($cached);
   if (empty($cfg['report_url'])) {
@@ -900,14 +1034,15 @@ function plugin_custom_api_incare() {
   if (is_wp_error($res)) return plugin_asm_error_response($res);
   $data = json_decode(wp_remote_retrieve_body($res), true);
   if (is_numeric($data)) {
-    $count = (int)$data;
+    $count = plugin_suite_impact_count($data);
   } elseif (is_array($data)) {
     if (!plugin_suite_array_is_list($data)) {
       $items = plugin_custom_api_extract_items($data, 'items');
       if (isset($items[0]) && is_array($items[0])) $data = $items[0];
     }
     if (isset($data[0]) && is_array($data[0])) $data = $data[0];
-    $count = (int)($data['count'] ?? $data['COUNT'] ?? $data['cats_in_care'] ?? $data['CATS_IN_CARE'] ?? $data['in_care'] ?? $data['IN_CARE'] ?? 0);
+    $raw = $data['count'] ?? $data['COUNT'] ?? $data['cats_in_care'] ?? $data['CATS_IN_CARE'] ?? $data['in_care'] ?? $data['IN_CARE'] ?? null;
+    $count = plugin_suite_impact_count($raw);
   } else {
     return new WP_REST_Response(['error' => 'Unexpected Custom API response'], 500);
   }
@@ -935,7 +1070,9 @@ function plugin_custom_api_image(WP_REST_Request $req) {
 }
 
 function plugin_asm_get_reservations() {
-  $cache_key = 'plugin_asm_reservations_v3';
+  $settings = plugin_suite_settings();
+  if (empty($settings['global']['asm_reservation_report_enabled'])) return [];
+  $cache_key = 'plugin_asm_reservations_v4_' . plugin_asm_impact_cache_context();
   $cached = plugin_suite_cache_get($cache_key);
   if ($cached !== false) return $cached;
 
@@ -995,7 +1132,8 @@ add_action('rest_api_init', function () {
       if ($source === 'custom_api') return plugin_custom_api_adoptables();
       if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_adoptables($source);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
-      $cache_key = 'plugin_asm_adoptables_v7';
+      $settings = plugin_suite_settings();
+      $cache_key = 'plugin_asm_adoptables_v8_' . plugin_asm_impact_cache_context() . '_' . (int)!empty($settings['global']['asm_reservation_report_enabled']);
       $cached = plugin_suite_cache_get($cache_key);
       if ($cached !== false) return rest_ensure_response($cached);
 
@@ -1100,6 +1238,11 @@ add_action('rest_api_init', function () {
     'methods' => 'GET',
     'callback' => function(WP_REST_Request $req) {
       $source = plugin_suite_data_source();
+      $title = trim((string)$req->get_param('title'));
+      if ($source === 'asm' && plugin_suite_impact_mode() === 'built_in' && in_array($title, ['Summary By Year', 'Cats In Care Now'], true)) {
+        $data = plugin_asm_fallback_report($title, $req);
+        if ($data !== null) return rest_ensure_response($data);
+      }
       if ($source === 'custom_api') return plugin_custom_api_report($req);
       if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_report($source, $req);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
@@ -1111,7 +1254,7 @@ add_action('rest_api_init', function () {
         return new WP_REST_Response(['error' => 'Report not allowed'], 403);
       }
 
-      $cache_key = 'plugin_asm_report_' . md5($title);
+      $cache_key = 'plugin_asm_report_v2_' . md5($title . '|' . plugin_asm_impact_cache_context());
       $cached = plugin_suite_cache_get($cache_key);
       if ($cached !== false) return rest_ensure_response($cached);
 
@@ -1154,7 +1297,8 @@ add_action('rest_api_init', function () {
       if ($source === 'custom_api') return plugin_custom_api_incare();
       if (in_array($source, ['shelterluv','petpoint'], true)) return plugin_provider_incare($source);
       if ($source !== 'asm') return new WP_REST_Response(['error'=>'Unsupported data source'], 400);
-      $cache_key = 'plugin_asm_in_care_count_v1';
+      if (plugin_suite_impact_mode() === 'built_in') return rest_ensure_response(plugin_asm_builtin_incare());
+      $cache_key = 'plugin_asm_in_care_count_v2_' . plugin_asm_impact_cache_context();
       $cached = plugin_suite_cache_get($cache_key);
       if ($cached !== false) return rest_ensure_response($cached);
 
@@ -1178,7 +1322,7 @@ add_action('rest_api_init', function () {
         if (array_key_exists($k, $row)) { $raw = $row[$k]; break; }
       }
 
-      $count = is_numeric($raw) ? (int)$raw : 0;
+      $count = plugin_suite_impact_count($raw);
       $out = ['count' => $count];
       plugin_suite_cache_set($cache_key, $out, plugin_suite_cache_ttl('cache_incare_seconds', 60));
       return rest_ensure_response($out);

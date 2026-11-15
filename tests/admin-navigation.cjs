@@ -20,7 +20,7 @@ const adminUrl = base + '/wp-admin/admin.php';
     const menu = page.locator('#toplevel_page_plugin-ui-suite');
     assert.equal(await menu.count(),1,'Exactly one top-level suite menu');
     assert.equal(await page.locator('#menu-settings .wp-submenu a[href*="page=plugin-ui-suite"]').count(),0,'No duplicate Settings menu entry');
-    const sections=[['General','global','plugin-ui-suite'],['Integrations','data-source','plugin-ui-suite-integrations'],['Widgets','adoptables','plugin-ui-suite-widgets'],['Forms','forms','plugin-ui-suite-forms'],['Donations','payments','plugin-ui-suite-donations'],['Diagnostics','diagnostics','plugin-ui-suite-diagnostics'],['Updates','updates','plugin-ui-suite-updates'],['Help Centre','help','plugin-ui-suite-help']];
+    const sections=[['General','global','plugin-ui-suite'],['Integrations','data-source','plugin-ui-suite-integrations'],['Widgets','adoptables','plugin-ui-suite-widgets'],['Forms','forms','plugin-ui-suite-forms'],['Donations','payments','plugin-ui-suite-donations'],['Rescue Shop','shop','plugin-ui-suite-shop'],['Diagnostics','diagnostics','plugin-ui-suite-diagnostics'],['Updates','updates','plugin-ui-suite-updates'],['Help Centre','help','plugin-ui-suite-help']];
     for (const [label, tab, slug] of sections) {
       await menu.locator('.wp-submenu a').filter({hasText:new RegExp('^'+label+'$')}).click();
       await page.locator('.rps-admin').waitFor();
@@ -83,6 +83,6 @@ const adminUrl = base + '/wp-admin/admin.php';
     const denied=await subscriber.goto(adminUrl+'?page=plugin-ui-suite');
     assert.equal(denied.status(),403,'Subscriber cannot access suite settings directly');
     assert.deepEqual(errors,[],'No browser errors');
-    console.log('PASS top-level menu, 8 sidebar sections, asset loading, active section, legacy URLs, setup, settings/payment saves and subscriber access restrictions.');
+    console.log('PASS top-level menu, 9 sidebar sections, asset loading, active section, legacy URLs, setup, settings/payment saves and subscriber access restrictions.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

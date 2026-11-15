@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Statistics
  * Description: Adds the statistics UI via shortcode [stats] with settings.
- * Version: 15.1.2
+ * Version: 15.2.0
  * Author: Jordan Sutton | Webstax
  */
 
@@ -746,6 +746,7 @@ function plugin_stats_ui_field_labels_caps_icons() {
  */
 add_shortcode('stats', function () {
   $opts = plugin_stats_ui_get_options();
+  $layout_preset = Plugin_UI_Suite_Plugin::get_settings()['stats']['layout_preset'] ?? 'tiles';
 
   wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
   wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
@@ -813,7 +814,7 @@ add_shortcode('stats', function () {
 
   ob_start();
   ?>
-  <section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> class="plugin-stats-ui-wrap rps-widget" aria-labelledby="<?php echo esc_attr($instance); ?>_main_title" aria-describedby="<?php echo esc_attr($instance); ?>_description" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
+  <section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> <?php echo Plugin_UI_Suite_Plugin::widget_layout_attributes('stats'); ?> class="plugin-stats-ui-wrap rps-widget" aria-labelledby="<?php echo esc_attr($instance); ?>_main_title" aria-describedby="<?php echo esc_attr($instance); ?>_description" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
     <p class="rps-sr-only" id="<?php echo esc_attr($instance); ?>_description">Rescue impact statistics showing animal welfare outcomes for the selected year. Choose a year to update the totals. Each card gives a total and describes the outcome it measures.</p>
     <style>
       /* Scoped only */
@@ -874,9 +875,9 @@ add_shortcode('stats', function () {
 
       /* Settings-driven overrides */
       #<?php echo esc_attr($instance); ?> .counter-card {
-        border-radius: <?php echo (int) $opts['card_radius']; ?>px !important;
+        border-radius: <?php echo $layout_preset === 'band' ? 0 : (int) $opts['card_radius']; ?>px !important;
         border-style: solid !important;
-        border-width: <?php echo !empty($opts['card_border_enabled']) ? (int)$opts['card_border_weight'] : 0; ?>px !important;
+        border-width: <?php echo $layout_preset !== 'band' && !empty($opts['card_border_enabled']) ? (int)$opts['card_border_weight'] : 0; ?>px !important;
         border-color: <?php echo esc_attr(!empty($opts['card_border_enabled']) ? ($opts['card_border_color'] ?: $opts['brand_color']) : 'transparent'); ?> !important;
         padding: <?php echo (int) $opts['card_padding']; ?>px !important;
       }
@@ -928,7 +929,7 @@ add_shortcode('stats', function () {
       }
 
       /* One-row mode: preserve prior behaviour if selected */
-      <?php if (($opts['layout_mode'] ?? 'grid') === 'one_row'): ?>
+      <?php if ($layout_preset === 'compact'): ?>
       @media (min-width: 640px) {
         #<?php echo esc_attr($instance); ?> .counter-card { padding: 14px !important; }
         #<?php echo esc_attr($instance); ?> .icon-float { width: 44px !important; height: 44px !important; margin-bottom: 10px !important; }
@@ -1062,6 +1063,8 @@ add_shortcode('stats', function () {
         };
 
         const MIN_YEAR = <?php echo (int) $opts['min_year']; ?>;
+        const CURRENT_YEAR = <?php echo (int) wp_date('Y'); ?>;
+        const BUILT_IN_STATS = <?php echo wp_json_encode(!function_exists('plugin_suite_impact_mode') || plugin_suite_impact_mode() === 'built_in'); ?>;
         const YEAR_LABEL_PREFIX = <?php echo wp_json_encode($opts['year_label_prefix']); ?>;
 
         const ids = {
@@ -1171,28 +1174,36 @@ add_shortcode('stats', function () {
           el.style.color = isError ? "#b91c1c" : "#475569";
         }
 
+        function normalizeCount(value) {
+          if (!['number', 'string'].includes(typeof value) || String(value).trim() === '') return null;
+          const count = Number(value);
+          return Number.isSafeInteger(count) && count >= 0 ? count : null;
+        }
+
         function normalizeRow(r) {
           const yearRaw = r.year ?? r.YEAR ?? r.Year;
           const year = parseInt(yearRaw, 10);
+          const count = normalizeCount;
           return {
             year: Number.isFinite(year) ? year : NaN,
-            cats_brought_in: Number(r.cats_brought_in ?? r.CATS_BROUGHT_IN ?? 0),
-            cats_adopted: Number(r.cats_adopted ?? r.CATS_ADOPTED ?? 0),
-            cats_vaccinated: Number(r.cats_vaccinated ?? r.CATS_VACCINATED ?? 0),
-            cats_neutered: Number(r.cats_neutered ?? r.CATS_NEUTERED ?? 0),
-            cats_chipped: Number(r.cats_chipped ?? r.CATS_CHIPPED ?? 0),
+            cats_brought_in: count(r.cats_brought_in ?? r.CATS_BROUGHT_IN),
+            cats_adopted: count(r.cats_adopted ?? r.CATS_ADOPTED ?? r.ADOPTIONS ?? r.Adoptions),
+            cats_vaccinated: count(r.cats_vaccinated ?? r.CATS_VACCINATED),
+            cats_neutered: count(r.cats_neutered ?? r.CATS_NEUTERED),
+            cats_chipped: count(r.cats_chipped ?? r.CATS_CHIPPED),
+            note: typeof r.note === 'string' ? r.note : '',
           };
         }
 
-        function buildProxyReportUrl() {
-          return `${PROXY.baseUrl}/report?title=${encodeURIComponent(PROXY.reportTitle)}`;
+        function buildProxyReportUrl(year) {
+          return `${PROXY.baseUrl}/report?title=${encodeURIComponent(PROXY.reportTitle)}${year ? `&year=${year}` : ''}`;
         }
 
-        async function fetchReportRowsViaProxy() {
-          const url = buildProxyReportUrl();
+        async function fetchReportRowsViaProxy(year) {
+          const url = buildProxyReportUrl(year);
           const res = await fetch(url, { method: "GET", credentials: "same-origin" });
           const text = await res.text();
-          if (!res.ok) throw new Error(`Proxy request failed (${res.status}): ${text}`.trim());
+          if (!res.ok) throw new Error(`Statistics request failed (${res.status}).`);
           const data = JSON.parse(text);
           if (!Array.isArray(data)) throw new Error("Proxy did not return an array.");
           return data.map(normalizeRow).filter(r => Number.isInteger(r.year));
@@ -1202,10 +1213,9 @@ add_shortcode('stats', function () {
           const url = `${PROXY.baseUrl}/in-care-count`;
           const res = await fetch(url, { method: "GET", credentials: "same-origin" });
           const text = await res.text();
-          if (!res.ok) throw new Error(`In-care failed (${res.status}): ${text}`.trim());
+          if (!res.ok) throw new Error(`In-care request failed (${res.status}).`);
           const data = JSON.parse(text);
-          const n = Number(data?.count);
-          return Number.isFinite(n) ? n : 0;
+          return normalizeCount(data?.count);
         }
 
         let rows = [];
@@ -1215,11 +1225,12 @@ add_shortcode('stats', function () {
           const select = byId(ids.yearSelect);
           if (!select) return;
 
-          const years = [...new Set(rows.map(r => r.year).filter(y => y >= MIN_YEAR))].sort((a,b)=>b-a);
+          const firstYear = Math.max(2000, Math.min(CURRENT_YEAR, MIN_YEAR));
+          const years = BUILT_IN_STATS ? Array.from({length: CURRENT_YEAR - firstYear + 1}, (_, i) => CURRENT_YEAR - i) : [...new Set(rows.map(r => r.year).filter(y => y >= MIN_YEAR))].sort((a,b)=>b-a);
           select.innerHTML = "";
 
           if (!years.length) {
-            showStatus(`No years ≥ ${MIN_YEAR} found in report.`, true);
+            showStatus(`No statistics were supplied for years from ${MIN_YEAR}.`, true);
             return;
           }
 
@@ -1237,12 +1248,34 @@ add_shortcode('stats', function () {
 
         function setText(id, v) {
           const el = byId(id);
-          if (el) el.textContent = v;
+          if (el) el.textContent = v === null || v === undefined ? '—' : v;
         }
 
         async function renderYear(year) {
-          const row = rows.find(r => r.year === year);
-          if (!row) return;
+          const myToken = ++renderToken;
+          let row = rows.find(r => r.year === year);
+          if (!row && BUILT_IN_STATS) {
+            showStatus('Loading statistics…');
+            Object.values(ids.count).forEach(id => setText(id, null));
+            const inCare = byId(ids.inCareCard);
+            if (inCare) inCare.classList.toggle('hidden', year !== CURRENT_YEAR);
+            try {
+              const loaded = await fetchReportRowsViaProxy(year);
+              rows.push(...loaded.filter(item => !rows.some(existing => existing.year === item.year)));
+              if (myToken !== renderToken) return;
+              row = rows.find(item => item.year === year);
+            } catch (error) {
+              if (myToken === renderToken) showStatus('Statistics could not be loaded. Please try again later.', true);
+              return;
+            }
+          }
+          if (myToken !== renderToken) return;
+          if (!row) {
+            showStatus('No statistics were supplied for this year. A dash means data was not supplied, not zero.');
+            return;
+          }
+          const missing = ['cats_brought_in','cats_adopted','cats_vaccinated','cats_neutered','cats_chipped'].some(key => row[key] === null);
+          showStatus([row.note, missing ? 'A dash means data was not supplied, not zero.' : ''].filter(Boolean).join(' '));
 
           const labelEl = byId(ids.yearLabel);
           if (labelEl) labelEl.textContent = `${YEAR_LABEL_PREFIX} ${row.year}`;
@@ -1257,9 +1290,7 @@ add_shortcode('stats', function () {
           const valueEl = byId(ids.count.in_care);
           if (!card || !valueEl) return;
 
-          const latestYearInReport = Math.max(...rows.map(r => r.year));
-
-          if (year !== latestYearInReport) {
+          if (year !== CURRENT_YEAR) {
             card.classList.add('hidden');
             updateGridLayout();
             syncIconFloat();
@@ -1270,17 +1301,17 @@ add_shortcode('stats', function () {
           updateGridLayout();
           syncIconFloat();
 
-          const myToken = ++renderToken;
           valueEl.textContent = "…";
 
           try {
             const n = await fetchInCareCount();
             if (myToken !== renderToken) return;
-            valueEl.textContent = n;
+            setText(ids.count.in_care, n);
+            if (n === null) showStatus([row.note, 'A dash means data was not supplied, not zero.'].filter(Boolean).join(' '));
           } catch (e) {
-            console.error(e);
             if (myToken !== renderToken) return;
             valueEl.textContent = "—";
+            showStatus([row.note, 'The current in-care total is unavailable. A dash means data was not supplied, not zero.'].filter(Boolean).join(' '));
           } finally {
             updateGridLayout();
             syncIconFloat();
@@ -1289,9 +1320,10 @@ add_shortcode('stats', function () {
 
         async function init() {
           showStatus("Loading stats…");
+          // Make the loading status visible while the selected year's data is fetched.
+          root.classList.add('plugin-ready');
           try {
-            rows = await fetchReportRowsViaProxy();
-            showStatus("");
+            if (!BUILT_IN_STATS) rows = await fetchReportRowsViaProxy();
 
             window.addEventListener('resize', () => { updateGridLayout(); syncIconFloat(); }, { passive: true });
 
@@ -1304,8 +1336,7 @@ add_shortcode('stats', function () {
               requestAnimationFrame(() => root.classList.add('plugin-ready'));
             });
           } catch (err) {
-            console.error(err);
-            showStatus(`Could not load stats. ${err.message || ""}`.trim(), true);
+            showStatus('Statistics could not be loaded. Please try again later.', true);
             // Still reveal so user can see error message
             root.classList.add('plugin-ready');
           }

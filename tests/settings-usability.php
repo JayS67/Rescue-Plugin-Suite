@@ -15,6 +15,7 @@ $panels = [
   'featured'=>['dashboard','appearance','filters','embed','analytics','help'],
   'quiz'=>['settings','questions','preview'],
   'forms'=>[''],
+  'shop'=>['shop','payments','email'],
 ];
 $no_op_names = ['suite[featured][layout_order]', 'suite[quiz][age_categories]', 'suite[quiz][question_order]', 'suite[quiz][answer_mappings]', 'suite[forms][layout_order]', 'suite[forms][platform_support_notes]', 'suite[global][supported_species]', 'suite[global][enabled_species]', 'suite[adopted][builder_card_order]', 'suite[adopted][builder_modal_order]', 'suite[stats][rows_mobile]', 'suite[stats][rows_tablet]', 'suite[stats][rows_desktop]', 'suite[proxy][api_key]'];
 $panel_count = 0; $control_count = 0;
@@ -22,6 +23,7 @@ $previous = libxml_use_internal_errors(true);
 try {
   foreach ($panels as $tab=>$subtabs) foreach ($subtabs as $subtab) {
     $_GET = ['page'=>'plugin-ui-suite','tab'=>$tab,'subtab'=>$subtab];
+    if ($tab === 'shop') $_GET += ['shop_section'=>'settings','shop_tab'=>$subtab];
     ob_start(); Plugin_UI_Suite_Plugin::render_settings_page(); $html = ob_get_clean();
     $check(strpos($html, 'rps-settings-content') !== false, "$tab/$subtab did not render settings");
     foreach ($no_op_names as $name) $check(strpos($html, 'name="' . $name . '"') === false, "$tab/$subtab still exposes unused $name");

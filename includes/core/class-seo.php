@@ -111,6 +111,18 @@ final class Plugin_UI_Suite_SEO {
     return self::pick($a, ['ANIMALCOMMENTS','WEBSITEMEDIANOTES','DESCRIPTION','ANIMALDESCRIPTION','AnimalComments','WebsiteMediaNotes'], '');
   }
 
+  /** Keep summaries plain, nonempty and bounded; full animal stories remain visible. */
+  private static function description_summary($value, $fallback, $limit = 500) {
+    $plain = wp_strip_all_tags(html_entity_decode((string)$value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    $plain = trim((string)preg_replace('/[\p{Z}\s]+/u', ' ', $plain));
+    if ($plain === '') $plain = $fallback;
+    // A Unicode-aware match avoids splitting a UTF-8 character without requiring mbstring.
+    if (preg_match('/^.{0,' . ((int)$limit - 1) . '}/us', $plain, $match) && strlen($match[0]) < strlen($plain)) {
+      return rtrim($match[0]) . '…';
+    }
+    return $plain;
+  }
+
   private static function image_url($a, $seq = 1) {
     $id = self::animal_id($a);
     return $id ? add_query_arg(['animalid'=>$id, 'seq'=>(int)$seq], rest_url('plugin/v1/animal-image')) : '';
@@ -277,8 +289,8 @@ final class Plugin_UI_Suite_SEO {
     $name = self::animal_name($a);
     $breed = self::pick($a, ['BREEDNAME','BreedName','BREEDNAME1','BreedName1'], 'cat');
     $desc = self::description($a);
-    if ($desc === '') $desc = !empty($profile['adopted']) ? "Read {$name}'s adoption success story." : "Meet {$name}, a {$breed} currently available for adoption.";
-    return wp_trim_words(wp_strip_all_tags($desc), 32, '…');
+    $fallback = !empty($profile['adopted']) ? "Read {$name}'s adoption success story." : "Meet {$name}, a {$breed} currently available for adoption.";
+    return self::description_summary($desc, $fallback, 160);
   }
 
   private static function preview_url($profile) {
@@ -364,7 +376,7 @@ final class Plugin_UI_Suite_SEO {
     $schema = [
       '@context'=>'https://schema.org', '@type'=>'Article',
       'headline'=>$adopted ? $name . ' adoption success story' : $name . ' available for adoption',
-      'description'=>wp_strip_all_tags($desc ?: ($adopted ? 'An adoption success story.' : 'A cat available for adoption.')),
+      'description'=>self::description_summary($desc, $adopted ? 'An adoption success story.' : 'A cat available for adoption.'),
       'mainEntityOfPage'=>$canonical,
       'image'=>$image ? [$image] : [],
       'about'=>[

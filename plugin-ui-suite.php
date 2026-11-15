@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Rescue Plugin Suite
- * Description: Unified commercial plugin suite for adoptables, adopted animals, statistics and forms, with shared settings, previews, proxy integration, setup wizard, diagnostics and snapshots.
- * Version: 15.1.2
+ * Description: Unified commercial plugin suite for adoptables, adopted animals, statistics, forms and Rescue Shop, with shared settings, previews, proxy integration, setup wizard, diagnostics and snapshots.
+ * Version: 15.2.0
  * Author: Jordan Sutton | Webstax
  */
 
@@ -32,3 +32,5 @@ Plugin_UI_Suite_Plugin::init();
 Plugin_UI_Suite_SEO::init();
 Plugin_UI_Suite_Updater::init();
 register_activation_hook(__FILE__, ['Plugin_UI_Suite_Plugin', 'activate']);
+
+register_deactivation_hook(__FILE__, ['Plugin_UI_Suite_Plugin', 'deactivate']);

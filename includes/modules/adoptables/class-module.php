@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adoptables
  * Description: Provides [adoptables] shortcode for the adoptable/adopted widget with scoped styling and settings.
- * Version: 15.1.2
+ * Version: 15.2.0
  * Author: Jordan Sutton | Webstax
  */
 
@@ -1143,9 +1143,6 @@ final class Plugin_Adoptables_UI_Shortcode {
   @media (min-width: 1024px){ #asm-adoptables-widget .asm-ad-card{ max-width: calc(100% * var(--asm-scale-d, 1)); } }
 
 
-  #asm-modal .asm-modal-animal-nav{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:14px;pointer-events:auto;width:100%;}
-  #asm-modal .asm-modal-nav{position:static;transform:none;z-index:2147483648;pointer-events:auto;min-width:160px;}
-
   #asm-modal .asm-modal-divider{
     height: var(--asm-divider-thickness, 2px);
     background: var(--asm-divider-color, var(--asm-brand));
@@ -1161,10 +1158,10 @@ final class Plugin_Adoptables_UI_Shortcode {
   #asm-adoptables-widget .asm-fav-top-right{right:8px;top:8px;left:auto;bottom:auto;}
   #asm-adoptables-widget .asm-fav-bottom-left{left:8px;bottom:8px;right:auto;top:auto;}
   #asm-adoptables-widget .asm-fav-bottom-right{right:8px;bottom:8px;left:auto;top:auto;}
-  #asm-modal .asm-modal-animal-nav .asm-modal-nav[disabled]{opacity:.45;cursor:not-allowed;}
+  #asm-modal .rps-modal-animal-nav .asm-modal-nav[disabled]{opacity:.45;cursor:not-allowed;}
 </style>
 
-<div <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> id="asm-adoptables-widget"
+<div <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> <?php echo Plugin_UI_Suite_Plugin::widget_layout_attributes('adoptables'); ?> id="asm-adoptables-widget"
      class="rps-widget min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-xl"
      data-asm-renderer-version="<?php echo esc_attr(PLUGIN_SUITE_VERSION); ?>"
      data-asm-rest-url="<?php echo esc_url(rest_url('plugin/v1/adoptables')); ?>"
@@ -1210,6 +1207,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       <p id="asm-adoptables-status" class="mt-3 text-sm font-medium" role="status" aria-live="polite" style="color:#475569; display:none;"></p>
     </div>
 
+    <?php Plugin_UI_Suite_Plugin::render_widget_view_switch('adoptables'); ?>
     <?php if (!empty($o['show_top_navigation']) || !empty($o['enable_filters'])) : ?>
     <div class="rps-widget-toolbar flex items-center justify-between gap-3 mb-5">
       <?php if (!empty($o['show_top_navigation'])) : ?>
@@ -1514,9 +1512,7 @@ final class Plugin_Adoptables_UI_Shortcode {
           </div>
         </div>
 
-      </div>
-
-      <div class="asm-modal-animal-nav">
+      <nav id="asm-modal-animal-nav" class="rps-modal-animal-nav" aria-label="Browse adoptable animals">
         <button id="asm-modal-prev-animal" class="asm-modal-nav inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white/95 shadow-md hover:shadow-lg hidden" style="border-color:var(--asm-brand);" type="button" aria-label="Previous animal">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--asm-brand)" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           <span class="text-sm font-semibold" style="color:var(--asm-brand);">Previous animal</span>
@@ -1525,6 +1521,7 @@ final class Plugin_Adoptables_UI_Shortcode {
           <span class="text-sm font-semibold" style="color:var(--asm-brand);">Next animal</span>
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="var(--asm-brand)" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
         </button>
+      </nav>
       </div>
     </div>
   </div>
@@ -1624,7 +1621,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       animal_id: String(getCatId(a) || ''),
       animal_name: safeText(a.ANIMALNAME ?? a.AnimalName ?? a.name ?? ''),
       animal_code: safeText(a.CODE ?? a.SHELTERCODE ?? a.ShelterCode ?? ''),
-      modal_url: modalLink(a)
+      modal_url: modalUrl(a)
     };
   }
 
@@ -2136,18 +2133,19 @@ final class Plugin_Adoptables_UI_Shortcode {
     const reservation = getReservationInfo(a);
     const badgePos = reservationBadgePositionClasses();
     const isFav = isFavourite(id);
-    const displayClass = ASM_WIDGET.displayStyle === "list" ? "sm:flex sm:items-stretch" : "";
+    const displayClass = "";
     const safeName = escHtml(name);
     const safeAge = escHtml(age);
     const safeSex = escHtml(sex);
     const safeBreed = escHtml(breed);
+    const excerpt = escHtml(String(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? '').replace(/<[^>]*>/g, '').split(/\s+/).slice(0, 34).join(' '));
     const safeId = escAttr(id);
     const safeNameAttr = escAttr(name);
     const safeImgUrl = escAttr(cardImgUrl);
     const bits = {
       image: `<div class="rps-card-media relative"><div class="asm-ad-imgwrap bg-gray-100 aspect-square w-full"><img src="${safeImgUrl}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" /></div></div>`,
       reservation_badge: reservation.show ? `<div class="absolute ${badgePos} px-2 py-1 rounded-full font-extrabold text-white shadow text-[10px] sm:text-sm lg:text-base" style="background:${ASM_WIDGET.brandColor}; max-width: calc(100% - 1rem);">${escHtml(reservation.label)}</div>` : ``,
-      name_meta: `<div class="rps-card-details asm-ad-card-pad"><h3 class="rps-card-name">${safeName}</h3><p class="rps-card-meta">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</p></div>`,
+      name_meta: `<div class="rps-card-details asm-ad-card-pad"><h3 class="rps-card-name">${safeName}</h3><p class="rps-card-meta">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</p><p class="rps-card-excerpt">${excerpt}</p></div>`,
       breed_line: `<div class="rps-card-footer asm-ad-card-pad"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Meet me <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></div>`,
       favourite_button: ASM_WIDGET.enableFavourites && ASM_WIDGET.favouriteButtonPosition !== 'hidden' ? `<button type="button" class="asm-fav-toggle absolute z-20 inline-flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-full border-2 bg-white/95 shadow asm-fav-${escAttr(ASM_WIDGET.favouriteButtonPosition.replace('_','-'))}" style="border-color:${ASM_WIDGET.brandColor}; color:${ASM_WIDGET.brandColor};" data-favid="${safeId}" aria-pressed="${isFav ? 'true' : 'false'}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}: ${safeNameAttr}">${favouriteIconSvg(isFav, "w-3.5 h-3.5 sm:w-5 sm:h-5")}</button>` : ``
     };
@@ -2281,6 +2279,8 @@ final class Plugin_Adoptables_UI_Shortcode {
     const total = Array.isArray(filteredCats) && filteredCats.length ? filteredCats.length : (Array.isArray(allCats) ? allCats.length : 0);
     const hasPrev = currentModalIndex > 0;
     const hasNext = currentModalIndex >= 0 && currentModalIndex < total - 1;
+    const navigation = qs("asm-modal-animal-nav");
+    if (navigation) navigation.hidden = total <= 1;
     prevBtn.classList.toggle("hidden", !hasPrev);
     nextBtn.classList.toggle("hidden", !hasNext);
     prevBtn.disabled = !hasPrev;
@@ -2664,7 +2664,7 @@ final class Plugin_Adoptables_UI_Shortcode {
       if (infoCol) infoCol.classList.remove("hidden");
       if (descCol) descCol.classList.remove("hidden");
       if (formCol) formCol.classList.add("hidden");
-      if (applyToggle) applyToggle.classList.remove("hidden");
+      if (applyToggle) applyToggle.classList.toggle("hidden", !ASM_WIDGET.applyFormEnabled);
       if (applyBackTop) applyBackTop.classList.add("hidden");
       restoreMovedApplyForm();
       if (scrollEl) {
