@@ -7,7 +7,7 @@ const keys = ['widget_transparent_background','widget_show_titles','widget_show_
   assert(process.env.RPS_ADMIN_USER && process.env.RPS_ADMIN_PASSWORD, 'Supply fixture admin credentials');
   const browser = await chromium.launch({ headless: true, ...(process.env.RPS_CHROMIUM ? { executablePath: process.env.RPS_CHROMIUM } : {}) });
   const page = await browser.newPage({ viewport: { width: 1200, height: 950 }, reducedMotion: 'reduce' });
-  const url = base + '/wp-admin/options-general.php?page=plugin-ui-suite&tab=global';
+  const url = base + '/wp-admin/admin.php?page=plugin-ui-suite&tab=global';
   let original;
   async function setFlags(values) {
     await page.goto(url);

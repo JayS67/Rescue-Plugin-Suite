@@ -19,7 +19,11 @@ final class Plugin_UI_Suite_Plugin {
     add_action('admin_init', [__CLASS__, 'redirect_legacy_admin_urls'], 6);
     add_action('admin_init', [__CLASS__, 'maybe_redirect_to_setup_wizard'], 20);
     add_action('admin_notices', [__CLASS__, 'render_admin_notices']);
+    // Redirect legacy/alias routes before WordPress checks the old menu parent.
+    add_action('admin_menu', [__CLASS__, 'redirect_legacy_admin_urls'], 1);
     add_action('admin_menu', [__CLASS__, 'admin_menu'], 20);
+    add_filter('parent_file', [__CLASS__, 'admin_parent_file']);
+    add_filter('submenu_file', [__CLASS__, 'admin_submenu_file']);
     add_action('admin_menu', [__CLASS__, 'remove_legacy_admin_pages'], 999);
     add_filter('plugin_action_links', [__CLASS__, 'plugin_action_links'], 10, 2);
     add_filter('plugin_row_meta', [__CLASS__, 'plugin_row_meta'], 10, 2);
@@ -75,7 +79,7 @@ final class Plugin_UI_Suite_Plugin {
   private static function admin_page_url($tab = 'global') {
     $args = ['page' => 'plugin-ui-suite'];
     if ($tab !== '') $args['tab'] = $tab;
-    return add_query_arg($args, admin_url('options-general.php'));
+    return add_query_arg($args, admin_url('admin.php'));
   }
 
   private static function help_centre_url() {
@@ -103,33 +107,44 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function redirect_legacy_admin_urls() {
-    if (empty($_GET['page'])) return;
+    if (!current_user_can('manage_options') || empty($_GET['page'])) return;
     $page = sanitize_key(wp_unslash($_GET['page']));
-    if ($page === 'plugin-ui-suite-updates') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates'], admin_url('options-general.php'))); exit;
+    foreach (self::sidebar_sections() as $tab => $section) {
+      if ($section['slug'] !== 'plugin-ui-suite' && $page === $section['slug']) {
+        $args = wp_unslash($_GET); $args['page'] = 'plugin-ui-suite'; $args['tab'] = $tab;
+        wp_safe_redirect(add_query_arg($args, admin_url('admin.php'))); exit;
+      }
+    }
+    if (($GLOBALS['pagenow'] ?? '') === 'options-general.php' && in_array($page, ['plugin-ui-suite','plugin-ui-suite-setup'], true)) {
+      wp_safe_redirect(add_query_arg(wp_unslash($_GET), admin_url('admin.php'))); exit;
+    }
+    $legacy_modules = ['plugin-adoptables-ui'=>'adoptables','plugin-adopted-ui'=>'adopted','plugin-stats-ui'=>'stats'];
+    if (isset($legacy_modules[$page])) {
+      $args = wp_unslash($_GET); $args['page'] = 'plugin-ui-suite'; $args['tab'] = $legacy_modules[$page];
+      wp_safe_redirect(add_query_arg($args, admin_url('admin.php'))); exit;
     }
     if (strpos($page, 'plugin-ui-suite-payments-') === 0) {
       $section = substr($page, strlen('plugin-ui-suite-payments-'));
       if ($section === 'providers') {
-        wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('options-general.php'))); exit;
+        wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('admin.php'))); exit;
       }
       $allowed = ['dashboard','general','widget','campaigns','gift-aid','fees','appearance','transactions','reports','diagnostics','help'];
       if (!in_array($section, $allowed, true)) $section = 'dashboard';
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$section], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$section], admin_url('admin.php'))); exit;
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'payments' && !empty($_GET['payments_section']) && sanitize_key(wp_unslash($_GET['payments_section'])) === 'providers') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('admin.php'))); exit;
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'data-source' && !empty($_GET['subtab'])) {
       $legacy_subtab = sanitize_key(wp_unslash($_GET['subtab']));
       $map = ['provider'=>'asm','endpoints'=>'custom-api','authentication'=>'custom-api','field-mapping'=>'custom-api','cache'=>'asm','connection-test'=>'asm'];
-      if (isset($map[$legacy_subtab])) { wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>$map[$legacy_subtab]], admin_url('options-general.php'))); exit; }
+      if (isset($map[$legacy_subtab])) { wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>$map[$legacy_subtab]], admin_url('admin.php'))); exit; }
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'widgets') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'featured','plugin_msg'=>'Widgets has been retired. Featured Animal is now its own module.'], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'featured','plugin_msg'=>'Widgets has been retired. Featured Animal is now its own module.'], admin_url('admin.php'))); exit;
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'layout') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'adoptables','subtab'=>'layout'], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'adoptables','subtab'=>'layout'], admin_url('admin.php'))); exit;
     }
   }
 
@@ -196,7 +211,7 @@ final class Plugin_UI_Suite_Plugin {
     ] as $i=>$description) Plugin_UI_Suite_Registry::register('setup_steps', $i, ['module'=>'global','title'=>ucwords(str_replace('-',' ', $i)),'description'=>$description,'order'=>count(Plugin_UI_Suite_Registry::all('setup_steps'))+1]);
     foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','featured'=>'Featured Animal','stats'=>'Statistics','payments'=>'Donations','quiz'=>'Match Quiz','forms'=>'Forms','diagnostics'=>'Diagnostics','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
     if (Plugin_UI_Suite_Registry::developer_mode_enabled()) foreach (['proxy'=>'Developer Tools','registry'=>'Registry'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>'global','order'=>90 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
-    Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'order'=>10]);
+    Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'top_level'=>true,'icon'=>'dashicons-heart','position'=>58,'order'=>10]);
   }
 
   private static function include_modules() {
@@ -609,7 +624,7 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function enqueue_admin_assets($hook) {
-    if ($hook !== 'settings_page_plugin-ui-suite') return;
+    if (!in_array($hook, ['toplevel_page_plugin-ui-suite','settings_page_plugin-ui-suite','admin_page_plugin-ui-suite-setup'], true)) return;
     wp_enqueue_style('plugin-suite-admin', PLUGIN_SUITE_URL . 'assets/css/admin.css', [], PLUGIN_SUITE_VERSION);
     wp_enqueue_script('plugin-suite-admin-help', PLUGIN_SUITE_URL . 'assets/js/admin-help.js', [], PLUGIN_SUITE_VERSION, true);
     wp_enqueue_script('plugin-suite-admin-sortable', PLUGIN_SUITE_URL . 'assets/js/admin-sortable.js', [], PLUGIN_SUITE_VERSION, true);
@@ -881,11 +896,45 @@ final class Plugin_UI_Suite_Plugin {
     }
   }
 
+  public static function sidebar_sections() {
+    return [
+      'global'=>['label'=>'General', 'slug'=>'plugin-ui-suite', 'tabs'=>['global']],
+      'data-source'=>['label'=>'Integrations', 'slug'=>'plugin-ui-suite-integrations', 'tabs'=>['data-source']],
+      'adoptables'=>['label'=>'Widgets', 'slug'=>'plugin-ui-suite-widgets', 'tabs'=>['adoptables','adopted','featured','stats','quiz']],
+      'forms'=>['label'=>'Forms', 'slug'=>'plugin-ui-suite-forms', 'tabs'=>['forms']],
+      'payments'=>['label'=>'Donations', 'slug'=>'plugin-ui-suite-donations', 'tabs'=>['payments']],
+      'diagnostics'=>['label'=>'Diagnostics', 'slug'=>'plugin-ui-suite-diagnostics', 'tabs'=>['diagnostics','proxy','registry']],
+      'updates'=>['label'=>'Updates', 'slug'=>'plugin-ui-suite-updates', 'tabs'=>['updates']],
+      'help'=>['label'=>'Help Centre', 'slug'=>'plugin-ui-suite-help', 'tabs'=>['help']],
+    ];
+  }
+
   public static function admin_menu() {
     if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::add_admin_menus();
-    else add_options_page('Rescue Plugin Suite','Rescue Plugin Suite','manage_options','plugin-ui-suite',[__CLASS__,'render_settings_page']);
+    else add_menu_page('Rescue Plugin Suite','Rescue Plugin Suite','manage_options','plugin-ui-suite',[__CLASS__,'render_settings_page'],'dashicons-heart',58);
+    foreach (self::sidebar_sections() as $section) {
+      add_submenu_page('plugin-ui-suite', 'Rescue Plugin Suite · ' . $section['label'], $section['label'], 'manage_options', $section['slug'], [__CLASS__, 'render_settings_page']);
+    }
     add_submenu_page(null,'Rescue Plugin Suite Setup','Rescue Plugin Suite Setup','manage_options','plugin-ui-suite-setup',[__CLASS__,'render_setup_wizard']);
-      }
+  }
+
+  private static function is_suite_admin_page() {
+    $page = sanitize_key(wp_unslash($_GET['page'] ?? ''));
+    if (in_array($page, ['plugin-ui-suite','plugin-ui-suite-setup'], true)) return true;
+    foreach (self::sidebar_sections() as $section) if ($page === $section['slug']) return true;
+    return false;
+  }
+
+  public static function admin_parent_file($parent) {
+    return self::is_suite_admin_page() ? 'plugin-ui-suite' : $parent;
+  }
+
+  public static function admin_submenu_file($submenu) {
+    if (!self::is_suite_admin_page()) return $submenu;
+    $tab = sanitize_key(wp_unslash($_GET['tab'] ?? 'global'));
+    foreach (self::sidebar_sections() as $section) if (in_array($tab, $section['tabs'], true)) return $section['slug'];
+    return 'plugin-ui-suite';
+  }
 
   public static function remove_legacy_admin_pages() {
     remove_submenu_page('options-general.php', 'plugin-adoptables-ui');
@@ -1180,7 +1229,7 @@ final class Plugin_UI_Suite_Plugin {
 
     self::create_snapshot('save');
     update_option(self::OPT_KEY, $clean, false);
-    $args=['page'=>'plugin-ui-suite','tab'=>$active_tab,'updated'=>'true']; if($active_subtab!=='') $args['subtab']=$active_subtab; wp_safe_redirect(add_query_arg($args, admin_url('options-general.php')));
+    $args=['page'=>'plugin-ui-suite','tab'=>$active_tab,'updated'=>'true']; if($active_subtab!=='') $args['subtab']=$active_subtab; wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
     exit;
   }
 
@@ -1189,7 +1238,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) wp_die('Not allowed');
     check_admin_referer('plugin_ui_suite_save_current_defaults');
     update_option(self::USER_DEFAULTS_KEY, self::get_settings(), false);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','saved_defaults'=>'1'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','saved_defaults'=>'1'], admin_url('admin.php')));
     exit;
   }
 
@@ -1200,7 +1249,7 @@ final class Plugin_UI_Suite_Plugin {
     $defaults = self::default_settings();
     update_option(self::OPT_KEY, $defaults, false);
     self::sync_legacy_options($defaults);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'defaults-reset'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'defaults-reset'], admin_url('admin.php')));
     exit;
   }
 
@@ -1228,11 +1277,11 @@ final class Plugin_UI_Suite_Plugin {
   public static function handle_registry_import() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_registry_import');
-    if (empty($_FILES['import_file']['tmp_name'])) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'No import file selected'], admin_url('options-general.php')));
+    if (empty($_FILES['import_file']['tmp_name'])) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'No import file selected'], admin_url('admin.php')));
     $json = file_get_contents($_FILES['import_file']['tmp_name']); $payload = json_decode($json, true);
-    if (!is_array($payload) || !is_array($payload['settings'] ?? null)) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'Registry import was not valid JSON'], admin_url('options-general.php')));
+    if (!is_array($payload) || !is_array($payload['settings'] ?? null)) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'Registry import was not valid JSON'], admin_url('admin.php')));
     $current = self::get_settings(); $merged = self::merge_with_defaults($current, $payload['settings']); update_option(self::OPT_KEY, $merged, false); self::sync_legacy_options($merged);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'imported','plugin_msg'=>'Registry settings imported'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'imported','plugin_msg'=>'Registry settings imported'], admin_url('admin.php'))); exit;
   }
 
   public static function handle_registry_reset() {
@@ -1240,7 +1289,7 @@ final class Plugin_UI_Suite_Plugin {
     check_admin_referer('plugin_ui_suite_registry_reset');
     $module = sanitize_key($_POST['module'] ?? ''); $settings = self::get_settings(); $defaults = self::default_settings();
     if ($module && isset($defaults[$module])) { $settings[$module] = $defaults[$module]; update_option(self::OPT_KEY, $settings, false); self::sync_legacy_options($settings); }
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'reset','plugin_msg'=>'Registry module settings reset'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'reset','plugin_msg'=>'Registry module settings reset'], admin_url('admin.php'))); exit;
   }
 
   public static function handle_export() {
@@ -1290,7 +1339,7 @@ final class Plugin_UI_Suite_Plugin {
       if (isset($data['legacy']['stats']) && is_array($data['legacy']['stats'])) update_option('plugin_stats_ui_options', $data['legacy']['stats']);
     }
     self::sync_legacy_options(self::get_settings());
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'imported'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'imported'], admin_url('admin.php')));
     exit;
   }
 
@@ -1505,7 +1554,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!array_key_exists($current, $items)) $current = array_key_first($items);
     echo '<nav class="plugin-suite-subnav" aria-label="'.esc_attr(ucwords(str_replace('-', ' ', $tab)).' settings sections').'">';
     foreach ($items as $key => $label) {
-      $url = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$tab,'subtab'=>$key], admin_url('options-general.php'));
+      $url = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$tab,'subtab'=>$key], admin_url('admin.php'));
       printf('<a class="%s" href="%s" %s>%s</a>', $current === $key ? 'active' : '', esc_url($url), $current === $key ? 'aria-current="page"' : '', esc_html($label));
     }
     echo '</nav>';
@@ -1822,10 +1871,10 @@ final class Plugin_UI_Suite_Plugin {
       if (!empty($snapshot['legacy']['adopted'])) update_option('plugin_adopted_ui_options', $snapshot['legacy']['adopted']);
       if (!empty($snapshot['legacy']['stats'])) update_option('plugin_stats_ui_options', $snapshot['legacy']['stats']);
       self::record_version_event('snapshot_restore');
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot restored'], admin_url('options-general.php')));
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot restored'], admin_url('admin.php')));
       exit;
     }
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','plugin_msg'=>'Snapshot not found'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','plugin_msg'=>'Snapshot not found'], admin_url('admin.php')));
     exit;
   }
 
@@ -1835,7 +1884,7 @@ final class Plugin_UI_Suite_Plugin {
     $id = sanitize_text_field($_POST['snapshot_id'] ?? '');
     $snapshots = array_values(array_filter(self::get_snapshots(), function($snapshot) use ($id){ return ($snapshot['id'] ?? '') !== $id; }));
     update_option(self::SNAP_KEY, $snapshots, false);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot deleted'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot deleted'], admin_url('admin.php')));
     exit;
   }
 
@@ -1870,7 +1919,7 @@ final class Plugin_UI_Suite_Plugin {
     }
     update_option(self::OPT_KEY, $settings, false);
     self::sync_legacy_options($settings);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>ucfirst($module).' imported'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>ucfirst($module).' imported'], admin_url('admin.php')));
     exit;
   }
 
@@ -1885,7 +1934,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!is_array($packs)) $packs = [];
     $packs[sanitize_title($name)] = ['name'=>$name,'created'=>current_time('mysql'),'suite'=>self::exportable_settings(self::get_settings())];
     update_option('plugin_ui_suite_setting_packs', $packs, false);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack saved'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack saved'], admin_url('admin.php'))); exit;
   }
   public static function handle_load_pack() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
@@ -1899,7 +1948,7 @@ final class Plugin_UI_Suite_Plugin {
     if (isset($existing['proxy']) && is_array($existing['proxy'])) foreach (['account','username','password'] as $secret_key) if (empty($merged['proxy'][$secret_key]) && !empty($existing['proxy'][$secret_key])) $merged['proxy'][$secret_key] = $existing['proxy'][$secret_key];
     if (isset($existing['global']) && is_array($existing['global'])) foreach (['custom_api_key','shelterluv_api_key','petpoint_username','petpoint_password'] as $secret_key) if (empty($merged['global'][$secret_key]) && !empty($existing['global'][$secret_key])) $merged['global'][$secret_key] = $existing['global'][$secret_key];
     update_option(self::OPT_KEY, $merged, false); self::sync_legacy_options($merged);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack loaded'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack loaded'], admin_url('admin.php'))); exit;
   }
 
   private static function exportable_settings($settings) {
@@ -1935,7 +1984,7 @@ final class Plugin_UI_Suite_Plugin {
     $settings = self::get_settings();
     $source_status = self::data_source_status($settings);
     if (!empty($source_status['missing'])) {
-      echo '<div class="notice notice-warning"><p>' . esc_html($source_status['label']) . ' is not fully configured. Missing: ' . esc_html(implode(', ', $source_status['missing'])) . '. Use the <a href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">setup wizard</a> or the relevant settings tab.</p></div>';
+      echo '<div class="notice notice-warning"><p>' . esc_html($source_status['label']) . ' is not fully configured. Missing: ' . esc_html(implode(', ', $source_status['missing'])) . '. Use the <a href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php'))) . '">setup wizard</a> or the relevant settings tab.</p></div>';
     }
   }
 
@@ -1946,7 +1995,7 @@ final class Plugin_UI_Suite_Plugin {
     $page = sanitize_key($_GET['page'] ?? '');
     if ($page === 'plugin-ui-suite-setup') return;
     delete_option(self::WIZARD_KEY);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php')));
     exit;
   }
 
@@ -1987,7 +2036,7 @@ final class Plugin_UI_Suite_Plugin {
     delete_option(self::WIZARD_KEY);
     self::sync_legacy_options($settings);
     self::record_version_event('setup_completed');
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','updated'=>'true','plugin_msg'=>'Setup completed'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','updated'=>'true','plugin_msg'=>'Setup completed'], admin_url('admin.php')));
     exit;
   }
 
@@ -2047,7 +2096,7 @@ final class Plugin_UI_Suite_Plugin {
       set_transient('plugin_ui_suite_last_proxy_error', '', 60);
       set_transient('plugin_ui_suite_last_proxy_success', current_time('mysql'), 86400);
     }
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('admin.php')));
     exit;
   }
 
@@ -2089,7 +2138,7 @@ final class Plugin_UI_Suite_Plugin {
     set_transient('plugin_ui_suite_provider_diagnostics', ['time' => current_time('mysql'), 'results' => $results], 30 * MINUTE_IN_SECONDS);
     $failed = array_filter($results, function($row){ return empty($row['ok']); });
     $msg = empty($failed) ? 'Provider diagnostics passed' : 'Provider diagnostics completed with warnings';
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('admin.php')));
     exit;
   }
 
@@ -2120,7 +2169,7 @@ final class Plugin_UI_Suite_Plugin {
       $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $pattern));
     }
     wp_cache_flush();
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>'Proxy cache cleared'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>'Proxy cache cleared'], admin_url('admin.php')));
     exit;
   }
 
@@ -2202,11 +2251,11 @@ final class Plugin_UI_Suite_Plugin {
   public static function handle_test_enquiry_integration() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_test_enquiry_integration');
-    $entry = ['time'=>current_time('mysql'),'event'=>'test_enquiry_integration','source'=>'admin_test','page'=>admin_url('options-general.php?page=plugin-ui-suite&tab=forms'),'ip_hash'=>'test','user_agent'=>'Rescue Plugin Suite test','context'=>['animal_id'=>'test','animal_name'=>'Test animal','animal_code'=>'TEST','modal_url'=>'']];
+    $entry = ['time'=>current_time('mysql'),'event'=>'test_enquiry_integration','source'=>'admin_test','page'=>admin_url('admin.php?page=plugin-ui-suite&tab=forms'),'ip_hash'=>'test','user_agent'=>'Rescue Plugin Suite test','context'=>['animal_id'=>'test','animal_name'=>'Test animal','animal_code'=>'TEST','modal_url'=>'']];
     $settings = self::get_settings();
     if (!empty($settings['global']['enquiry_email'])) wp_mail($settings['global']['enquiry_email'], 'Rescue Plugin Suite test enquiry notification', 'This is a test notification from Rescue Plugin Suite.');
     $ok = self::send_enquiry_webhook($entry, $settings);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>$ok ? 'Test enquiry integration sent' : 'Test webhook queued for retry'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>$ok ? 'Test enquiry integration sent' : 'Test webhook queued for retry'], admin_url('admin.php'))); exit;
   }
 
   public static function process_webhook_retry_queue($manual = false) {
@@ -2231,7 +2280,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_retry_webhooks');
     $result = self::process_webhook_retry_queue(true);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>'Webhook retry sent ' . (int)$result['sent'] . ' item(s); remaining queue: ' . (int)$result['remaining']], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>'Webhook retry sent ' . (int)$result['sent'] . ' item(s); remaining queue: ' . (int)$result['remaining']], admin_url('admin.php'))); exit;
   }
 
   private static function render_webhook_audit_table() {
@@ -2622,7 +2671,7 @@ final class Plugin_UI_Suite_Plugin {
 
     echo '<p class="plugin-setup-actions">';
     submit_button('Save and finish','primary','submit',false);
-    echo ' <a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite'], admin_url('options-general.php'))) . '">Skip for now</a>';
+    echo ' <a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite'], admin_url('admin.php'))) . '">Skip for now</a>';
     echo '</p></form></div>';
     echo '<script>(function(){function currentSource(){const checked=document.querySelector("input[name=\"suite[global][data_source]\"]:checked");return checked?checked.value:"asm";}function syncSourceUi(){const source=currentSource();document.querySelectorAll("[data-source-fields]").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-source-fields")===source);});document.querySelectorAll("[data-source-card]").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-source-card")===source);});}document.addEventListener("click",function(e){const btn=e.target.closest(".plugin-wizard-step-btn");if(btn){e.preventDefault();const step=btn.getAttribute("data-step");document.querySelectorAll(".plugin-suite-subsection[data-step]").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-step")===step);});}const card=e.target.closest("[data-source-card]");if(card){const input=card.querySelector("input[type=radio]");if(input){input.checked=true;syncSourceUi();}}});document.addEventListener("change",function(e){if(e.target&&e.target.name==="suite[global][data_source]")syncSourceUi();});syncSourceUi();})();</script>';
     echo '</div>';
@@ -2654,7 +2703,7 @@ final class Plugin_UI_Suite_Plugin {
       'Release Notes' => 'Check the latest release before updating production sites.',
       'Support workflow' => '1) Run Diagnostics. 2) Copy System Information. 3) Search Known Issues. 4) Open a focused GitHub issue.'
     ];
-    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('Contextual help is available for each major module, with a dedicated support workflow for production rescue websites.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a> <a class="button" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_copy_system_information'), 'plugin_ui_suite_copy_system_information')) . '">'.esc_html__('Copy System Information','plugin-ui-suite').'</a></p></div>';
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('Contextual help is available for each major module, with a dedicated support workflow for production rescue websites.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a> <a class="button" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_copy_system_information'), 'plugin_ui_suite_copy_system_information')) . '">'.esc_html__('Copy System Information','plugin-ui-suite').'</a></p></div>';
     foreach ($sections as $title=>$content) echo '<div class="plugin-suite-card"><h2>'.esc_html($title).'</h2><p>'.esc_html($content).'</p></div>';
     echo '<div class="plugin-suite-card" style="grid-column:1/-1"><h2>GitHub support</h2><div class="plugin-suite-actions"><a class="button" href="'.esc_url(self::github_url('issues/new')).'" target="_blank" rel="noopener">Report a Bug</a><a class="button" href="'.esc_url(self::github_url('issues')).'" target="_blank" rel="noopener">Known Issues</a><a class="button" href="'.esc_url(self::github_url('issues/new?labels=enhancement')).'" target="_blank" rel="noopener">Feature Requests</a><a class="button" href="'.esc_url(self::github_url('releases/latest')).'" target="_blank" rel="noopener">Latest Releases</a><a class="button" href="'.esc_url(self::github_url()).'" target="_blank" rel="noopener">Repository</a></div></div>';
     if (class_exists('Plugin_UI_Suite_Registry')) foreach (Plugin_UI_Suite_Registry::help_items() as $guide) { echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title'] ?? '').'</h2><p>'.wp_kses_post($guide['content'] ?? '').'</p>'; if (!empty($guide['external_url'])) echo '<p><a class="button" href="'.esc_url($guide['external_url']).'" target="_blank" rel="noopener">'.esc_html__('Open official documentation','plugin-ui-suite').'</a></p>'; echo '</div>'; }
@@ -2696,7 +2745,7 @@ final class Plugin_UI_Suite_Plugin {
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'; wp_nonce_field('plugin_ui_suite_proxy_test'); echo '<input type="hidden" name="action" value="plugin_ui_suite_proxy_test" />'; submit_button('Test connection','secondary','submit',false); echo '</form>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'; wp_nonce_field('plugin_ui_suite_proxy_clear_cache'); echo '<input type="hidden" name="action" value="plugin_ui_suite_proxy_clear_cache" />'; submit_button('Clear proxy cache','secondary','submit',false); echo '</form>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'; wp_nonce_field('plugin_ui_suite_provider_diagnostics'); echo '<input type="hidden" name="action" value="plugin_ui_suite_provider_diagnostics" />'; submit_button('Run provider diagnostics','secondary','submit',false); echo '</form>';
-    echo '<a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">Open setup wizard</a>';
+    echo '<a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php'))) . '">Open setup wizard</a>';
     echo '</div>';
     self::render_provider_diagnostics_results();
     echo '</div></div>';

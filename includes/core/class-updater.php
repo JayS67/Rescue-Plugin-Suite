@@ -335,7 +335,7 @@ final class Plugin_UI_Suite_Updater {
       self::clear_update_caches();
       $args['saved'] = '1';
     } else return;
-    wp_safe_redirect(add_query_arg($args, admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
     exit;
   }
   private static function validate_release_package() {
