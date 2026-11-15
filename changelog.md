@@ -1,4 +1,4 @@
-## 15.2.2
+## 15.2.3
 
 - Restore prominent full-width cat photographs across all grid card designs.
 - Crop images edge to edge into rounded square frames, without letterboxing.

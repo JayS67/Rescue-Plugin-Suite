@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Forms Shortcodes
  * Description: Provides separate shortcodes for rescue management online forms ([plugin_adoption_form], [plugin_volunteer_form], [plugin_waiting_list_form], [plugin_lost_cat_form]).
- * Version: 15.2.2
+ * Version: 15.2.3
  * Author: Rescue Plugin Suite
  */
 
