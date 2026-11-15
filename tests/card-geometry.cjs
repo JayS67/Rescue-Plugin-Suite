@@ -69,8 +69,9 @@ const modules = {
               assert(Math.abs(item.frame.width - item.frame.height) <= 1.5, `${label}: photo frame ${item.id} is square (${item.frame.width}x${item.frame.height})`);
               assert(Math.abs(item.photo.width - item.photo.height) <= 1.5, `${label}: image ${item.id} is square`);
               assert(item.media.width > 0 && item.media.height > 0, label + ': visible image');
-              assert.equal(item.fit, 'contain', label + ': complete photograph is visible without cropping');
-              if (item.favourite && (design !== 'classic' || layout !== 'grid')) assert(item.photo.bottom <= item.favourite.top - 3, label + ': favourites do not cover the photograph');
+              if (layout !== 'list') assert(item.media.width >= item.card.width * .9, label + ': photograph dominates the card width');
+              assert.equal(item.fit, 'cover', label + ': photograph fills its square edge to edge');
+              if (item.favourite && (design !== 'classic' || layout !== 'grid')) assert(item.photo.bottom <= item.favourite.top - 3 || item.photo.right <= item.favourite.left - 3, label + ': favourites do not cover the photograph');
               if (item.status) assert(item.status.left >= item.media.right - 1.5 || item.status.top >= item.media.bottom - 1.5, label + ': reservation labels do not cover the photograph');
               assert(item.media.left >= item.card.left - 1.5 && item.media.right <= item.card.right + 1.5, label + ': media stays inside card');
               assert(item.media.bottom <= item.card.bottom + 1.5, label + ': media is not clipped by short card');
@@ -78,8 +79,8 @@ const modules = {
             }
             assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), label + ': no horizontal page overflow');
             if (layout === 'blog') {
-              assert(Math.max(...cards.map(item => item.media.width)) <= Math.min(width, 340), label + ': blog photo is bounded instead of full-width hero');
-              assert(Math.max(...heights) <= 550, label + ': blog cards stay compact');
+              assert(Math.max(...cards.map(item => item.media.width)) <= Math.min(width, 420), label + ': blog photo is bounded instead of full-width hero');
+              assert(Math.max(...heights) <= 680, label + ': blog cards stay compact');
               const excerpt = root.locator('.rps-animal-card[data-animalid="42"] .rps-card-excerpt');
               const data = await excerpt.evaluate(element => ({ text: element.textContent, whitespace: getComputedStyle(element).whiteSpace, display: getComputedStyle(element).display }));
               assert.match(data.text, /First line:[^\n]*\nSecond line:/, label + ': literal line break is preserved');

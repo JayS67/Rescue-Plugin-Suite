@@ -1,3 +1,11 @@
+## 15.2.2
+
+- Restore prominent full-width cat photographs across all grid card designs.
+- Crop images edge to edge into rounded square frames, without letterboxing.
+- Replace tiny blog thumbnails with a photo-led editorial gallery; retain generous desktop list photos.
+- Remove empty status slots, fixed text gaps and placeholder metadata while keeping card heights consistent.
+- Align favourites with the footer and retain paragraph previews and accessible modal navigation.
+
 ## 15.2.1
 
 - Fix fatal errors in payment-provider integrations and preserve other settings when saving individual providers or donation sections.

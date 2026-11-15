@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adoptables
  * Description: Provides [adoptables] shortcode for the adoptable/adopted widget with scoped styling and settings.
- * Version: 15.2.1
+ * Version: 15.2.2
  * Author: Jordan Sutton | Webstax
  */
 
@@ -2163,7 +2163,8 @@ final class Plugin_Adoptables_UI_Shortcode {
     const safeName = escHtml(name);
     const safeAge = escHtml(age);
     const safeSex = escHtml(sex);
-    const safeBreed = escHtml(breed);
+    const safeBreed = escHtml(breed === '—' || breed === '-' ? '' : breed);
+    const cardMeta = [sex, age].filter(value => value && value !== '—' && value !== '-').map(escHtml).join(' · ');
     const excerpt = escHtml(cardExcerpt(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? ''));
     const safeId = escAttr(id);
     const safeNameAttr = escAttr(name);
@@ -2171,7 +2172,7 @@ final class Plugin_Adoptables_UI_Shortcode {
     const bits = {
       image: `<div class="rps-card-media relative"><div class="asm-ad-imgwrap bg-gray-100 aspect-square w-full"><img src="${safeImgUrl}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" /></div></div>`,
       reservation_badge: reservation.show ? `<div class="rps-card-status absolute ${badgePos} px-2 py-1 rounded-full font-extrabold text-white shadow text-[10px] sm:text-sm lg:text-base" style="background:${ASM_WIDGET.brandColor}; max-width: calc(100% - 1rem);"><span class="rps-card-status-text">${escHtml(reservation.label)}</span></div>` : `<div class="rps-card-status rps-card-status-empty" aria-hidden="true"></div>`,
-      name_meta: `<div class="rps-card-details asm-ad-card-pad"><h3 class="rps-card-name">${safeName}</h3><p class="rps-card-meta">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</p><p class="rps-card-excerpt">${excerpt}</p></div>`,
+      name_meta: `<div class="rps-card-details asm-ad-card-pad"><h3 class="rps-card-name">${safeName}</h3><p class="rps-card-meta">${cardMeta}</p><p class="rps-card-excerpt">${excerpt}</p></div>`,
       breed_line: `<div class="rps-card-footer asm-ad-card-pad"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Meet me <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></div>`,
       favourite_button: ASM_WIDGET.enableFavourites && ASM_WIDGET.favouriteButtonPosition !== 'hidden' ? `<button type="button" class="asm-fav-toggle absolute z-20 inline-flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-full border-2 bg-white/95 shadow asm-fav-${escAttr(ASM_WIDGET.favouriteButtonPosition.replace('_','-'))}" style="border-color:${ASM_WIDGET.brandColor}; color:${ASM_WIDGET.brandColor};" data-favid="${safeId}" aria-pressed="${isFav ? 'true' : 'false'}" aria-label="${isFav ? 'Remove from favourites' : 'Add to favourites'}: ${safeNameAttr}">${favouriteIconSvg(isFav, "w-3.5 h-3.5 sm:w-5 sm:h-5")}</button>` : ``
     };

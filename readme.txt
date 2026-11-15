@@ -1,5 +1,10 @@
 === Rescue Plugin Suite ===
-Stable tag: 15.2.1
+Stable tag: 15.2.2
+
+15.2.2
+- Prominent edge-to-edge photographs in rounded square frames across animal card designs.
+- Photo-led blog gallery, generous list images and consistent card/footer spacing.
+- No empty status slots, thumbnail rails or placeholder metadata.
 
 15.2.1
 - Fixed critical errors in all payment integration panels and destructive partial settings saves.
@@ -19,7 +24,7 @@ Stable tag: 15.2.1
 - Accessible impact description and no inappropriate Dataset schema for the stats widget.
 
 SETUP FOR NEW FEATURES
-In the WordPress sidebar, open Rescue Plugin Suite. Widgets opens Adoptables; use the tabs for Adopted and Statistics. Each widget's Design section contains its layout options and animal card designs. Compact cards use square thumbnails beside the text; blog layouts show bounded paragraph previews. Animal card heights stay consistent within the widget. Statistics > Typography controls totals, icons, headings and captions separately for mobile, tablet and desktop; Responsive includes mobile card padding. Enable the visitor view switch separately for each animal widget. General contains transparent-background and heading/footer visibility options; dialogs stay opaque.
+In the WordPress sidebar, open Rescue Plugin Suite. Widgets opens Adoptables; use the tabs for Adopted and Statistics. Each widget's Design section contains its layout options and animal card designs. Compact cards keep full-width square photographs with tighter text spacing; blog layouts use a photo-led gallery with paragraph previews. Animal card heights stay consistent within the widget. Statistics > Typography controls totals, icons, headings and captions separately for mobile, tablet and desktop; Responsive includes mobile card padding. Enable the visitor view switch separately for each animal widget. General contains transparent-background and heading/footer visibility options; dialogs stay opaque.
 
 Rescue Shop contains products, orders, categories and shop settings. Create pages containing [rescue_shop] and [rescue_shop_basket]. Legacy [straysafe_shop], [straysafe_shop_product] and [straysafe_shop_basket] embeds keep working. If the standalone shop is active, deactivate it (do not delete its data) before using the suite shop. Existing shop settings and Stripe keys remain separate from donation settings. Configure the shop's Stripe signing secret and webhook endpoint, then test checkout before switching to live mode. Checkout supports interactive e-cards. Physical products, downloads and other unsupported digital items remain enquiry-only. Shop orders and e-card files are retained on uninstall. Apache storage protection is included. On Nginx, the host must deny direct HTTP access to the uploads/straysafe-shop-private/ directory; image delivery uses the token endpoint. Keep directory listing disabled. Unpurchased uploads expire after 30 days; purchased image metadata is retained.
 
