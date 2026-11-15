@@ -36,7 +36,7 @@ const animals = [{ANIMALID:42,ANIMALNAME:'Mittens',ANIMALAGE:'2 years',SEXNAME:'
       const photo=await featured.locator('.rps-featured-media img').evaluate(el=>{const r=el.getBoundingClientRect();return{w:r.width,h:r.height,fit:getComputedStyle(el).objectFit};});
       assert(Math.abs(photo.w-photo.h)<1,'Featured photo retains a square frame');
       assert(photo.w<=281,'Featured photo is bounded on large pages');
-      assert.equal(photo.fit,'contain','Featured photo is not cropped');
+      assert.equal(photo.fit,'cover','Featured photo fills its square frame');
       const quiz=page.locator('.asm-adoption-quiz-widget').first();
       await quiz.locator('[id$="-asm-quiz-run"]').click();
       await quiz.locator('.rps-match-card').first().waitFor();
