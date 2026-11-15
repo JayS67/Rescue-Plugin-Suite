@@ -1,0 +1,83 @@
+/* Public experiences inherit the surrounding site; every selector belongs to the suite. */
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap,.plugin-payments-widget) {
+  font-family: inherit;
+  line-height: 1.6;
+  box-shadow: none !important;
+}
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap):not([data-rps-transparent=true]) {
+  background-image: none !important;
+  border-color: var(--rps-line, #dce2eb) !important;
+}
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap) {
+  border-radius: 18px !important;
+  padding: clamp(18px, 3vw, 30px) !important;
+}
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap) :is(h2,h3,p,label,a,button,select,input,textarea) { font-family: inherit; }
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap) :is(h2,h3,p) { overflow-wrap: anywhere; }
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget) .rps-widget-title:is(h2),
+[data-rps-ui].rescue-suite-form-wrap .rps-form-heading h2 {
+  font-size: clamp(1.4rem, 2.5vw, 1.9rem) !important;
+  line-height: 1.25 !important;
+  letter-spacing: -.02em;
+  max-width: 30ch;
+}
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap) .rps-widget-subtitle { max-width: 65ch; font-size: 1rem; line-height: 1.6; }
+[data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap) :is(button,a,input,select,textarea):focus-visible {
+  outline: 3px solid #2459a6 !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #fff !important;
+}
+/* A featured animal should feel like an editorial insert, not a large banner. */
+[data-rps-ui].asm-featured-animal-widget { container: rps-featured / inline-size; }
+[data-rps-ui].asm-featured-animal-widget .rps-featured-layout {
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  gap: clamp(18px, 3vw, 30px);
+}
+[data-rps-ui].asm-featured-animal-widget .rps-featured-media { max-width: 280px; width: 100%; }
+[data-rps-ui].asm-featured-animal-widget .rps-featured-media > div { border-radius: 12px !important; }
+[data-rps-ui].asm-featured-animal-widget .rps-featured-media img { object-fit: contain !important; }
+[data-rps-ui].asm-featured-animal-widget .rps-featured-content { padding-block: 0; }
+[data-rps-ui].asm-featured-animal-widget [id$="-asm-featured-name"] { font-size: 1.25rem !important; line-height: 1.4; font-weight: 700 !important; overflow-wrap: anywhere; }
+[data-rps-ui].asm-featured-animal-widget .rps-featured-content a { min-height: 44px; padding: 10px 18px !important; white-space: normal; text-align: center; }
+@container rps-featured (max-width: 560px) {
+  [data-rps-ui].asm-featured-animal-widget .rps-featured-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  [data-rps-ui].asm-featured-animal-widget .rps-featured-media { max-width: 220px; }
+}
+/* Short, aligned questions and a clearly separated results region. */
+[data-rps-ui].asm-adoption-quiz-widget { container: rps-quiz / inline-size; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-quiz-fields { gap: 16px; margin-block: 20px; padding-block: 20px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+[data-rps-ui].asm-adoption-quiz-widget .rps-quiz-fields > label { min-width: 0; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-quiz-fields label > span { line-height: 1.5; font-size: .875rem; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-quiz-fields :is(button,select) { min-height: 44px; font-size: 1rem; }
+[data-rps-ui].asm-adoption-quiz-widget [id$="-asm-quiz-results"] { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)) !important; gap: 14px !important; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-match-card { display: grid !important; grid-template-columns: clamp(80px, 30%, 144px) minmax(0, 1fr); align-items: center; min-width: 0; box-shadow: none; border-radius: 12px !important; overflow: hidden; color: inherit; text-decoration: none; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-match-card > div:first-child { aspect-ratio: 1; min-width: 0; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-match-card > div:last-child { min-width: 0; font-size: .875rem; line-height: 1.55; overflow-wrap: anywhere; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-match-card:hover { border-color: var(--asm-quiz-brand) !important; }
+[data-rps-ui].asm-adoption-quiz-widget .rps-match-card img { object-fit: contain !important; background: #f3f4f6; }
+/* Hosted forms retain their labels, native controls and the website's font. */
+[data-rps-ui].rescue-suite-form-wrap .rps-form-heading { margin-bottom: 22px; padding-bottom: 18px; }
+[data-rps-ui].rescue-suite-form-wrap :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { font-size: 1rem; line-height: 1.5; padding: 10px 12px; min-height: 44px; }
+[data-rps-ui].rescue-suite-form-wrap textarea { resize: vertical; }
+[data-rps-ui].rescue-suite-form-wrap :is(input[type=checkbox],input[type=radio]) { accent-color: var(--rps-accent, #401268); }
+[data-rps-ui].rescue-suite-form-wrap :is(button,input[type=submit]) { min-height: 44px; border-radius: 10px; font-size: 1rem; padding: 10px 20px; }
+/* Keep donations calm and compact without changing configured colours or corner radius. */
+[data-rps-ui].plugin-payments-widget { padding: clamp(20px, 3vw, 30px); }
+[data-rps-ui].plugin-payments-widget h2 { font-size: clamp(1.4rem, 2.5vw, 1.9rem); line-height: 1.25; letter-spacing: -.02em; }
+[data-rps-ui].plugin-payments-widget .plugin-payments-subtitle { font-size: 1rem; line-height: 1.6; }
+[data-rps-ui].plugin-payments-widget .plugin-payments-types { gap: 4px; margin-block: 18px; }
+[data-rps-ui].plugin-payments-widget .plugin-payments-types button { min-height: 44px; }
+[data-rps-ui].plugin-payments-widget .plugin-payments-amounts { gap: 10px; margin-block: 16px; }
+[data-rps-ui].plugin-payments-widget .plugin-payments-amounts button { min-height: 48px; padding: 10px 12px; }
+[data-rps-ui].plugin-payments-widget :is(.plugin-payments-impact,.plugin-payments-error):empty { min-block-size: 0; margin-block: 0; }
+[data-rps-ui].plugin-payments-widget .plugin-payments-continue { min-height: 48px; }
+[data-rps-ui].plugin-payments-widget:focus-within { outline: none; }
+@media (max-width: 480px) {
+  [data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap) { border-radius: 14px !important; }
+  [data-rps-ui].asm-adoption-quiz-widget .rps-quiz-fields { gap: 14px; }
+  [data-rps-ui].rescue-suite-form-wrap :is(button,input[type=submit]) { max-width: 100%; }
+}
+@media (forced-colors: active) {
+  [data-rps-ui].asm-adoption-quiz-widget .rps-match-card { border: 1px solid CanvasText !important; }
+  [data-rps-ui]:is(.asm-featured-animal-widget,.asm-adoption-quiz-widget,.rescue-suite-form-wrap,.plugin-payments-widget) :is(button,a):focus-visible { outline-color: Highlight !important; }
+}

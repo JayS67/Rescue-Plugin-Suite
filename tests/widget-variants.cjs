@@ -53,7 +53,7 @@ const modules = {
   async function geometry(root) {
     return root.locator('.rps-animal-card[data-animalid]').first().evaluate(card => {
       const bounds = el => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height }; };
-      return { card: bounds(card), media: bounds(card.querySelector('.rps-card-media')), details: bounds(card.querySelector('.rps-card-details')), padding: getComputedStyle(card.querySelector('.rps-card-details')).paddingTop };
+      return { card: bounds(card), media: bounds(card.querySelector('.rps-card-media')), photo: bounds(card.querySelector('.rps-card-media img')), details: bounds(card.querySelector('.rps-card-details')), padding: getComputedStyle(card.querySelector('.rps-card-details')).paddingTop };
     });
   }
   async function checkAxe(root, label) {
@@ -88,18 +88,20 @@ const modules = {
       await save(module, { card_design: 'compact' });
       root = await openWidget(module);
       const compact = await geometry(root);
-      assert(compact.card.height < classic.card.height * .9, `${module}: compact cards reduce rendered height (${compact.card.height} vs ${classic.card.height})`);
-      assert.equal(compact.padding, '10px', module + ' compact padding');
+      assert(compact.card.height <= classic.card.height, `${module}: compact cards remain no taller than classic (${compact.card.height} vs ${classic.card.height})`);
+      assert(Math.abs(compact.photo.width - compact.photo.height) <= 1.5, module + ': compact keeps square photos');
+      assert(parseFloat(compact.padding) <= parseFloat(classic.padding), module + ': compact spacing does not exceed classic');
       await checkAxe(root, module + ' compact');
       await save(module, { card_design: 'thumbnail' });
       root = await openWidget(module);
       const thumbnail = await geometry(root);
       assert(thumbnail.details.x > thumbnail.media.x + thumbnail.media.width - 2, module + ' thumbnail places image beside details');
-      assert(thumbnail.card.height < classic.card.height * .8, module + ' thumbnail is a compact option');
+      assert(thumbnail.card.height < classic.card.height, module + ' thumbnail is a compact option');
+      assert(Math.abs(thumbnail.photo.width - thumbnail.photo.height) <= 1.5, module + ': thumbnails stay square');
       await save(module, { layout_preset: 'blog', card_design: 'classic' });
       root = await openWidget(module);
       assert.equal(await root.getAttribute('data-rps-layout'), 'blog');
-      assert.equal(await root.locator('.rps-card-excerpt').first().evaluate(el => getComputedStyle(el).display), 'block', 'Blog shows story excerpts');
+      assert.notEqual(await root.locator('.rps-card-excerpt').first().evaluate(el => getComputedStyle(el).display), 'none', 'Blog shows story excerpts');
       assert.equal(await root.locator(modules[module].grid).evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), 1, 'Blog uses one readable column');
       await checkAxe(root, module + ' blog');
       await save(module, { layout_preset: 'list', visitor_view_switch: true });

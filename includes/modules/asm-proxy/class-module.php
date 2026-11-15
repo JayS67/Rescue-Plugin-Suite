@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Data Proxy
  * Description: Proxies rescue management JSON endpoints so credentials never reach browsers and animal images are served safely.
- * Version: 15.2.0
+ * Version: 15.2.1
  */
 
 if (!defined('ABSPATH')) exit;
@@ -737,6 +737,58 @@ function plugin_asm_impact_cache_context() {
   return md5(plugin_asm_base_url() . '|' . plugin_asm_account() . '|' . plugin_asm_user() . '|' . plugin_asm_pass());
 }
 
+/** Reuse existing installations' yearly aggregates without making reports mandatory. */
+function plugin_asm_existing_impact_rows() {
+  $ttl = plugin_suite_cache_ttl('cache_stats_seconds', 60);
+  $key = 'plugin_asm_existing_impact_v1_' . plugin_asm_impact_cache_context() . '_ttl' . $ttl;
+  $cached = plugin_suite_cache_get($key);
+  if ($cached !== false) return $cached;
+  $res = plugin_asm_http_get(['method' => 'json_report', 'username' => plugin_asm_user(), 'password' => plugin_asm_pass(), 'title' => 'Summary By Year'], ['timeout' => 3]);
+  $data = is_wp_error($res) ? null : json_decode(wp_remote_retrieve_body($res), true);
+  $rows = [];
+  if (is_array($data) && plugin_suite_array_is_list($data)) foreach ($data as $record) {
+    if (!is_array($record)) continue;
+    $year = plugin_suite_impact_count($record['year'] ?? $record['YEAR'] ?? $record['Year'] ?? null);
+    if ($year === null || $year < 2000 || $year > (int)wp_date('Y')) continue;
+    $row = plugin_suite_empty_impact_row($year, 'asm_existing_report');
+    $has_value = false;
+    foreach (['cats_brought_in', 'cats_adopted', 'cats_vaccinated', 'cats_neutered', 'cats_chipped'] as $metric) {
+      $aliases = [$metric, strtoupper($metric)];
+      if ($metric === 'cats_adopted') $aliases = array_merge($aliases, ['ADOPTIONS', 'Adoptions']);
+      foreach ($aliases as $alias) if (array_key_exists($alias, $record)) {
+        $row[$metric] = plugin_suite_impact_count($record[$alias]);
+        if ($row[$metric] !== null) $has_value = true;
+        break;
+      }
+    }
+    if ($has_value) $rows[] = $row;
+  }
+  // Retain only public numeric aggregates, never arbitrary columns from the report.
+  plugin_suite_cache_set($key, $rows, $rows ? $ttl : 300);
+  return $rows;
+}
+
+function plugin_asm_automatic_summary(WP_REST_Request $req) {
+  $year = plugin_suite_impact_year($req);
+  $summary = null;
+  foreach (plugin_asm_existing_impact_rows() as $row) {
+    if ($row['year'] === $year) { $summary = $row; break; }
+  }
+  if ($summary === null || $summary['cats_brought_in'] === null || $summary['cats_adopted'] === null) {
+    $built_in = plugin_asm_builtin_summary($req)[0];
+    if ($summary === null) $summary = $built_in;
+    else foreach (['cats_brought_in', 'cats_adopted'] as $metric) {
+      if ($summary[$metric] === null) $summary[$metric] = $built_in[$metric];
+    }
+  }
+  $missing = false;
+  foreach (['cats_brought_in', 'cats_adopted', 'cats_vaccinated', 'cats_neutered', 'cats_chipped'] as $metric) {
+    if ($summary[$metric] === null) $missing = true;
+  }
+  $summary['note'] = $missing ? 'Some annual totals are not available for the selected year.' : '';
+  return [$summary];
+}
+
 function plugin_asm_builtin_summary(WP_REST_Request $req) {
   $year = plugin_suite_impact_year($req);
   $current_year = (int)wp_date('Y');
@@ -1240,7 +1292,7 @@ add_action('rest_api_init', function () {
       $source = plugin_suite_data_source();
       $title = trim((string)$req->get_param('title'));
       if ($source === 'asm' && plugin_suite_impact_mode() === 'built_in' && in_array($title, ['Summary By Year', 'Cats In Care Now'], true)) {
-        $data = plugin_asm_fallback_report($title, $req);
+        $data = $title === 'Summary By Year' ? plugin_asm_automatic_summary($req) : plugin_asm_fallback_report($title, $req);
         if ($data !== null) return rest_ensure_response($data);
       }
       if ($source === 'custom_api') return plugin_custom_api_report($req);

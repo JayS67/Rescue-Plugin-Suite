@@ -423,3 +423,12 @@
 .ssshop [data-preview-text-block]:focus-visible,.ssshop-modal [data-preview-text-block]:focus-visible{outline:3px solid #401268;outline-offset:3px}
 .ssshop button:focus-visible,.ssshop a:focus-visible,.ssshop input:focus-visible,.ssshop select:focus-visible,.ssshop-modal button:focus-visible,.ssshop-modal input:focus-visible,.ssshop-modal select:focus-visible,.ssshop-modal textarea:focus-visible{outline:3px solid #401268;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.ssshop *,.ssshop-modal *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Storefront cards share the suite's quieter, space-conscious surfaces. */
+[data-rps-ui].ssshop .ssshop-grid { gap: 18px; grid-auto-rows: 1fr; }
+[data-rps-ui].ssshop .ssshop-card { display: flex; flex-direction: column; border-color: #dce2e7; border-radius: 12px; box-shadow: none; }
+[data-rps-ui].ssshop .ssshop-content { display: flex; flex: 1; flex-direction: column; padding: 16px; }
+[data-rps-ui].ssshop .ssshop-content h3 { line-height: 1.35; overflow-wrap: anywhere; }
+[data-rps-ui].ssshop .ssshop-content p { margin-block: 6px 10px; }
+[data-rps-ui].ssshop .ssshop-price { margin-top: auto; padding-top: 10px; }
+[data-rps-ui].ssshop :is(.ssshop-personalise,.ssshop-add,.ssshop-checkout) { min-height: 44px; align-self: flex-start; line-height: 1.35; }

@@ -123,3 +123,25 @@ if (!function_exists('plugin_suite_collect_labels')) {
     return $labels;
   }
 }
+
+
+if (!function_exists('plugin_suite_card_excerpt')) {
+  /** Plain card previews keep source line breaks, with bounded words and Unicode length. */
+  function plugin_suite_card_excerpt($value, $max_words = 34, $max_chars = 360) {
+    $text = str_replace(["\r\n", "\r"], "\n", (string)$value);
+    $text = preg_replace('~<(script|style)\b[^>]*>[\s\S]*?</\1\s*>~i', '', $text);
+    $text = preg_replace('~<br\b[^>]*>|</(?:p|div|li|h[1-6]|blockquote)\s*>~i', "\n", $text);
+    $text = html_entity_decode(wp_strip_all_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = wp_check_invalid_utf8($text);
+    $text = preg_replace('/[^\S\n]+/u', ' ', $text);
+    $text = trim(preg_replace(['/ *\n */u', '/\n{3,}/u'], ["\n", "\n\n"], $text));
+    preg_match_all('/\S+/u', $text, $words, PREG_OFFSET_CAPTURE);
+    $truncated = count($words[0]) > $max_words;
+    if ($truncated) $text = rtrim(substr($text, 0, $words[0][$max_words][1]));
+    if (preg_match('/^.{0,' . (int)$max_chars . '}/us', $text, $characters) && strlen($characters[0]) < strlen($text)) {
+      $text = rtrim($characters[0]);
+      $truncated = true;
+    }
+    return $text . ($truncated ? '…' : '');
+  }
+}

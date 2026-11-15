@@ -1,0 +1,52 @@
+/* Statistics settings apply within this widget, including narrow desktop embeds. */
+.plugin-stats-ui-wrap.rps-widget .rps-widget-shell {
+  --plugin-active-heading: var(--plugin-fs-h-m, 28px);
+  --plugin-active-subheading: var(--plugin-fs-s-m, 16px);
+  --plugin-active-paragraph: var(--plugin-fs-p-m, 14px);
+  --plugin-active-number: var(--plugin-fs-n-m, 28px);
+  --plugin-active-icon: var(--plugin-icon-m, 28px);
+  --plugin-active-padding: var(--plugin-pad-m, 14px);
+  --plugin-active-card-w: var(--plugin-card-w-m, none);
+  --plugin-active-card-h: var(--plugin-card-h-m, auto);
+}
+.plugin-stats-ui-wrap.rps-widget[data-rps-stats-device=t] .rps-widget-shell {
+  --plugin-active-heading: var(--plugin-fs-h-t, 36px);
+  --plugin-active-subheading: var(--plugin-fs-s-t, 18px);
+  --plugin-active-paragraph: var(--plugin-fs-p-t, 16px);
+  --plugin-active-number: var(--plugin-fs-n-t, 34px);
+  --plugin-active-icon: var(--plugin-icon-t, 36px);
+  --plugin-active-padding: var(--plugin-pad-d, 24px);
+  --plugin-active-card-w: var(--plugin-card-w-t, none);
+  --plugin-active-card-h: var(--plugin-card-h-t, auto);
+}
+.plugin-stats-ui-wrap.rps-widget[data-rps-stats-device=d] .rps-widget-shell {
+  --plugin-active-heading: var(--plugin-fs-h-d, 42px);
+  --plugin-active-subheading: var(--plugin-fs-s-d, 20px);
+  --plugin-active-paragraph: var(--plugin-fs-p-d, 16px);
+  --plugin-active-number: var(--plugin-fs-n-d, 40px);
+  --plugin-active-icon: var(--plugin-icon-d, 40px);
+  --plugin-active-padding: var(--plugin-pad-d, 24px);
+  --plugin-active-card-w: var(--plugin-card-w-d, none);
+  --plugin-active-card-h: var(--plugin-card-h-d, auto);
+}
+.plugin-stats-ui-wrap.rps-widget .plugin-heading { font-size: var(--plugin-active-heading) !important; font-weight: 750; line-height: 1.18; }
+.plugin-stats-ui-wrap.rps-widget :is(.plugin-subheading, .stat-heading) { font-size: var(--plugin-active-subheading) !important; line-height: 1.35; }
+.plugin-stats-ui-wrap.rps-widget :is(.plugin-paragraph, .stat-caption, [role=status]) { font-size: var(--plugin-active-paragraph) !important; line-height: 1.5; }
+.plugin-stats-ui-wrap.rps-widget .rps-impact-card { min-width: 0; overflow-wrap: anywhere; }
+.plugin-stats-ui-wrap.rps-widget .rps-impact-card > .flex { gap: 0; justify-content: flex-start; }
+.plugin-stats-ui-wrap.rps-widget .rps-impact-card .icon-float { width: var(--plugin-active-icon); height: var(--plugin-active-icon); flex-shrink: 0; margin-bottom: 10px; border-radius: 9px; }
+.plugin-stats-ui-wrap.rps-widget .rps-impact-card .icon-float svg { width: 55%; height: 55%; }
+.plugin-stats-ui-wrap.rps-widget .stat-number { display: block; max-width: 100%; font-size: var(--plugin-active-number) !important; line-height: 1.12; margin-block: 0 8px; letter-spacing: -.035em; }
+.plugin-stats-ui-wrap.rps-widget .stat-number[data-rps-unavailable=true] { font-size: var(--plugin-active-paragraph) !important; line-height: 1.4; font-weight: 600; letter-spacing: 0; color: #596579 !important; }
+.plugin-stats-ui-wrap.rps-widget .stat-caption { margin-top: 6px; }
+.plugin-stats-ui-wrap.rps-widget [role=status] { max-width: 66ch; }
+.plugin-stats-ui-wrap.rps-widget[data-rps-layout=compact] .rps-impact-card > .flex,
+.plugin-stats-ui-wrap.rps-widget[data-rps-layout=band] .rps-impact-card > .flex { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; column-gap: 10px; }
+.plugin-stats-ui-wrap.rps-widget:is([data-rps-layout=compact], [data-rps-layout=band]) .icon-float { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+.plugin-stats-ui-wrap.rps-widget:is([data-rps-layout=compact], [data-rps-layout=band]) .stat-number { grid-column: 1; grid-row: 1; }
+.plugin-stats-ui-wrap.rps-widget:is([data-rps-layout=compact], [data-rps-layout=band]) .stat-heading { grid-column: 1; grid-row: 2; }
+.plugin-stats-ui-wrap.rps-widget:is([data-rps-layout=compact], [data-rps-layout=band]) .stat-caption { grid-column: 1 / -1; grid-row: 3; }
+[data-rps-ui].plugin-stats-ui-wrap.rps-widget[data-rps-layout=band] [data-plugin-grid] { grid-template-columns: repeat(var(--plugin-active-columns, 2), minmax(0, 1fr)) !important; gap: 0 !important; padding: 0; overflow: hidden; background: #fff; }
+[data-rps-ui].plugin-stats-ui-wrap.rps-widget[data-rps-layout=band] .counter-card { background: #fff; box-shadow: inset -1px -1px 0 #dce2eb !important; }
+[data-rps-ui].plugin-stats-ui-wrap.rps-widget[data-rps-layout=band] .counter-card::after { display: none; }
+[data-rps-ui].plugin-stats-ui-wrap.rps-widget[data-rps-layout=band] .counter-card .icon-float { display: flex; }
