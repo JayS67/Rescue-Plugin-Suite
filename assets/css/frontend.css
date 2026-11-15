@@ -62,21 +62,21 @@
   --rps-line: #dce2eb;
   --rps-surface: #fff;
   box-sizing: border-box;
-  border: 1px solid var(--rps-line);
-  border-radius: 24px;
-  background-image: linear-gradient(145deg, #ffffffd9, #ffffff8c) !important;
+  border: 0;
+  border-radius: 0;
+  background-image: none !important;
   font-family: inherit;
   color: var(--rps-ink);
 }
 .rps-widget *, .rps-widget *::before, .rps-widget *::after { box-sizing: border-box; }
-.rps-widget .rps-widget-shell { max-width: 1200px; padding: clamp(24px, 4vw, 48px); }
-.rps-widget .rps-widget-heading { margin-bottom: 28px; text-align: start; }
+.rps-widget .rps-widget-shell { max-width: 1200px; padding: clamp(16px, 3vw, 32px); }
+.rps-widget .rps-widget-heading { margin-bottom: 20px; text-align: start; }
 .rps-widget .rps-widget-heading > .flex { justify-content: flex-start; }
 .rps-widget .rps-widget-heading h2 { margin: 0; font-weight: 750; line-height: 1.18; letter-spacing: -.035em; }
 .rps-widget .rps-widget-heading > p:not(.rps-eyebrow) { max-width: 64ch; margin: 12px 0 0; font-weight: 400; }
 .rps-widget .rps-widget-heading > .mt-4 { justify-content: flex-start; }
 .rps-widget .rps-eyebrow { margin: 0 0 12px; color: var(--rps-accent); font-size: 11px; font-weight: 750; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; }
-.rps-widget .rps-widget-toolbar { padding: 12px; border: 1px solid var(--rps-line); border-radius: 14px; background: #ffffffd9; }
+.rps-widget .rps-widget-toolbar { padding: 8px; border: 1px solid var(--rps-line); border-radius: 10px; background: var(--rps-surface); }
 .rps-widget .rps-widget-toolbar button { box-shadow: none; border-width: 1px; }
 .rps-widget :is(select, input:not([type=checkbox]):not([type=radio]), textarea) {
   max-width: 100%;
@@ -160,7 +160,6 @@
   .rps-widget .rps-widget-toolbar { padding: 8px; gap: 8px; }
   .rps-animal-card .rps-card-footer { gap: 6px; }
   .rps-animal-card .rps-card-link { font-size: 11px; }
-  .plugin-stats-ui-wrap.rps-widget .stat-number { font-size: clamp(28px, 8vw, 40px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .rps-widget, .rps-widget *, .rps-widget *::before, .rps-widget *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

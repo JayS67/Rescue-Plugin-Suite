@@ -3,6 +3,7 @@
 define('ABSPATH', __DIR__ . '/');
 $settings = ['global' => ['stats_data_mode' => 'built_in'], 'proxy' => ['account' => 'fixture-account']];
 $transients = []; $transient_ttls = []; $routes = []; $requests = []; $fail_month = 0; $shelter_invalid = false;
+$summary_report = null;
 class WP_REST_Request {
   private $params = [];
   public function __construct(...$args) {}
@@ -44,7 +45,7 @@ function monthly_fixture($month, $year) {
       'ageUnknown' => ['adoption' => 0], 'upToFiveMonths' => ['adoption' => 3]]]]];
 }
 function wp_remote_get($url, $options) {
-  global $requests, $fail_month, $shelter_invalid;
+  global $requests, $fail_month, $shelter_invalid, $summary_report;
   parse_str(parse_url($url, PHP_URL_QUERY), $params); $requests[] = $params;
   if ($params['method'] === 'json_monthly_stats') {
     if ((int)$params['month'] === $fail_month) return new WP_Error('fixture_failure');
@@ -53,6 +54,8 @@ function wp_remote_get($url, $options) {
     $data = $shelter_invalid ? [['ID' => 1]] : [['ID' => 1, 'SPECIESID' => 2], ['ID' => 2, 'SPECIESID' => 1], ['ID' => 3, 'SPECIESNAME' => 'Cat']];
   } elseif ($params['method'] === 'json_report') {
     if ($params['title'] === 'Active Reservations Proxy') $data = [['AID' => 42, 'STATUSNAME' => 'Pending Adoption']];
+    elseif ($params['title'] === 'Summary By Year' && $summary_report === false) return ['code' => 200, 'body' => 'ERROR: report not found'];
+    elseif ($params['title'] === 'Summary By Year' && is_array($summary_report)) $data = $summary_report;
     else $data = $params['title'] === 'Cats In Care Now' ? [['cats_in_care' => 7]] : [['YEAR' => 2026, 'CATS_ADOPTED' => 9, 'CATS_VACCINATED' => 12]];
   } else throw new RuntimeException('Unexpected method: ' . $params['method']);
   return ['code' => 200, 'body' => json_encode($data)];
@@ -60,21 +63,21 @@ function wp_remote_get($url, $options) {
 require dirname(__DIR__) . '/includes/modules/asm-proxy/class-module.php';
 function ok($condition, $message) { if (!$condition) throw new RuntimeException($message); echo "ok: $message\n"; }
 function report_request($year = 2026) { $req = new WP_REST_Request(); $req->set_param('title', 'Summary By Year'); $req->set_param('year', $year); return $req; }
-$report = $routes['/report'](report_request())->get_data();
+$report = plugin_asm_builtin_summary(report_request());
 ok($report[0]['cats_brought_in'] === 60 && $report[0]['cats_adopted'] === 15, 'Current-year built-in statistics aggregate three months, including nested transfers and only adoption outcomes');
 ok($report[0]['cats_vaccinated'] === null && $report[0]['cats_neutered'] === null && $report[0]['cats_chipped'] === null, 'Health totals absent from the standard API remain unknown');
-ok(count($requests) === 3 && !in_array('json_report', array_column($requests, 'method'), true), 'Default reporting needs no installed custom report and never requests future months');
+ok(count($requests) === 3 && !in_array('json_report', array_column($requests, 'method'), true), 'Built-in fallback needs no installed custom report and never requests future months');
 ok(array_values($transient_ttls) === [86400, 86400, 60, 60], 'Current period statistics honor the configured General cache while completed months are retained longer');
-$routes['/report'](report_request());
+plugin_asm_builtin_summary(report_request());
 ok(count($requests) === 3, 'A repeat visitor reuses cached yearly statistics');
-$past = $routes['/report'](report_request(2025))->get_data();
+$past = plugin_asm_builtin_summary(report_request(2025));
 ok($past[0]['cats_adopted'] === 60 && count($requests) === 15, 'A historical year aggregates all twelve months only when requested');
 $count = $routes['/in-care-count'](new WP_REST_Request())->get_data();
 ok($count === ['count' => 2, 'source' => 'asm_shelter_animals'], 'In-care counts use all shelter animals, filter cats and expose only the aggregate');
 ok(!isset(end($requests)['sensitive']), 'Personal data is never opted into at the ASM endpoint');
 $settings['proxy']['account'] = 'second-fixture-account';
 $fail_month = 2;
-$partial = $routes['/report'](report_request())->get_data();
+$partial = plugin_asm_builtin_summary(report_request());
 ok($partial[0]['cats_brought_in'] === null && $partial[0]['cats_adopted'] === null, 'One failed month cannot become a misleading partial annual total');
 ok(count($requests) === 18, 'Changing rescue accounts invalidates the aggregate cache');
 $shelter_invalid = true;
@@ -108,5 +111,29 @@ $settings['global']['stats_data_mode'] = 'built_in';
 $settings['global']['cache_stats_seconds'] = 0;
 $fail_month = 0;
 $before = count($requests);
-$routes['/report'](report_request()); $routes['/report'](report_request());
+plugin_asm_builtin_summary(report_request()); plugin_asm_builtin_summary(report_request());
 ok(count($requests) === $before + 6, 'Zero statistics cache seconds bypasses successful current-year and monthly caches immediately');
+$settings['global']['cache_stats_seconds'] = 60;
+$settings['proxy']['account'] = 'auto-full-report';
+$summary_report = [['YEAR' => 2026, 'CATS_BROUGHT_IN' => '43', 'CATS_ADOPTED' => 56, 'CATS_VACCINATED' => 41, 'CATS_NEUTERED' => 0, 'CATS_CHIPPED' => 38, 'PRIVATE_OWNER' => 'do not expose this column']];
+$before = count($requests);
+$automatic = $routes['/report'](report_request())->get_data()[0];
+ok($automatic['cats_vaccinated'] === 41 && $automatic['cats_neutered'] === 0 && $automatic['cats_chipped'] === 38, 'Automatic mode restores existing annual health totals, including explicit zeros');
+ok($automatic['cats_brought_in'] === 43 && $automatic['cats_adopted'] === 56 && count($requests) === $before + 1, 'A valid existing full report preserves earlier totals and avoids redundant monthly requests');
+ok(strpos(json_encode([$automatic, $transients]), 'do not expose this column') === false, 'Automatic report discovery stores and exposes only validated aggregate fields');
+$routes['/report'](report_request());
+ok(count($requests) === $before + 1, 'A cached existing report is reused without an upstream probe');
+$settings['proxy']['account'] = 'auto-partial-report';
+$summary_report = [['YEAR' => 2026, 'CATS_VACCINATED' => 7, 'CATS_NEUTERED' => 'unknown', 'CATS_CHIPPED' => 0]];
+$automatic = $routes['/report'](report_request())->get_data()[0];
+ok($automatic['cats_brought_in'] === 60 && $automatic['cats_adopted'] === 15 && $automatic['cats_vaccinated'] === 7 && $automatic['cats_neutered'] === null, 'Partial reports augment built-in totals without turning malformed health values into zero');
+$settings['proxy']['account'] = 'auto-missing-report';
+$summary_report = false;
+$before = count($requests);
+$automatic = $routes['/report'](report_request())->get_data()[0];
+$routes['/report'](report_request());
+ok($automatic['cats_adopted'] === 15 && $automatic['cats_chipped'] === null && count($requests) === $before + 4, 'Missing optional reports fall back to built-ins and are not probed on every view');
+$settings['proxy']['account'] = 'auto-other-year';
+$summary_report = [['YEAR' => 2025, 'CATS_VACCINATED' => 900]];
+$automatic = $routes['/report'](report_request())->get_data()[0];
+ok($automatic['cats_vaccinated'] === null, 'Health totals from a different year cannot populate the selected year');

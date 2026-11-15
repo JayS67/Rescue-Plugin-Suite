@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Statistics
  * Description: Adds the statistics UI via shortcode [stats] with settings.
- * Version: 15.2.0
+ * Version: 15.2.1
  * Author: Jordan Sutton | Webstax
  */
 
@@ -45,6 +45,7 @@ function plugin_stats_ui_default_options() {
     // Card styling
     'card_radius'      => 16,
     'card_padding'     => 24,
+    'card_padding_mobile' => 14,
 
     // Layout: 'grid' OR 'one_row' (kept for backwards compatibility)
     'layout_mode'      => 'grid',
@@ -69,6 +70,13 @@ function plugin_stats_ui_default_options() {
     'fs_paragraph_mobile'  => 14,
     'fs_paragraph_tablet'  => 16,
     'fs_paragraph_desktop' => 16,
+
+    'fs_number_mobile' => 28,
+    'fs_number_tablet' => 34,
+    'fs_number_desktop' => 40,
+    'icon_size_mobile' => 28,
+    'icon_size_tablet' => 36,
+    'icon_size_desktop' => 40,
 
     // Card size (px) - 0 means "auto"
     // Width = max-width per card, Height = min-height per card
@@ -445,6 +453,11 @@ function plugin_stats_ui_sanitize_options($input) {
     $v = isset($input[$k]) ? intval($input[$k]) : $d[$k];
     $out[$k] = max(10, min(80, $v));
   }
+  foreach (['mobile', 'tablet', 'desktop'] as $device) {
+    $out['fs_number_' . $device] = max(18, min(80, (int)($input['fs_number_' . $device] ?? $d['fs_number_' . $device])));
+    $out['icon_size_' . $device] = max(16, min(80, (int)($input['icon_size_' . $device] ?? $d['icon_size_' . $device])));
+  }
+  $out['card_padding_mobile'] = max(0, min(64, (int)($input['card_padding_mobile'] ?? $d['card_padding_mobile'])));
 
   // Card size constraints (px) - 0 allowed
   foreach ([
@@ -750,6 +763,7 @@ add_shortcode('stats', function () {
 
   wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
   wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
+  wp_enqueue_style('rescue-plugin-suite-statistics', PLUGIN_SUITE_URL . 'assets/css/statistics.css', ['rescue-plugin-suite-frontend'], PLUGIN_SUITE_VERSION);
 
   $font_css = empty($opts['font_family'])
     ? "font-family: inherit;"
@@ -797,6 +811,14 @@ add_shortcode('stats', function () {
     "--plugin-fs-p-m: " . (int)$opts['fs_paragraph_mobile'] . "px",
     "--plugin-fs-p-t: " . (int)$opts['fs_paragraph_tablet'] . "px",
     "--plugin-fs-p-d: " . (int)$opts['fs_paragraph_desktop'] . "px",
+    "--plugin-fs-n-m: " . (int)$opts['fs_number_mobile'] . "px",
+    "--plugin-fs-n-t: " . (int)$opts['fs_number_tablet'] . "px",
+    "--plugin-fs-n-d: " . (int)$opts['fs_number_desktop'] . "px",
+    "--plugin-icon-m: " . (int)$opts['icon_size_mobile'] . "px",
+    "--plugin-icon-t: " . (int)$opts['icon_size_tablet'] . "px",
+    "--plugin-icon-d: " . (int)$opts['icon_size_desktop'] . "px",
+    "--plugin-pad-m: " . (int)$opts['card_padding_mobile'] . "px",
+    "--plugin-pad-d: " . (int)$opts['card_padding'] . "px",
 
     "--plugin-card-w-m: " . $cardWm,
     "--plugin-card-w-t: " . $cardWt,
@@ -815,7 +837,7 @@ add_shortcode('stats', function () {
   ob_start();
   ?>
   <section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> <?php echo Plugin_UI_Suite_Plugin::widget_layout_attributes('stats'); ?> class="plugin-stats-ui-wrap rps-widget" aria-labelledby="<?php echo esc_attr($instance); ?>_main_title" aria-describedby="<?php echo esc_attr($instance); ?>_description" id="<?php echo esc_attr($instance); ?>" style="<?php echo esc_attr($font_css . ' ' . $vars_css); ?>">
-    <p class="rps-sr-only" id="<?php echo esc_attr($instance); ?>_description">Rescue impact statistics showing animal welfare outcomes for the selected year. Choose a year to update the totals. Each card gives a total and describes the outcome it measures.</p>
+    <p class="rps-sr-only" id="<?php echo esc_attr($instance); ?>_description">Rescue impact statistics showing animal welfare outcomes for the selected year. Choose a year to update the totals. Each card gives a total or explains when an annual total is unavailable, and describes the outcome it measures.</p>
     <style>
       /* Scoped only */
       #<?php echo esc_attr($instance); ?> { margin:0 !important; padding:0 !important; }
@@ -879,70 +901,15 @@ add_shortcode('stats', function () {
         border-style: solid !important;
         border-width: <?php echo $layout_preset !== 'band' && !empty($opts['card_border_enabled']) ? (int)$opts['card_border_weight'] : 0; ?>px !important;
         border-color: <?php echo esc_attr(!empty($opts['card_border_enabled']) ? ($opts['card_border_color'] ?: $opts['brand_color']) : 'transparent'); ?> !important;
-        padding: <?php echo (int) $opts['card_padding']; ?>px !important;
+        padding: var(--plugin-active-padding, <?php echo (int) $opts['card_padding_mobile']; ?>px) !important;
       }
 
       /* Card sizing (device-specific) */
       #<?php echo esc_attr($instance); ?> .counter-card{
         width: 100%;
+        max-width: var(--plugin-active-card-w, none) !important;
+        min-height: var(--plugin-active-card-h, auto) !important;
       }
-      @media (max-width: 639px){
-        #<?php echo esc_attr($instance); ?> .counter-card{
-          max-width: var(--plugin-card-w-m, none) !important;
-          min-height: var(--plugin-card-h-m, auto) !important;
-        }
-      }
-      @media (min-width: 640px) and (max-width: 1023px){
-        #<?php echo esc_attr($instance); ?> .counter-card{
-          max-width: var(--plugin-card-w-t, none) !important;
-          min-height: var(--plugin-card-h-t, auto) !important;
-        }
-      }
-      @media (min-width: 1024px){
-        #<?php echo esc_attr($instance); ?> .counter-card{
-          max-width: var(--plugin-card-w-d, none) !important;
-          min-height: var(--plugin-card-h-d, auto) !important;
-        }
-      }
-
-      /* Typography (device-specific) */
-      #<?php echo esc_attr($instance); ?> .plugin-heading {
-        font-size: var(--plugin-fs-h-m, 28px) !important;
-        font-weight: 800 !important;
-        line-height: 1.15;
-      }
-      #<?php echo esc_attr($instance); ?> .plugin-subheading {
-        font-size: var(--plugin-fs-s-m, 16px) !important;
-      }
-      #<?php echo esc_attr($instance); ?> .plugin-paragraph {
-        font-size: var(--plugin-fs-p-m, 14px) !important;
-      }
-      @media (min-width: 640px){
-        #<?php echo esc_attr($instance); ?> .plugin-heading { font-size: var(--plugin-fs-h-t, 36px) !important; }
-        #<?php echo esc_attr($instance); ?> .plugin-subheading { font-size: var(--plugin-fs-s-t, 18px) !important; }
-        #<?php echo esc_attr($instance); ?> .plugin-paragraph { font-size: var(--plugin-fs-p-t, 16px) !important; }
-      }
-      @media (min-width: 1024px){
-        #<?php echo esc_attr($instance); ?> .plugin-heading { font-size: var(--plugin-fs-h-d, 42px) !important; }
-        #<?php echo esc_attr($instance); ?> .plugin-subheading { font-size: var(--plugin-fs-s-d, 20px) !important; }
-        #<?php echo esc_attr($instance); ?> .plugin-paragraph { font-size: var(--plugin-fs-p-d, 16px) !important; }
-      }
-
-      /* One-row mode: preserve prior behaviour if selected */
-      <?php if ($layout_preset === 'compact'): ?>
-      @media (min-width: 640px) {
-        #<?php echo esc_attr($instance); ?> .counter-card { padding: 14px !important; }
-        #<?php echo esc_attr($instance); ?> .icon-float { width: 44px !important; height: 44px !important; margin-bottom: 10px !important; }
-        #<?php echo esc_attr($instance); ?> .icon-float svg { width: 22px !important; height: 22px !important; }
-        #<?php echo esc_attr($instance); ?> .stat-number { font-size: 1.6rem !important; line-height: 1.9rem !important; }
-        #<?php echo esc_attr($instance); ?> .stat-heading { font-size: 0.95rem !important; line-height: 1.15rem !important; }
-        #<?php echo esc_attr($instance); ?> .stat-caption { font-size: 0.78rem !important; line-height: 1.05rem !important; }
-      }
-      @media (min-width: 768px) {
-        #<?php echo esc_attr($instance); ?> .counter-card { padding: 16px !important; }
-        #<?php echo esc_attr($instance); ?> .stat-number { font-size: 1.75rem !important; }
-      }
-      <?php endif; ?>
     </style>
 
     <div class="rps-widget-backdrop min-h-full w-full overflow-x-hidden overflow-y-auto relative rounded-2xl"
@@ -1115,8 +1082,10 @@ add_shortcode('stats', function () {
           // Pick the configured layout for the embed width, not just the viewport.
           const width = Math.min(window.innerWidth, root.getBoundingClientRect().width);
           const device = width >= 1024 ? 'd' : (width >= 640 ? 't' : 'm');
+          root.dataset.rpsStatsDevice = device;
           const configuredCols = Number(getComputedStyle(root).getPropertyValue('--plugin-cols-' + device)) || 2;
           grid.style.gridTemplateColumns = `repeat(${configuredCols}, minmax(0, 1fr))`;
+          root.style.setProperty('--plugin-active-columns', configuredCols);
 
           const cards = getVisibleCards();
           resetGridOverrides(cards);
@@ -1128,6 +1097,7 @@ add_shortcode('stats', function () {
           if (cards.length < cols) {
             const activeCols = cards.length;
             grid.style.gridTemplateColumns = `repeat(${activeCols}, minmax(0, 1fr))`;
+            root.style.setProperty('--plugin-active-columns', activeCols);
 
             const remainder = cards.length % activeCols;
 
@@ -1248,7 +1218,11 @@ add_shortcode('stats', function () {
 
         function setText(id, v) {
           const el = byId(id);
-          if (el) el.textContent = v === null || v === undefined ? '—' : v;
+          if (el) {
+            const unavailable = v === null || v === undefined;
+            el.textContent = unavailable ? 'Not available' : v;
+            el.dataset.rpsUnavailable = unavailable ? 'true' : 'false';
+          }
         }
 
         async function renderYear(year) {
@@ -1271,11 +1245,11 @@ add_shortcode('stats', function () {
           }
           if (myToken !== renderToken) return;
           if (!row) {
-            showStatus('No statistics were supplied for this year. A dash means data was not supplied, not zero.');
+            showStatus('Annual totals are not available for the selected year.');
             return;
           }
           const missing = ['cats_brought_in','cats_adopted','cats_vaccinated','cats_neutered','cats_chipped'].some(key => row[key] === null);
-          showStatus([row.note, missing ? 'A dash means data was not supplied, not zero.' : ''].filter(Boolean).join(' '));
+          showStatus(missing ? 'Some annual totals are not available for the selected year.' : row.note);
 
           const labelEl = byId(ids.yearLabel);
           if (labelEl) labelEl.textContent = `${YEAR_LABEL_PREFIX} ${row.year}`;
@@ -1307,11 +1281,11 @@ add_shortcode('stats', function () {
             const n = await fetchInCareCount();
             if (myToken !== renderToken) return;
             setText(ids.count.in_care, n);
-            if (n === null) showStatus([row.note, 'A dash means data was not supplied, not zero.'].filter(Boolean).join(' '));
+            if (n === null) showStatus('Some totals are not available for the selected year.');
           } catch (e) {
             if (myToken !== renderToken) return;
-            valueEl.textContent = "—";
-            showStatus([row.note, 'The current in-care total is unavailable. A dash means data was not supplied, not zero.'].filter(Boolean).join(' '));
+            setText(ids.count.in_care, null);
+            showStatus('The current in-care total is not available. Please try again later.');
           } finally {
             updateGridLayout();
             syncIconFloat();
@@ -1322,6 +1296,17 @@ add_shortcode('stats', function () {
           showStatus("Loading stats…");
           // Make the loading status visible while the selected year's data is fetched.
           root.classList.add('plugin-ready');
+          updateGridLayout();
+          if ('ResizeObserver' in window) {
+            let previousWidth = 0;
+            const observer = new ResizeObserver(entries => {
+              const width = entries[0]?.contentRect.width || 0;
+              if (Math.abs(width - previousWidth) < 1) return;
+              previousWidth = width;
+              updateGridLayout();
+            });
+            observer.observe(root);
+          }
           try {
             if (!BUILT_IN_STATS) rows = await fetchReportRowsViaProxy();
 
@@ -1336,6 +1321,7 @@ add_shortcode('stats', function () {
               requestAnimationFrame(() => root.classList.add('plugin-ready'));
             });
           } catch (err) {
+            Object.values(ids.count).forEach(id => setText(id, null));
             showStatus('Statistics could not be loaded. Please try again later.', true);
             // Still reveal so user can see error message
             root.classList.add('plugin-ready');

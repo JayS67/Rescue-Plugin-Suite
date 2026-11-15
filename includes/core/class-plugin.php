@@ -390,6 +390,8 @@ final class Plugin_UI_Suite_Plugin {
         'fs_heading_mobile' => 28, 'fs_heading_tablet' => 36, 'fs_heading_desktop' => 42,
         'fs_subheading_mobile' => 16, 'fs_subheading_tablet' => 18, 'fs_subheading_desktop' => 20,
         'fs_paragraph_mobile' => 14, 'fs_paragraph_tablet' => 16, 'fs_paragraph_desktop' => 16,
+        'fs_number_mobile' => 28, 'fs_number_tablet' => 34, 'fs_number_desktop' => 40,
+        'icon_size_mobile' => 28, 'icon_size_tablet' => 36, 'icon_size_desktop' => 40, 'card_padding_mobile' => 14,
         'card_w_mobile' => 0, 'card_w_tablet' => 0, 'card_w_desktop' => 0, 'card_h_mobile' => 0, 'card_h_tablet' => 0, 'card_h_desktop' => 0,
         'label_brought' => 'Brought In', 'caption_brought' => 'Found their way to us', 'icon_brought' => 'heart',
         'label_adopted' => 'Adopted', 'caption_adopted' => 'Furever homes found', 'icon_adopted' => 'home',
@@ -668,6 +670,22 @@ final class Plugin_UI_Suite_Plugin {
     }
     wp_enqueue_style('rescue-plugin-suite-utilities', PLUGIN_SUITE_URL . 'assets/css/utilities.css', [], PLUGIN_SUITE_VERSION);
     wp_enqueue_style('rescue-plugin-suite-frontend', PLUGIN_SUITE_URL . 'assets/css/frontend.css', ['rescue-plugin-suite-utilities'], PLUGIN_SUITE_VERSION);
+    wp_enqueue_style('rescue-plugin-suite-widget-experiences', PLUGIN_SUITE_URL . 'assets/css/widget-experiences.css', ['rescue-plugin-suite-frontend'], PLUGIN_SUITE_VERSION);
+    // Load layout rules in the head so server-rendered cards never flash as oversized images.
+    if (!$profile && isset($post)) {
+      $content = (string)$post->post_content;
+      $map = self::get_settings()['shortcodes'];
+      $has_layout = false;
+      foreach (['adoptables','adopted','statistics'] as $module) {
+        if (has_shortcode($content, $map[$module] ?? ($module === 'statistics' ? 'stats' : $module)) || has_block('asm-suite/' . $module, $content)) $has_layout = true;
+      }
+      if (has_shortcode($content, 'plugin_adoptables_ui') || has_shortcode($content, 'plugin_adopted_ui')) $has_layout = true;
+      if ($has_layout) self::enqueue_widget_layout_assets();
+      if (has_shortcode($content, $map['statistics'] ?? 'stats') || has_block('asm-suite/statistics', $content)) {
+        wp_enqueue_style('rescue-plugin-suite-statistics', PLUGIN_SUITE_URL . 'assets/css/statistics.css', ['rescue-plugin-suite-frontend'], PLUGIN_SUITE_VERSION);
+      }
+    }
+
   }
 
   public static function enqueue_admin_assets($hook) {
@@ -1098,6 +1116,9 @@ final class Plugin_UI_Suite_Plugin {
         if (is_int($default)) {
           $min=0; $max=1200;
           if (strpos($key,'rows_')===0 or strpos($key,'cols_')===0) $max=12;
+          elseif (strpos($key,'fs_number_')===0) {$min=18; $max=80;}
+          elseif (strpos($key,'icon_size_')===0) {$min=16; $max=80;}
+          elseif ($key==='card_padding_mobile') {$min=0; $max=64;}
           elseif (strpos($key,'fs_')===0) {$min=10; $max=80;}
           elseif (strpos($key,'fw_')===0) {$min=100; $max=900;}
           elseif (in_array($key,['paw_count'],true)) {$min=0; $max=80;}
@@ -1682,12 +1703,11 @@ final class Plugin_UI_Suite_Plugin {
     echo '</table></div>';
 
     echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='labels'?'active':'').'" data-subtab="labels"><h2>Reservation labels</h2><table class="form-table">';
+    self::row('Status placement', '<p class="description">Status labels sit beside or below the square photograph so they do not cover the animal.</p>');
     ob_start(); self::checkbox_input('adoptables','show_reservation_label',$o['show_reservation_label'],'Show reservation label on cards and modal'); self::row('Show reservation label', ob_get_clean());
     ob_start(); self::checkbox_input('adoptables','show_pending_reservation_label',$o['show_pending_reservation_label'] ?? 1,'Show Pending Adoption labels'); self::row('Pending Adoption labels', ob_get_clean());
     ob_start(); self::checkbox_input('adoptables','show_other_reservation_label',$o['show_other_reservation_label'] ?? 1,'Show other active reservation labels'); self::row('Other reservation labels', ob_get_clean());
     foreach (['reservation_pending_label'=>'Pending Adoption label text','reservation_active_label'=>'Other active reservation label text'] as $k=>$label){ ob_start(); self::text_input('adoptables',$k,$o[$k]); self::row($label, ob_get_clean()); }
-    ob_start(); self::select_input('adoptables','reservation_label_halign',$o['reservation_label_halign'],['left'=>'Left','center'=>'Center','right'=>'Right']); self::row('Reservation label horizontal alignment', ob_get_clean());
-    ob_start(); self::select_input('adoptables','reservation_label_valign',$o['reservation_label_valign'],['top'=>'Top','bottom'=>'Bottom']); self::row('Reservation label vertical alignment', ob_get_clean());
     echo '</table></div>';
 
     echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='sharing'?'active':'').'" data-subtab="sharing"><h2>Sharing & apply</h2><table class="form-table">';
@@ -1701,7 +1721,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (['enable_filter_age'=>'Age','enable_filter_sex'=>'Sex','enable_filter_breed'=>'Breed','enable_exclude_pending_filter'=>'Hide pending adoption','enable_modal_slideshow_controls'=>'Enable modal slideshow controls','enable_favourites'=>'Enable favourites','detect_bonded_from_description'=>'Detect bonded from description','detect_indoor_only_from_description'=>'Detect indoor only from description'] as $k=>$label){ ob_start(); self::checkbox_input('adoptables',$k,$o[$k] ?? 0,$label); self::row($label, ob_get_clean()); }
     foreach (['filter_age_label'=>'Age filter label','filter_sex_label'=>'Sex filter label','filter_breed_label'=>'Breed filter label','filter_exclude_pending_label'=>'Hide pending label','favourites_label_text'=>'Favourites label','show_only_favourites_label'=>'Show favourites label','compare_button_text'=>'Compare button text','bonded_label_text'=>'Bonded badge label','indoor_only_label_text'=>'Indoor only badge label','fallback_description'=>'Fallback description'] as $k=>$label){ ob_start(); if($k==='fallback_description') self::textarea_input('adoptables',$k,$o[$k] ?? '',3); else self::text_input('adoptables',$k,$o[$k] ?? ''); self::row($label, ob_get_clean()); }
     foreach (['bonded_label_bg_color'=>'Bonded badge background','bonded_label_text_color'=>'Bonded badge text','indoor_only_label_bg_color'=>'Indoor badge background','indoor_only_label_text_color'=>'Indoor badge text'] as $k=>$label){ ob_start(); self::colour_input('adoptables',$k,$o[$k] ?? '#ffffff'); self::row($label, ob_get_clean()); }
-    ob_start(); self::select_input('adoptables','favourite_button_position',$o['favourite_button_position'] ?? 'top_left',['top_left'=>'Top left','top_right'=>'Top right','bottom_left'=>'Bottom left','bottom_right'=>'Bottom right','hidden'=>'Hidden']); self::row('Favourite button position', ob_get_clean());
+    ob_start(); self::select_input('adoptables','favourite_button_position',$o['favourite_button_position'] ?? 'top_left',['top_left'=>'Top left','top_right'=>'Top right','bottom_left'=>'Bottom left','bottom_right'=>'Bottom right','hidden'=>'Hidden']); self::row('Favourite button position', ob_get_clean() . '<p class="description">Corner positions apply to classic grid cards. Compact, thumbnail and story rows place favourites below the photo; Hidden applies to every layout.</p>');
     echo '</table></div>';
 
     if ($sub === 'embed') { self::render_embed_card('adoptables','Adoptables', self::sanitize_shortcode_tag(self::get_settings()['shortcodes']['adoptables'] ?? 'adoptables'), 'Place your available animals on adoption pages.'); self::preview_frame('adoptables'); } else { echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='layout'?'active':'').'" data-subtab="layout"><h2>Adoptables card layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['image'=>'Image','reservation_badge'=>'Reservation badge','name_meta'=>'Name and meta','breed_line'=>'Breed line','favourite_button'=>'Favourite button']); echo '<h2>Adoptables modal layout</h2>'; self::sortable_list(self::field_name('adoptables','builder_modal_order'), preg_split('/\R+/', (string)($o['builder_modal_order'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['gallery'=>'Gallery','badges'=>'Badges','info_cards'=>'Info cards','tips'=>'Tips','description'=>'Description','global_text'=>'Global text','contact_footer'=>'Contact footer','custom_buttons'=>'Custom buttons']); echo '<h2>Header actions</h2>'; self::sortable_list(self::field_name('adoptables','builder_header_actions'), preg_split('/\R+/', (string)($o['builder_header_actions'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), ['apply'=>'Apply','favourite'=>'Favourite','share'=>'Share','close'=>'Close']); echo '</div>'; }
@@ -1772,7 +1792,7 @@ final class Plugin_UI_Suite_Plugin {
       foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_radius','Card corner radius (px)',0,200,1],['card_padding','Card padding (px)',0,200,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('stats',$r[0],$o[$r[0]]); else self::number_input('stats',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
       ob_start(); self::checkbox_input('stats','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
       self::render_widget_layout_controls('stats', $o);
-      ob_start(); self::select_input('global','stats_data_mode',$g['stats_data_mode'] ?? 'built_in',['built_in'=>'Built-in system data (recommended)','custom_report'=>'Optional custom reports (advanced)']); self::row('Impact statistics source', ob_get_clean() . '<p class="description">ASM uses its built-in monthly statistics and animals-in-care endpoints. Treatment totals need an optional report and display as unavailable when the system does not supply them. Custom report mode uses Summary By Year and Cats In Care Now. Other systems use configured statistics feeds or available adoption records.</p>');
+      ob_start(); self::select_input('global','stats_data_mode',$g['stats_data_mode'] ?? 'built_in',['built_in'=>'Automatic: system data and existing reports','custom_report'=>'Optional custom reports (advanced)']); self::row('Impact statistics source', ob_get_clean() . '<p class="description">ASM automatically reuses an existing Summary By Year report and fills missing intake/adoption totals from built-in endpoints. No new report is required. Health totals show Not available when your existing reports or connected feeds do not supply them. Custom report mode uses Summary By Year and Cats In Care Now. Other systems retain configured feeds or available adoption records.</p>');
       echo '</table></div>';
     } elseif($sub==='text') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Text</h2><table class="form-table">';
@@ -1781,11 +1801,13 @@ final class Plugin_UI_Suite_Plugin {
     } elseif($sub==='responsive') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Responsive</h2><table class="form-table">';
       foreach (['cols_mobile'=>'Mobile columns','cols_tablet'=>'Tablet columns','cols_desktop'=>'Desktop columns'] as $key=>$label) { ob_start(); self::number_input('stats',$key,$o[$key],1,12); self::row($label, ob_get_clean()); }
+      ob_start(); self::number_input('stats','card_padding_mobile',$o['card_padding_mobile'],0,64); self::row('Mobile card padding (px)', ob_get_clean());
       foreach ([['Card width M / T / PC','card_w_mobile','card_w_tablet','card_w_desktop'],['Card height M / T / PC','card_h_mobile','card_h_tablet','card_h_desktop']] as $r){ ob_start(); echo '<div class="plugin-suite-inline">'; self::number_input('stats',$r[1],$o[$r[1]],0,1600); self::number_input('stats',$r[2],$o[$r[2]],0,1600); self::number_input('stats',$r[3],$o[$r[3]],0,1600); echo '</div>'; self::row($r[0], ob_get_clean()); }
       echo '</table></div>';
     } elseif($sub==='typography') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Typography</h2><table class="plugin-suite-table"><thead><tr><th>Text</th><th>Mobile</th><th>Tablet</th><th>PC</th></tr></thead><tbody>';
-      foreach (['heading'=>'Heading','subheading'=>'Subheading','paragraph'=>'Paragraph'] as $slug=>$label){ echo '<tr><td>'.esc_html($label).'</td><td>'; self::number_input('stats','fs_'.$slug.'_mobile',$o['fs_'.$slug.'_mobile'],10,80); echo '</td><td>'; self::number_input('stats','fs_'.$slug.'_tablet',$o['fs_'.$slug.'_tablet'],10,80); echo '</td><td>'; self::number_input('stats','fs_'.$slug.'_desktop',$o['fs_'.$slug.'_desktop'],10,80); echo '</td></tr>'; }
+      foreach (['heading'=>'Widget title','number'=>'Totals','subheading'=>'Card headings / year label','paragraph'=>'Captions / footer'] as $slug=>$label){ $min = $slug === 'number' ? 18 : 10; echo '<tr><td>'.esc_html($label).'</td><td>'; self::number_input('stats','fs_'.$slug.'_mobile',$o['fs_'.$slug.'_mobile'],$min,80); echo '</td><td>'; self::number_input('stats','fs_'.$slug.'_tablet',$o['fs_'.$slug.'_tablet'],$min,80); echo '</td><td>'; self::number_input('stats','fs_'.$slug.'_desktop',$o['fs_'.$slug.'_desktop'],$min,80); echo '</td></tr>'; }
+      echo '<tr><td>Icon size (px)</td>'; foreach (['mobile','tablet','desktop'] as $device) { echo '<td>'; self::number_input('stats','icon_size_'.$device,$o['icon_size_'.$device],16,80); echo '</td>'; } echo '</tr>';
       echo '</tbody></table></div>';
     } elseif($sub==='cards') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Cards</h2><table class="form-table">'; ob_start(); self::sortable_list(self::field_name('stats','builder_card_order'), preg_split('/\R+/', (string)($o['builder_card_order'] ?? $o['card_order']), -1, PREG_SPLIT_NO_EMPTY), ['brought'=>'Brought In','adopted'=>'Adopted','vaccinated'=>'Vaccinated','neutered'=>'Neutered','chipped'=>'Microchipped','in_care'=>'In Our Care']); self::row('Card order', ob_get_clean()); echo '</table><table class="plugin-suite-table"><thead><tr><th>Card</th><th>Heading</th><th>Caption</th><th>Icon</th></tr></thead><tbody>';

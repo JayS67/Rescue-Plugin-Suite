@@ -1,3 +1,12 @@
+## 15.2.1
+
+- Fix fatal errors in payment-provider integrations and preserve other settings when saving individual providers or donation sections.
+- Keep animal cards equal in height with square, uncropped photos across grid, compact, thumbnail, list and blog layouts.
+- Preserve paragraph and line breaks in bounded story previews; keep status labels and row favourites clear of photographs.
+- Replace oversized blog images with compact editorial rows and refine public widget surfaces, spacing and controls.
+- Restore impact metrics from existing annual reports automatically while retaining built-in ASM fallback.
+- Make total, icon, heading and caption sizing controls work at mobile, tablet and desktop embed widths.
+
 ## 15.2.0
 
 - Add a top-level suite admin menu with section links and compatible redirects for older settings URLs.

@@ -39,7 +39,9 @@ const context = {
   Object,
 };
 vm.createContext(context);
-vm.runInContext(`${source.slice(start, end)}; this.renderCard = cardTemplate;`, context);
+const previewStart = source.indexOf('  function cardExcerpt(');
+const previewEnd = source.indexOf('  function cardTemplate(a){', previewStart);
+vm.runInContext(`${source.slice(previewStart, previewEnd)}\n${source.slice(start, end)}; this.renderCard = cardTemplate;`, context);
 
 const markup = context.renderCard({
   ANIMALID: '42',

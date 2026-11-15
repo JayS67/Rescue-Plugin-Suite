@@ -526,27 +526,36 @@ final class Plugin_Payments_Module {
     $input = is_array($input) ? wp_unslash($input) : [];
     $clean = self::settings();
     $providers = self::gateway_manager()->all();
+    // Integrations submits one provider, while Donations submits its own settings.
+    // A provider-only save must not reset donation options or other credentials.
+    if (array_key_exists('_integration_provider', $input)) {
+      $id = is_scalar($input['_integration_provider']) ? sanitize_key((string)$input['_integration_provider']) : '';
+      $values = $input['provider_settings'][$id] ?? null;
+      if (!isset($providers[$id]) || !is_array($values)) return $clean;
+      $clean['provider_settings'][$id] = self::sanitize_provider_settings($clean['provider_settings'][$id] ?? [], $values, $providers[$id]);
+      self::audit('integration_saved', ['provider'=>$id]);
+      return apply_filters('plugin_payments_sanitized_settings', $clean, $input);
+    }
     $active = sanitize_key($input['active_provider'] ?? $clean['active_provider']);
     $clean['active_provider'] = isset($providers[$active]) ? $active : (isset($providers['stripe']) ? 'stripe' : (string) array_key_first($providers));
     foreach ($providers as $id=>$provider) {
-      $clean['provider_settings'][$id]['enabled'] = !empty($input['provider_settings'][$id]['enabled']) ? 1 : 0;
-      foreach ($provider->get_configuration_fields() as $key=>$field) {
-        $v = $input['provider_settings'][$id][$key] ?? '';
-        $field_type = $field['type'] ?? 'text';
-        if ($field_type === 'checkbox') $clean['provider_settings'][$id][$key] = !empty($v)?1:0; elseif ($field_type === 'password' && $v === '') $clean['provider_settings'][$id][$key] = $clean['provider_settings'][$id][$key] ?? ''; else $clean['provider_settings'][$id][$key] = sanitize_text_field((string)$v);
-      }
+      if (!isset($input['provider_settings'][$id]) || !is_array($input['provider_settings'][$id])) continue;
+      $clean['provider_settings'][$id] = self::sanitize_provider_settings($clean['provider_settings'][$id] ?? [], $input['provider_settings'][$id], $provider);
     }
-    $g=$input['general']??[];
-    foreach(['title','subtitle','intro_text','button_text','thank_you_message'] as $k) $clean['general'][$k]=sanitize_text_field($g[$k]??$clean['general'][$k]);
-    foreach(['success_url','cancel_url','learn_more_url'] as $k) $clean['general'][$k]=esc_url_raw($g[$k]??$clean['general'][$k]);
-    $clean['general']['enabled']=!empty($g['enabled'])?1:0;
-    $clean['general']['test_mode']=!empty($g['test_mode'])?1:0;
-    $clean['general']['live_mode']=!empty($g['live_mode'])?1:0;
-    $clean['general']['enable_campaigns']=!empty($g['enable_campaigns'])?1:0;
-    $clean['general']['currency']=preg_replace('/[^A-Z]/','',strtoupper($g['currency']??$clean['general']['currency'])) ?: 'GBP';
-    $clean['general']['default_type']=in_array(($g['default_type']??'one_off'),['one_off','recurring'],true)?$g['default_type']:'one_off';
+    if (isset($input['general']) && is_array($input['general'])) {
+      $g=$input['general'];
+      foreach(['title','subtitle','intro_text','button_text','thank_you_message'] as $k) $clean['general'][$k]=sanitize_text_field($g[$k]??$clean['general'][$k]);
+      foreach(['success_url','cancel_url','learn_more_url'] as $k) $clean['general'][$k]=esc_url_raw($g[$k]??$clean['general'][$k]);
+      $clean['general']['enabled']=!empty($g['enabled'])?1:0;
+      $clean['general']['test_mode']=!empty($g['test_mode'])?1:0;
+      $clean['general']['live_mode']=!empty($g['live_mode'])?1:0;
+      $clean['general']['enable_campaigns']=!empty($g['enable_campaigns'])?1:0;
+      $clean['general']['currency']=preg_replace('/[^A-Z]/','',strtoupper($g['currency']??$clean['general']['currency'])) ?: 'GBP';
+      $clean['general']['default_type']=in_array(($g['default_type']??$clean['general']['default_type']),['one_off','recurring'],true)?($g['default_type']??$clean['general']['default_type']):'one_off';
+    }
     foreach(['one_off','recurring'] as $section){
-      $in=$input[$section]??[];
+      if (!isset($input[$section]) || !is_array($input[$section])) continue;
+      $in=$input[$section];
       $clean[$section]['enabled']=!empty($in['enabled'])?1:0;
       $clean[$section]['allow_custom']=!empty($in['allow_custom'])?1:0;
       foreach(['min','max','default'] as $k) $clean[$section][$k]=max(0,(float)($in[$k]??$clean[$section][$k]));
@@ -556,32 +565,51 @@ final class Plugin_Payments_Module {
         $clean[$section]['presets'][]=['amount'=>(string)max(0,(float)$row['amount']),'description'=>sanitize_text_field($row['description']??''),'icon'=>sanitize_text_field($row['icon']??''),'colour'=>sanitize_hex_color($row['colour']??'') ?: '#401268','campaign'=>sanitize_key($row['campaign']??'')];
       }
     }
-    $clean['campaigns']=self::sanitize_campaigns($input['campaigns']??[]);
-    $ga=$input['gift_aid']??[];
-    $clean['gift_aid']['enabled']=!empty($ga['enabled'])?1:0;
-    $clean['gift_aid']['required']=!empty($ga['required'])?1:0;
-    $clean['gift_aid']['store_declaration']=!empty($ga['store_declaration'])?1:0;
-    $clean['gift_aid']['wording']=sanitize_text_field($ga['wording']??$clean['gift_aid']['wording']);
-    $clean['gift_aid']['declaration']=sanitize_textarea_field($ga['declaration']??$clean['gift_aid']['declaration']);
-    $fr=$input['fee_recovery']??[];
-    $clean['fee_recovery']['enabled']=!empty($fr['enabled'])?1:0;
-    $clean['fee_recovery']['payer']=in_array(($fr['payer']??'rescue'), ['rescue','donor'], true) ? $fr['payer'] : 'rescue';
-    $clean['fee_recovery']['override_defaults']=!empty($fr['override_defaults'])?1:0;
-    $clean['fee_recovery']['percentage']=$clean['fee_recovery']['override_defaults'] ? (string)max(0,(float)($fr['percentage']??0)) : '';
-    $clean['fee_recovery']['fixed']=$clean['fee_recovery']['override_defaults'] ? (string)max(0,(float)($fr['fixed']??0)) : '';
-    $clean['fee_recovery']['wording']=sanitize_text_field($fr['wording']??$clean['fee_recovery']['wording']);
-    $a=$input['appearance']??[];
-    foreach(['primary','background','text'] as $k) $clean['appearance'][$k]=sanitize_hex_color($a[$k]??$clean['appearance'][$k]) ?: $clean['appearance'][$k];
-    $clean['appearance']['font_family']=sanitize_text_field($a['font_family']??$clean['appearance']['font_family']);
-    $clean['appearance']['button_style']=in_array(($a['button_style']??'rounded'),['rounded','square','pill'],true)?$a['button_style']:'rounded';
-    $clean['appearance']['spacing']=max(0,min(64,(int)($a['spacing']??16)));
-    $clean['appearance']['radius']=max(0,min(48,(int)($a['radius']??16)));
-    $clean['appearance']['shadow']=!empty($a['shadow'])?1:0;
-    $clean['appearance']['mode']=($a['mode']??'light')==='dark'?'dark':'light';
-    $clean['appearance']['show_logo']=!empty($a['show_logo'])?1:0;
+    if (array_key_exists('campaigns', $input)) $clean['campaigns']=self::sanitize_campaigns($input['campaigns']);
+    if (isset($input['gift_aid']) && is_array($input['gift_aid'])) {
+      $ga=$input['gift_aid'];
+      $clean['gift_aid']['enabled']=!empty($ga['enabled'])?1:0;
+      $clean['gift_aid']['required']=!empty($ga['required'])?1:0;
+      $clean['gift_aid']['store_declaration']=!empty($ga['store_declaration'])?1:0;
+      $clean['gift_aid']['wording']=sanitize_text_field($ga['wording']??$clean['gift_aid']['wording']);
+      $clean['gift_aid']['declaration']=sanitize_textarea_field($ga['declaration']??$clean['gift_aid']['declaration']);
+    }
+    if (isset($input['fee_recovery']) && is_array($input['fee_recovery'])) {
+      $fr=$input['fee_recovery'];
+      $clean['fee_recovery']['enabled']=!empty($fr['enabled'])?1:0;
+      $clean['fee_recovery']['payer']=in_array(($fr['payer']??$clean['fee_recovery']['payer']), ['rescue','donor'], true) ? ($fr['payer']??$clean['fee_recovery']['payer']) : 'rescue';
+      $clean['fee_recovery']['override_defaults']=!empty($fr['override_defaults'])?1:0;
+      $clean['fee_recovery']['percentage']=$clean['fee_recovery']['override_defaults'] ? (string)max(0,(float)($fr['percentage']??0)) : '';
+      $clean['fee_recovery']['fixed']=$clean['fee_recovery']['override_defaults'] ? (string)max(0,(float)($fr['fixed']??0)) : '';
+      $clean['fee_recovery']['wording']=sanitize_text_field($fr['wording']??$clean['fee_recovery']['wording']);
+    }
+    if (isset($input['appearance']) && is_array($input['appearance'])) {
+      $a=$input['appearance'];
+      foreach(['primary','background','text'] as $k) $clean['appearance'][$k]=sanitize_hex_color($a[$k]??$clean['appearance'][$k]) ?: $clean['appearance'][$k];
+      $clean['appearance']['font_family']=sanitize_text_field($a['font_family']??$clean['appearance']['font_family']);
+      $clean['appearance']['button_style']=in_array(($a['button_style']??$clean['appearance']['button_style']),['rounded','square','pill'],true)?($a['button_style']??$clean['appearance']['button_style']):'rounded';
+      $clean['appearance']['spacing']=max(0,min(64,(int)($a['spacing']??16)));
+      $clean['appearance']['radius']=max(0,min(48,(int)($a['radius']??16)));
+      $clean['appearance']['shadow']=!empty($a['shadow'])?1:0;
+      $clean['appearance']['mode']=($a['mode']??'light')==='dark'?'dark':'light';
+      $clean['appearance']['show_logo']=!empty($a['show_logo'])?1:0;
+    }
     self::audit('settings_saved',['provider'=>$clean['active_provider']]);
     return apply_filters('plugin_payments_sanitized_settings',$clean,$input);
   }
+  private static function sanitize_provider_settings($current, array $input, Plugin_Payment_Provider_Interface $provider) {
+    $clean = is_array($current) ? $current : [];
+    $clean['enabled'] = !empty($input['enabled']) ? 1 : 0;
+    foreach ($provider->get_configuration_fields() as $key=>$field) {
+      $type = $field['type'] ?? 'text';
+      if ($type === 'checkbox') { $clean[$key] = !empty($input[$key]) ? 1 : 0; continue; }
+      if (!array_key_exists($key, $input) || !is_scalar($input[$key])) continue;
+      $value = sanitize_text_field((string)$input[$key]);
+      if ($type !== 'password' || $value !== '') $clean[$key] = $value;
+    }
+    return $clean;
+  }
+
   public static function audit($event,$data=[]) {
     $entry = array_merge(['time'=>current_time('mysql'),'event'=>sanitize_key($event),'user'=>get_current_user_id()],['data'=>$data]);
     $log = get_option(self::AUDIT_KEY, []);
@@ -1254,24 +1282,28 @@ final class Plugin_Payments_Module {
   }
 
   public static function render_integration_provider_panel($integration_id) {
+    if (!current_user_can(self::admin_capability())) return;
     $id = str_replace('payment-', '', sanitize_key($integration_id));
     $providers = self::gateway_manager()->all();
     if (empty($providers[$id])) { echo '<div class="plugin-suite-card"><p>'.esc_html__('Payment provider not found.', 'plugin-ui-suite').'</p></div>'; return; }
-    $settings = self::get_settings();
+    $settings = self::settings();
     $name = self::OPTION_KEY;
     $provider = $providers[$id];
     $enabled = !empty($settings['provider_settings'][$id]['enabled']);
-    $webhook = rest_url('plugin-payments/v1/'.$id.'-webhook');
-    $status = $provider->validate_configuration($settings['provider_settings'][$id] ?? []);
+    $webhook = in_array($id, ['stripe','paypal','gocardless'], true) ? rest_url('plugin-payments/v1/'.$id.'-webhook') : '';
+    $provider_settings = is_array($settings['provider_settings'][$id] ?? null) ? $settings['provider_settings'][$id] : [];
+    $status = $provider->validate_configuration($provider_settings);
     echo '<form method="post" action="options.php">'; settings_fields('plugin_payments_settings');
     echo '<input type="hidden" name="_wp_http_referer" value="'.esc_url(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-'.$id], admin_url('admin.php'))).'" />';
+    echo '<input type="hidden" name="'.esc_attr($name).'[_integration_provider]" value="'.esc_attr($id).'" />';
     echo '<input type="hidden" name="'.esc_attr($name).'[active_provider]" value="'.esc_attr($settings['active_provider']).'">';
     echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html($provider->get_name()).' integration</h2><p class="description">Connect this payment service here. Payments only controls donation behaviour, campaigns, widget wording and reports.</p><table class="form-table" role="presentation">';
     echo '<tr><th>'.esc_html__('Enable integration','plugin-ui-suite').'</th><td><label><input type="checkbox" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).'][enabled]" value="1" '.checked($enabled, true, false).'/> '.esc_html__('Allow this provider to take donations','plugin-ui-suite').'</label></td></tr>';
-    echo '<tr><th>'.esc_html__('Webhook URL','plugin-ui-suite').'</th><td><code>'.esc_html($webhook).'</code><p class="description">Copy this URL into the provider dashboard when webhooks are required.</p></td></tr>';
-    echo '<tr><th>'.esc_html__('Connection status','plugin-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Connected':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
+    if ($webhook !== '') echo '<tr><th>'.esc_html__('Webhook URL','plugin-ui-suite').'</th><td><code>'.esc_html($webhook).'</code><p class="description">Copy this URL into the provider dashboard when webhooks are required.</p></td></tr>';
+    else echo '<tr><th>'.esc_html__('Checkout','plugin-ui-suite').'</th><td><p class="description">This provider uses hosted checkout. The suite does not provide a webhook endpoint for this adapter.</p></td></tr>';
+    echo '<tr><th>'.esc_html__('Connection status','plugin-ui-suite').'</th><td><strong>'.esc_html($status['connected']?'Configuration ready':'Needs configuration').'</strong><p class="description">'.esc_html($status['message']).'</p></td></tr>';
     foreach($provider->get_configuration_fields() as $key=>$f){
-      $val=$settings['provider_settings'][$id][$key]??'';
+      $val=$provider_settings[$key]??'';
       echo '<tr><th><label for="ssp-integration-'.esc_attr($id.'-'.$key).'">'.esc_html($f['label']).'</label></th><td>';
       if(($f['type'] ?? 'text')==='checkbox') echo '<input id="ssp-integration-'.esc_attr($id.'-'.$key).'" type="checkbox" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="1" '.checked($val,1,false).'/>';
       else { $display_val = ($f['type'] ?? 'text')==='password' ? '' : $val; echo '<input id="ssp-integration-'.esc_attr($id.'-'.$key).'" class="regular-text" type="'.esc_attr($f['type'] ?? 'text').'" name="'.esc_attr($name).'[provider_settings]['.esc_attr($id).']['.esc_attr($key).']" value="'.esc_attr($display_val).'" autocomplete="off"/>'; if(($f['type'] ?? '')==='password' && $val !== '') echo '<p class="description">'.esc_html__('Saved. Leave blank to keep the existing value.','plugin-ui-suite').'</p>'; }

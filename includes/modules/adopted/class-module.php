@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
- * Version: 15.2.0
+ * Version: 15.2.1
  * Author: Jordan Sutton | Webstax
  */
 
@@ -851,7 +851,7 @@ final class Plugin_Adopted_UI_Shortcode {
           <div class="rps-card-details" style="padding:var(--plugin-card-pad);">
             <h3 class="rps-card-name plugin-card-name" style="margin:0;color:var(--plugin-text);"><?php if ($seo_url !== '') : ?><a href="<?php echo esc_url($seo_url); ?>" style="color:inherit;text-decoration:none;"><?php echo esc_html($seo_name); ?></a><?php else : ?><?php echo esc_html($seo_name); ?><?php endif; ?></h3>
             <p class="rps-card-meta plugin-card-meta" style="margin:.4rem 0 0;color:var(--plugin-muted);"><?php echo esc_html(implode(' • ', array_filter([$seo_sex, $seo_age, $seo_breed]))); ?></p>
-            <?php if ($seo_story !== '') : ?><p class="rps-card-excerpt" style="margin:.75rem 0 0;color:var(--plugin-text);line-height:1.6;"><?php echo esc_html(wp_trim_words($seo_story, 28)); ?></p><?php endif; ?>
+            <?php if ($seo_story !== '') : ?><p class="rps-card-excerpt" style="margin:.75rem 0 0;color:var(--plugin-text);line-height:1.6;"><?php echo esc_html(plugin_suite_card_excerpt($seo_story)); ?></p><?php endif; ?>
           </div>
         </article>
       <?php endforeach; ?>
@@ -1363,6 +1363,32 @@ final class Plugin_Adopted_UI_Shortcode {
     return `${v} ${h}`;
   }
 
+  // Preview text stays plain while retaining the author's paragraphs and line breaks.
+  function cardExcerpt(value, maxWords = 34, maxChars = 360){
+    let text = String(value ?? '').replace(/\r\n?/g, '\n')
+      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+      .replace(/<br\b[^>]*>|<\/(?:p|div|li|h[1-6]|blockquote)\s*>/gi, '\n')
+      .replace(/<[^>]*>/g, '');
+    if (text.includes('&')) {
+      const decoder = document.createElement('textarea');
+      // Decode only an entity at a time: feed markup is never inserted into a DOM.
+      text = text.replace(/&(?:#\d+|#x[\da-f]+|[a-z][a-z\d]+);/gi, entity => {
+        decoder.innerHTML = entity;
+        return decoder.value;
+      });
+    }
+    text = text.replace(/[^\S\n]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    const words = Array.from(text.matchAll(/\S+/g));
+    let truncated = words.length > maxWords;
+    if (truncated) text = text.slice(0, words[maxWords].index).trimEnd();
+    const characters = Array.from(text);
+    if (characters.length > maxChars) {
+      text = characters.slice(0, maxChars).join('').trimEnd();
+      truncated = true;
+    }
+    return text + (truncated ? '…' : '');
+  }
+
   function cardTemplate(a){
     const animalId = getNumericAnimalId(a);
     const name  = safeText(a.ANIMALNAME ?? a.AnimalName ?? a.NAME);
@@ -1377,7 +1403,7 @@ final class Plugin_Adopted_UI_Shortcode {
     const safeAge = escHtml(age);
     const safeSex = escHtml(sex);
     const safeBreed = escHtml(breed);
-    const excerpt = escHtml(String(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? '').replace(/<[^>]*>/g, '').trim().split(/\s+/).slice(0, 34).join(' '));
+    const excerpt = escHtml(cardExcerpt(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? ''));
     const imageBlock = animalId
       ? `<img src="${escAttr(thumb)}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" />`
       : `<div class="w-full h-full flex items-center justify-center text-4xl">🐾</div>`;

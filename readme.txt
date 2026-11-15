@@ -1,5 +1,13 @@
 === Rescue Plugin Suite ===
-Stable tag: 15.2.0
+Stable tag: 15.2.1
+
+15.2.1
+- Fixed critical errors in all payment integration panels and destructive partial settings saves.
+- Equal animal card heights, square complete photographs, preserved preview paragraphs and compact blog rows.
+- Reservation labels and row favourites sit clear of animal photos.
+- Responsive impact typography/icons now follow settings, including narrow desktop embeds.
+- Existing annual reports automatically supplement supported built-in impact statistics.
+- Refined public widget spacing, surfaces, forms, quiz results and featured layouts.
 
 15.2.0
 - One top-level WordPress menu for settings, widgets, donations, Rescue Shop and updates.
@@ -11,11 +19,11 @@ Stable tag: 15.2.0
 - Accessible impact description and no inappropriate Dataset schema for the stats widget.
 
 SETUP FOR NEW FEATURES
-In the WordPress sidebar, open Rescue Plugin Suite. Widgets opens Adoptables; use the tabs for Adopted and Statistics. Each widget's Design section contains its layout options and animal card designs. Enable the visitor view switch separately for each animal widget. General contains transparent-background and heading/footer visibility options; dialogs stay opaque.
+In the WordPress sidebar, open Rescue Plugin Suite. Widgets opens Adoptables; use the tabs for Adopted and Statistics. Each widget's Design section contains its layout options and animal card designs. Compact cards use square thumbnails beside the text; blog layouts show bounded paragraph previews. Animal card heights stay consistent within the widget. Statistics > Typography controls totals, icons, headings and captions separately for mobile, tablet and desktop; Responsive includes mobile card padding. Enable the visitor view switch separately for each animal widget. General contains transparent-background and heading/footer visibility options; dialogs stay opaque.
 
 Rescue Shop contains products, orders, categories and shop settings. Create pages containing [rescue_shop] and [rescue_shop_basket]. Legacy [straysafe_shop], [straysafe_shop_product] and [straysafe_shop_basket] embeds keep working. If the standalone shop is active, deactivate it (do not delete its data) before using the suite shop. Existing shop settings and Stripe keys remain separate from donation settings. Configure the shop's Stripe signing secret and webhook endpoint, then test checkout before switching to live mode. Checkout supports interactive e-cards. Physical products, downloads and other unsupported digital items remain enquiry-only. Shop orders and e-card files are retained on uninstall. Apache storage protection is included. On Nginx, the host must deny direct HTTP access to the uploads/straysafe-shop-private/ directory; image delivery uses the token endpoint. Keep directory listing disabled. Unpurchased uploads expire after 30 days; purchased image metadata is retained.
 
-Under Statistics > Design, use Built-in system data for ASM's monthly intake/adoption totals and current in-care count. The ASM API user needs animal and movement viewing permissions. Vaccination, neutering and microchip totals require an optional custom report; they are not estimated. Other rescue systems use their configured feeds where available. ASM reservation flags also work without a custom report; optional advanced reservation details can be enabled under Integrations > ASM if that report is installed. Do not expose private animal records in public feeds.
+Under Statistics > Design, use Automatic: system data and existing reports for ASM's monthly intake/adoption totals and current in-care count. The ASM API user needs animal and movement viewing permissions. Existing Summary By Year reports are detected automatically and can supply vaccination, neutering and microchip totals. If the connection supplies no health aggregates, they display as Not available; they are not estimated. Other rescue systems use their configured feeds where available. ASM reservation flags also work without a custom report; optional advanced reservation details can be enabled under Integrations > ASM if that report is installed. Do not expose private animal records in public feeds.
 
 If Search Console still reports an invalid description, inspect the affected live URL and schema type, clear site/CDN caches and request validation after deployment. The impact widget does not emit Dataset markup; other plugins or previously cached markup may still produce it.
 
