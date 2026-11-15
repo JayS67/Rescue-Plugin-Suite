@@ -19,7 +19,11 @@ final class Plugin_UI_Suite_Plugin {
     add_action('admin_init', [__CLASS__, 'redirect_legacy_admin_urls'], 6);
     add_action('admin_init', [__CLASS__, 'maybe_redirect_to_setup_wizard'], 20);
     add_action('admin_notices', [__CLASS__, 'render_admin_notices']);
+    // Redirect legacy/alias routes before WordPress checks the old menu parent.
+    add_action('admin_menu', [__CLASS__, 'redirect_legacy_admin_urls'], 1);
     add_action('admin_menu', [__CLASS__, 'admin_menu'], 20);
+    add_filter('parent_file', [__CLASS__, 'admin_parent_file']);
+    add_filter('submenu_file', [__CLASS__, 'admin_submenu_file']);
     add_action('admin_menu', [__CLASS__, 'remove_legacy_admin_pages'], 999);
     add_filter('plugin_action_links', [__CLASS__, 'plugin_action_links'], 10, 2);
     add_filter('plugin_row_meta', [__CLASS__, 'plugin_row_meta'], 10, 2);
@@ -75,7 +79,7 @@ final class Plugin_UI_Suite_Plugin {
   private static function admin_page_url($tab = 'global') {
     $args = ['page' => 'plugin-ui-suite'];
     if ($tab !== '') $args['tab'] = $tab;
-    return add_query_arg($args, admin_url('options-general.php'));
+    return add_query_arg($args, admin_url('admin.php'));
   }
 
   private static function help_centre_url() {
@@ -103,47 +107,64 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function redirect_legacy_admin_urls() {
-    if (empty($_GET['page'])) return;
+    if (!current_user_can('manage_options') || empty($_GET['page'])) return;
     $page = sanitize_key(wp_unslash($_GET['page']));
-    if ($page === 'plugin-ui-suite-updates') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'updates'], admin_url('options-general.php'))); exit;
+    foreach (self::sidebar_sections() as $tab => $section) {
+      if ($section['slug'] !== 'plugin-ui-suite' && $page === $section['slug']) {
+        $args = wp_unslash($_GET); $args['page'] = 'plugin-ui-suite'; $args['tab'] = $tab;
+        wp_safe_redirect(add_query_arg($args, admin_url('admin.php'))); exit;
+      }
+    }
+    if (($GLOBALS['pagenow'] ?? '') === 'options-general.php' && in_array($page, ['plugin-ui-suite','plugin-ui-suite-setup'], true)) {
+      wp_safe_redirect(add_query_arg(wp_unslash($_GET), admin_url('admin.php'))); exit;
+    }
+    $legacy_modules = ['plugin-adoptables-ui'=>'adoptables','plugin-adopted-ui'=>'adopted','plugin-stats-ui'=>'stats'];
+    if (isset($legacy_modules[$page])) {
+      $args = wp_unslash($_GET); $args['page'] = 'plugin-ui-suite'; $args['tab'] = $legacy_modules[$page];
+      wp_safe_redirect(add_query_arg($args, admin_url('admin.php'))); exit;
     }
     if (strpos($page, 'plugin-ui-suite-payments-') === 0) {
       $section = substr($page, strlen('plugin-ui-suite-payments-'));
       if ($section === 'providers') {
-        wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('options-general.php'))); exit;
+        wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('admin.php'))); exit;
       }
       $allowed = ['dashboard','general','widget','campaigns','gift-aid','fees','appearance','transactions','reports','diagnostics','help'];
       if (!in_array($section, $allowed, true)) $section = 'dashboard';
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$section], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'payments','payments_section'=>$section], admin_url('admin.php'))); exit;
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'payments' && !empty($_GET['payments_section']) && sanitize_key(wp_unslash($_GET['payments_section'])) === 'providers') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>'payment-stripe','plugin_msg'=>'Payment provider connections now live in Integrations. Choose the provider you need from this page.'], admin_url('admin.php'))); exit;
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'data-source' && !empty($_GET['subtab'])) {
       $legacy_subtab = sanitize_key(wp_unslash($_GET['subtab']));
       $map = ['provider'=>'asm','endpoints'=>'custom-api','authentication'=>'custom-api','field-mapping'=>'custom-api','cache'=>'asm','connection-test'=>'asm'];
-      if (isset($map[$legacy_subtab])) { wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>$map[$legacy_subtab]], admin_url('options-general.php'))); exit; }
+      if (isset($map[$legacy_subtab])) { wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'data-source','subtab'=>$map[$legacy_subtab]], admin_url('admin.php'))); exit; }
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'widgets') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'featured','plugin_msg'=>'Widgets has been retired. Featured Animal is now its own module.'], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'featured','plugin_msg'=>'Widgets has been retired. Featured Animal is now its own module.'], admin_url('admin.php'))); exit;
     }
     if ($page === 'plugin-ui-suite' && !empty($_GET['tab']) && sanitize_key(wp_unslash($_GET['tab'])) === 'layout') {
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'adoptables','subtab'=>'layout'], admin_url('options-general.php'))); exit;
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'adoptables','subtab'=>'layout'], admin_url('admin.php'))); exit;
     }
   }
 
   public static function activate() {
-    $merged = self::merge_with_defaults(self::default_settings(), self::load_saved_settings());
+    $merged = self::get_settings();
     update_option(self::OPT_KEY, $merged, false);
     update_option(self::WIZARD_KEY, 1, false);
     self::record_version_event('activated');
     self::sync_legacy_options($merged);
     self::ensure_webhook_retry_schedule();
+    if (class_exists('Plugin_Rescue_Shop_Module')) Plugin_Rescue_Shop_Module::activate();
     if (class_exists('Plugin_UI_Suite_SEO')) Plugin_UI_Suite_SEO::rewrite_rules();
     flush_rewrite_rules(false);
   }
 
+
+  public static function deactivate() {
+    wp_clear_scheduled_hook(self::WEBHOOK_CRON_HOOK);
+    if (class_exists('Plugin_Rescue_Shop_Module')) Plugin_Rescue_Shop_Module::deactivate();
+  }
 
   private static function register_core_framework_metadata() {
     if (!class_exists('Plugin_UI_Suite_Registry')) return;
@@ -156,6 +177,7 @@ final class Plugin_UI_Suite_Plugin {
       'diagnostics'=>['name'=>'Diagnostics','description'=>'Plugin health centre, support information and environment checks.','icon'=>'sos'],
       'stats'=>['name'=>'Statistics','description'=>'Impact statistics display settings.','icon'=>'chart-bar'],
       'forms'=>['name'=>'Forms','description'=>'Application and enquiry form routing.','icon'=>'feedback'],
+      'shop'=>['name'=>'Rescue Shop','description'=>'Products, orders, digital gifts and shop settings.','icon'=>'cart'],
       'payments'=>['name'=>'Payments','description'=>'Donation behaviour, widget, campaigns, Gift Aid and reporting.','icon'=>'money-alt'],
     ] as $id=>$module) Plugin_UI_Suite_Registry::register_module($id, $module);
     foreach (self::default_settings() as $module=>$fields) {
@@ -194,9 +216,9 @@ final class Plugin_UI_Suite_Plugin {
       'updates'=>'Check the installed version and choose whether automatic updates are enabled.',
       'finished'=>'Review the checklist and save your setup.',
     ] as $i=>$description) Plugin_UI_Suite_Registry::register('setup_steps', $i, ['module'=>'global','title'=>ucwords(str_replace('-',' ', $i)),'description'=>$description,'order'=>count(Plugin_UI_Suite_Registry::all('setup_steps'))+1]);
-    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','featured'=>'Featured Animal','stats'=>'Statistics','payments'=>'Donations','quiz'=>'Match Quiz','forms'=>'Forms','diagnostics'=>'Diagnostics','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
+    foreach (['global'=>'General','data-source'=>'Integrations','adoptables'=>'Adoptables','adopted'=>'Adopted','featured'=>'Featured Animal','stats'=>'Statistics','payments'=>'Donations','shop'=>'Rescue Shop','quiz'=>'Match Quiz','forms'=>'Forms','diagnostics'=>'Diagnostics','updates'=>'Updates','help'=>'Help Centre'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>in_array($i, ['data-source','updates'], true) ? 'global' : $i,'order'=>10 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
     if (Plugin_UI_Suite_Registry::developer_mode_enabled()) foreach (['proxy'=>'Developer Tools','registry'=>'Registry'] as $i=>$label) Plugin_UI_Suite_Registry::register_navigation('tab_'.$i, ['context'=>'tab','slug'=>$i,'label'=>$label,'module'=>'global','order'=>90 + count(Plugin_UI_Suite_Registry::all('navigation'))]);
-    Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'order'=>10]);
+    Plugin_UI_Suite_Registry::register_navigation('settings_root', ['context'=>'admin','slug'=>'plugin-ui-suite','label'=>'Rescue Plugin Suite','page_title'=>'Rescue Plugin Suite','menu_title'=>'Rescue Plugin Suite','capability'=>'manage_options','callback'=>[__CLASS__,'render_settings_page'],'top_level'=>true,'icon'=>'dashicons-heart','position'=>58,'order'=>10]);
   }
 
   private static function include_modules() {
@@ -206,6 +228,7 @@ final class Plugin_UI_Suite_Plugin {
     require_once PLUGIN_SUITE_PATH . 'includes/modules/adopted/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/statistics/class-module.php';
     require_once PLUGIN_SUITE_PATH . 'includes/modules/payments/class-module.php';
+    require_once PLUGIN_SUITE_PATH . 'includes/modules/shop/class-module.php';
   }
 
   public static function default_settings() {
@@ -215,6 +238,8 @@ final class Plugin_UI_Suite_Plugin {
         'cache_adoptables_seconds' => 60,
         'cache_adopted_seconds' => 120,
         'cache_stats_seconds' => 60,
+        'stats_data_mode' => 'built_in',
+        'asm_reservation_report_enabled' => 0,
         'bypass_plugin_cache' => 0,
         'delete_data_on_uninstall' => 0,
         'adoptables_page_url' => '',
@@ -322,11 +347,13 @@ final class Plugin_UI_Suite_Plugin {
         'enable_compare_tool' => 1, 'compare_button_text' => 'Compare favourites', 'favourites_modal_title' => 'Saved favourites', 'compare_modal_title' => 'Compare favourites',
         'enable_modals' => 1,
         'display_style' => 'classic',
+        'layout_preset' => 'grid', 'card_design' => 'classic', 'visitor_view_switch' => 0,
         'builder_card_order' => "image\nreservation_badge\nname_meta\nbreed_line\nfavourite_button",
         'builder_modal_order' => "gallery\nbadges\ninfo_cards\ntips\ndescription\nglobal_text\ncontact_footer\ncustom_buttons",
         'builder_header_actions' => "apply\nfavourite\nshare\nclose",
       ],
       'adopted' => [
+        'layout_preset' => 'grid', 'card_design' => 'classic', 'visitor_view_switch' => 0,
         'brand_color' => '#401268', 'background_color' => '#fcf5fd', 'text_primary_color' => '#374151', 'text_muted_color' => '#6b7280',
         'paw_opacity' => '0.15', 'paw_count' => 50, 'title_text' => 'Found My Furever Home',
         'subtitle_text' => 'Recently adopted cats - the newest happy endings first',
@@ -346,7 +373,7 @@ final class Plugin_UI_Suite_Plugin {
         'fw_card_name' => 800, 'fw_card_meta' => 600, 'fw_badge' => 800,
         'enable_modals' => 1, 'enable_deep_links' => 1, 'share_button_text' => 'Share', 'share_copied_text' => 'Link copied',
         'modal_global_text' => 'Every adoption changes a life. Thank you for supporting rescue work. 🐾',
-        'adoptables_cta_enabled' => 0,
+        'adoptables_cta_enabled' => 1,
         'adoptables_cta_text' => 'Looking for your next best friend?',
         'adoptables_cta_button_text' => 'View animals for adoption',
         'adoptables_cta_url' => '',
@@ -354,6 +381,7 @@ final class Plugin_UI_Suite_Plugin {
         'builder_modal_order' => "gallery\nname_meta\nadoption_date\nstory\nglobal_text\nshare_button",
       ],
       'stats' => [
+        'layout_preset' => 'tiles',
         'brand_color' => '#401268', 'background_color' => '#fcf5fd', 'min_year' => 2026, 'paw_opacity' => '0.15', 'paw_count' => 50,
         'title_text' => 'Our Rescue Impact', 'year_label_prefix' => "This Year's Statistics -",
         'footer_text' => 'Every number represents a life changed. Thank you for supporting rescue work. 🐾', 'font_family' => '',
@@ -509,7 +537,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) return;
     $defaults = self::default_settings();
     $saved = self::load_saved_settings();
-    $merged = self::merge_with_defaults($defaults, $saved);
+    $merged = self::get_settings();
     if ($saved !== $merged) update_option(self::OPT_KEY, $merged, false);
     self::sync_legacy_options($merged);
   }
@@ -517,6 +545,12 @@ final class Plugin_UI_Suite_Plugin {
   public static function get_settings() {
     $saved = self::load_saved_settings();
     $settings = self::merge_with_defaults(self::default_settings(), $saved);
+    // Preserve older installations' list/compact choices until a new preset is saved.
+    foreach (['adoptables','adopted'] as $module) {
+      if (!isset($saved[$module]['layout_preset']) && isset($saved[$module]['display_style'])) $settings[$module]['layout_preset'] = ($saved[$module]['display_style'] ?? '') === 'list' ? 'list' : 'grid';
+      if (!isset($saved[$module]['card_design']) && ($saved[$module]['display_style'] ?? '') === 'compact') $settings[$module]['card_design'] = 'compact';
+    }
+    if (!isset($saved['stats']['layout_preset']) && isset($saved['stats']['layout_mode'])) $settings['stats']['layout_preset'] = ($settings['stats']['layout_mode'] ?? '') === 'one_row' ? 'compact' : 'tiles';
     if (isset($saved['widgets']) && is_array($saved['widgets'])) {
       $settings['featured'] = self::featured_settings(['featured'=>$settings['featured'] ?? [], 'widgets'=>$saved['widgets']]);
     }
@@ -593,6 +627,34 @@ final class Plugin_UI_Suite_Plugin {
     return implode(' ', $attributes);
   }
 
+  public static function enqueue_widget_layout_assets() {
+    wp_enqueue_style('rescue-plugin-suite-widget-layouts', PLUGIN_SUITE_URL . 'assets/css/widget-layouts.css', ['rescue-plugin-suite-frontend'], PLUGIN_SUITE_VERSION);
+    wp_enqueue_script('rescue-plugin-suite-widget-layouts', PLUGIN_SUITE_URL . 'assets/js/widget-layouts.js', [], PLUGIN_SUITE_VERSION, true);
+  }
+
+  /** Layout data is limited to a public widget root, never a body-appended modal. */
+  public static function widget_layout_attributes($module) {
+    if (!in_array($module, ['adoptables','adopted','stats'], true)) return '';
+    self::enqueue_widget_layout_assets();
+    $options = self::get_settings()[$module];
+    $allowed = $module === 'stats' ? ['tiles','compact','band'] : ['grid','list','blog'];
+    $preset = in_array($options['layout_preset'] ?? '', $allowed, true) ? $options['layout_preset'] : $allowed[0];
+    $attributes = 'data-rps-layout="' . esc_attr($preset) . '"';
+    if ($module !== 'stats') {
+      $design = in_array($options['card_design'] ?? '', ['classic','compact','thumbnail'], true) ? $options['card_design'] : 'classic';
+      $attributes .= ' data-rps-card-design="' . esc_attr($design) . '" data-rps-view="' . ($preset === 'list' ? 'list' : 'grid') . '" data-rps-view-switch="' . (!empty($options['visitor_view_switch']) ? 'true' : 'false') . '"';
+    }
+    return $attributes;
+  }
+
+  public static function render_widget_view_switch($module) {
+    if (!in_array($module, ['adoptables','adopted'], true)) return;
+    $options = self::get_settings()[$module];
+    if (empty($options['visitor_view_switch'])) return;
+    $list = ($options['layout_preset'] ?? '') === 'list';
+    echo '<div class="rps-view-switch" role="group" aria-label="Animal display view"><span>View</span><button type="button" data-rps-select-view="grid" aria-pressed="' . ($list ? 'false' : 'true') . '">Grid</button><button type="button" data-rps-select-view="list" aria-pressed="' . ($list ? 'true' : 'false') . '">List</button></div>';
+  }
+
   public static function enqueue_frontend_assets() {
     $profile = get_query_var(Plugin_UI_Suite_SEO::ADOPTABLE_VAR) || get_query_var(Plugin_UI_Suite_SEO::ADOPTED_VAR);
     if (!$profile) {
@@ -609,7 +671,7 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   public static function enqueue_admin_assets($hook) {
-    if ($hook !== 'settings_page_plugin-ui-suite') return;
+    if (!in_array($hook, ['toplevel_page_plugin-ui-suite','settings_page_plugin-ui-suite','admin_page_plugin-ui-suite-setup'], true)) return;
     wp_enqueue_style('plugin-suite-admin', PLUGIN_SUITE_URL . 'assets/css/admin.css', [], PLUGIN_SUITE_VERSION);
     wp_enqueue_script('plugin-suite-admin-help', PLUGIN_SUITE_URL . 'assets/js/admin-help.js', [], PLUGIN_SUITE_VERSION, true);
     wp_enqueue_script('plugin-suite-admin-sortable', PLUGIN_SUITE_URL . 'assets/js/admin-sortable.js', [], PLUGIN_SUITE_VERSION, true);
@@ -858,7 +920,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (self::get_forms() as $tag => $id) $tags[] = $tag;
     $tags[] = self::sanitize_shortcode_tag($settings['featured']['shortcode'] ?? ($settings['widgets']['featured_shortcode'] ?? 'featured_animal'));
     $tags[] = self::sanitize_shortcode_tag($settings['quiz']['quiz_shortcode'] ?? 'adoption_match_quiz');
-    $tags = array_merge($tags, ['donation_widget', 'plugin_adoptables_ui', 'plugin_adopted_ui', 'plugin_adoption_form', 'plugin_volunteer_form', 'plugin_waiting_list_form', 'plugin_lost_cat_form']);
+    $tags = array_merge($tags, ['rescue_shop','rescue_shop_product','rescue_shop_basket','straysafe_shop','straysafe_shop_product','straysafe_shop_basket', 'donation_widget', 'plugin_adoptables_ui', 'plugin_adopted_ui', 'plugin_adoption_form', 'plugin_volunteer_form', 'plugin_waiting_list_form', 'plugin_lost_cat_form']);
     return array_values(array_unique(array_filter($tags)));
   }
 
@@ -870,7 +932,7 @@ final class Plugin_UI_Suite_Plugin {
     $tags = self::all_suite_shortcodes();
     if (empty($settings['global']['bypass_plugin_cache']) && !isset($_GET['cat']) && !isset($_GET['adopted'])) {
       // Form and donation pages carry nonces; keep their page-cache safeguards.
-      $tags = array_merge(array_keys(self::get_forms()), ['donation_widget']);
+      $tags = array_merge(array_keys(self::get_forms()), ['donation_widget','rescue_shop','rescue_shop_product','rescue_shop_basket','straysafe_shop','straysafe_shop_product','straysafe_shop_basket']);
     }
     foreach ($tags as $tag) {
       if (has_shortcode($post->post_content, $tag)) {
@@ -881,11 +943,46 @@ final class Plugin_UI_Suite_Plugin {
     }
   }
 
+  public static function sidebar_sections() {
+    return [
+      'global'=>['label'=>'General', 'slug'=>'plugin-ui-suite', 'tabs'=>['global']],
+      'data-source'=>['label'=>'Integrations', 'slug'=>'plugin-ui-suite-integrations', 'tabs'=>['data-source']],
+      'adoptables'=>['label'=>'Widgets', 'slug'=>'plugin-ui-suite-widgets', 'tabs'=>['adoptables','adopted','featured','stats','quiz']],
+      'forms'=>['label'=>'Forms', 'slug'=>'plugin-ui-suite-forms', 'tabs'=>['forms']],
+      'payments'=>['label'=>'Donations', 'slug'=>'plugin-ui-suite-donations', 'tabs'=>['payments']],
+      'shop'=>['label'=>'Rescue Shop', 'slug'=>'plugin-ui-suite-shop', 'tabs'=>['shop']],
+      'diagnostics'=>['label'=>'Diagnostics', 'slug'=>'plugin-ui-suite-diagnostics', 'tabs'=>['diagnostics','proxy','registry']],
+      'updates'=>['label'=>'Updates', 'slug'=>'plugin-ui-suite-updates', 'tabs'=>['updates']],
+      'help'=>['label'=>'Help Centre', 'slug'=>'plugin-ui-suite-help', 'tabs'=>['help']],
+    ];
+  }
+
   public static function admin_menu() {
     if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::add_admin_menus();
-    else add_options_page('Rescue Plugin Suite','Rescue Plugin Suite','manage_options','plugin-ui-suite',[__CLASS__,'render_settings_page']);
+    else add_menu_page('Rescue Plugin Suite','Rescue Plugin Suite','manage_options','plugin-ui-suite',[__CLASS__,'render_settings_page'],'dashicons-heart',58);
+    foreach (self::sidebar_sections() as $section) {
+      add_submenu_page('plugin-ui-suite', 'Rescue Plugin Suite · ' . $section['label'], $section['label'], 'manage_options', $section['slug'], [__CLASS__, 'render_settings_page']);
+    }
     add_submenu_page(null,'Rescue Plugin Suite Setup','Rescue Plugin Suite Setup','manage_options','plugin-ui-suite-setup',[__CLASS__,'render_setup_wizard']);
-      }
+  }
+
+  private static function is_suite_admin_page() {
+    $page = sanitize_key(wp_unslash($_GET['page'] ?? ''));
+    if (in_array($page, ['plugin-ui-suite','plugin-ui-suite-setup'], true)) return true;
+    foreach (self::sidebar_sections() as $section) if ($page === $section['slug']) return true;
+    return false;
+  }
+
+  public static function admin_parent_file($parent) {
+    return self::is_suite_admin_page() ? 'plugin-ui-suite' : $parent;
+  }
+
+  public static function admin_submenu_file($submenu) {
+    if (!self::is_suite_admin_page()) return $submenu;
+    $tab = sanitize_key(wp_unslash($_GET['tab'] ?? 'global'));
+    foreach (self::sidebar_sections() as $section) if (in_array($tab, $section['tabs'], true)) return $section['slug'];
+    return 'plugin-ui-suite';
+  }
 
   public static function remove_legacy_admin_pages() {
     remove_submenu_page('options-general.php', 'plugin-adoptables-ui');
@@ -961,7 +1058,7 @@ final class Plugin_UI_Suite_Plugin {
     return ['paw_opacity'];
   }
   private static function bool_keys($section) {
-    return $section === 'adoptables' ? ['cats_only','show_top_navigation','show_reservation_label','show_pending_reservation_label','show_other_reservation_label','enable_deep_links','enable_apply_button','card_border_enabled','enable_filters','enable_filter_age','enable_filter_sex','enable_filter_breed','enable_exclude_pending_filter','detect_bonded_from_description','detect_indoor_only_from_description','enable_modal_slideshow_controls','enable_favourites','enable_compare_tool','enable_modals','enable_adoptables_modals'] : (($section === 'adopted') ? ['show_top_navigation','card_border_enabled','enable_modals','enable_deep_links','adoptables_cta_enabled'] : (($section === 'stats') ? ['card_border_enabled'] : []));
+    return $section === 'adoptables' ? ['cats_only','show_top_navigation','show_reservation_label','show_pending_reservation_label','show_other_reservation_label','enable_deep_links','enable_apply_button','card_border_enabled','enable_filters','enable_filter_age','enable_filter_sex','enable_filter_breed','enable_exclude_pending_filter','detect_bonded_from_description','detect_indoor_only_from_description','enable_modal_slideshow_controls','enable_favourites','enable_compare_tool','enable_modals','enable_adoptables_modals','visitor_view_switch'] : (($section === 'adopted') ? ['show_top_navigation','card_border_enabled','enable_modals','enable_deep_links','adoptables_cta_enabled','visitor_view_switch'] : (($section === 'stats') ? ['card_border_enabled'] : []));
   }
   private static function textarea_keys($section) {
     $map = ['adoptables' => ['footer_text','modal_global_text','fallback_description','builder_card_order','builder_modal_order','builder_header_actions'], 'adopted' => ['footer_text','modal_global_text','builder_card_order','builder_modal_order'], 'stats' => ['footer_text','card_order','builder_card_order']];
@@ -969,7 +1066,7 @@ final class Plugin_UI_Suite_Plugin {
   }
   private static function select_keys($section) {
     $map = ['adoptables' => ['reservation_label_halign','reservation_label_valign','display_style','favourite_button_position'], 'adopted' => ['date_label_halign','date_label_valign','display_style'], 'stats' => ['layout_mode']];
-    return $map[$section] ?? [];
+    return array_merge($map[$section] ?? [], in_array($section, ['adoptables','adopted','stats'], true) ? ['layout_preset'] : [], in_array($section, ['adoptables','adopted'], true) ? ['card_design'] : []);
   }
   private static function icon_keys($section) { return $section === 'stats' ? ['icon_brought','icon_adopted','icon_vaccinated','icon_neutered','icon_chipped','icon_in_care'] : []; }
 
@@ -986,7 +1083,9 @@ final class Plugin_UI_Suite_Plugin {
       elseif ($section === 'adopted' && $key === 'adoptables_cta_url') $out[$key] = esc_url_raw($input[$key] ?? '');
       elseif (in_array($key, self::select_keys($section), true)) {
         $val = sanitize_key($input[$key] ?? $defaults[$key]);
-        if ($section === 'adoptables' && $key === 'reservation_label_halign') $out[$key] = in_array($val, ['left','right'], true) ? $val : $defaults[$key];
+        if ($key === 'layout_preset') $out[$key] = in_array($val, $section === 'stats' ? ['tiles','compact','band'] : ['grid','list','blog'], true) ? $val : $defaults[$key];
+        elseif ($key === 'card_design') $out[$key] = in_array($val, ['classic','compact','thumbnail'], true) ? $val : $defaults[$key];
+        elseif ($section === 'adoptables' && $key === 'reservation_label_halign') $out[$key] = in_array($val, ['left','right'], true) ? $val : $defaults[$key];
         elseif ($section === 'adoptables' && $key === 'reservation_label_valign') $out[$key] = in_array($val, ['top','bottom'], true) ? $val : $defaults[$key];
         elseif ($section === 'adoptables' && $key === 'display_style') $out[$key] = in_array($val, ['classic','compact','list'], true) ? $val : $defaults[$key];
         elseif ($section === 'adoptables' && $key === 'favourite_button_position') $out[$key] = in_array($val, ['top_left','top_right','bottom_left','bottom_right','hidden'], true) ? $val : $defaults[$key];
@@ -1087,6 +1186,10 @@ final class Plugin_UI_Suite_Plugin {
     } elseif (in_array($active_tab, ['adoptables','adopted','stats'], true)) {
       $clean[$active_tab] = self::sanitize_section($active_tab, $input[$active_tab] ?? [], $clean[$active_tab] ?? []);
       if (!empty($input['shortcodes']) && is_array($input['shortcodes'])) { $sc=$input['shortcodes']; foreach (['adoptables','adopted','statistics'] as $k) if (isset($sc[$k])) $clean['shortcodes'][$k] = self::sanitize_shortcode_tag($sc[$k]) ?: ($clean['shortcodes'][$k] ?? $defaults['shortcodes'][$k]); }
+      if ($active_tab === 'stats' && isset($input['global']['stats_data_mode'])) {
+        $mode = sanitize_key($input['global']['stats_data_mode']);
+        $clean['global']['stats_data_mode'] = in_array($mode, ['built_in','custom_report'], true) ? $mode : 'built_in';
+      }
       if ($active_tab === 'stats' && isset($input['stats']['card_order']) && !isset($input['stats']['builder_card_order'])) $clean['stats']['builder_card_order'] = $clean['stats']['card_order'];
       if ($active_tab === 'stats' && !empty($clean['stats']['builder_card_order'])) $clean['stats']['card_order'] = $clean['stats']['builder_card_order'];
     } elseif ($active_tab === 'featured') {
@@ -1121,6 +1224,7 @@ final class Plugin_UI_Suite_Plugin {
       $clean['forms']['platform_support_notes'] = sanitize_textarea_field($fo['platform_support_notes'] ?? ($clean['forms']['platform_support_notes'] ?? $defaults['forms']['platform_support_notes']));
     } elseif ($active_tab === 'data-source') {
       $g = $input['global'] ?? [];
+      if (array_key_exists('asm_reservation_report_enabled', $g)) $clean['global']['asm_reservation_report_enabled'] = empty($g['asm_reservation_report_enabled']) ? 0 : 1;
       $pr = $input['proxy'] ?? [];
       $source = sanitize_key($g['data_source'] ?? ($clean['global']['data_source'] ?? 'asm'));
       $clean['global']['data_source'] = in_array($source, ['asm','custom_api','shelterluv','petpoint'], true) ? $source : 'asm';
@@ -1180,7 +1284,7 @@ final class Plugin_UI_Suite_Plugin {
 
     self::create_snapshot('save');
     update_option(self::OPT_KEY, $clean, false);
-    $args=['page'=>'plugin-ui-suite','tab'=>$active_tab,'updated'=>'true']; if($active_subtab!=='') $args['subtab']=$active_subtab; wp_safe_redirect(add_query_arg($args, admin_url('options-general.php')));
+    $args=['page'=>'plugin-ui-suite','tab'=>$active_tab,'updated'=>'true']; if($active_subtab!=='') $args['subtab']=$active_subtab; wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
     exit;
   }
 
@@ -1189,7 +1293,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) wp_die('Not allowed');
     check_admin_referer('plugin_ui_suite_save_current_defaults');
     update_option(self::USER_DEFAULTS_KEY, self::get_settings(), false);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','saved_defaults'=>'1'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','saved_defaults'=>'1'], admin_url('admin.php')));
     exit;
   }
 
@@ -1200,7 +1304,7 @@ final class Plugin_UI_Suite_Plugin {
     $defaults = self::default_settings();
     update_option(self::OPT_KEY, $defaults, false);
     self::sync_legacy_options($defaults);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'defaults-reset'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'defaults-reset'], admin_url('admin.php')));
     exit;
   }
 
@@ -1228,11 +1332,11 @@ final class Plugin_UI_Suite_Plugin {
   public static function handle_registry_import() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_registry_import');
-    if (empty($_FILES['import_file']['tmp_name'])) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'No import file selected'], admin_url('options-general.php')));
+    if (empty($_FILES['import_file']['tmp_name'])) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'No import file selected'], admin_url('admin.php')));
     $json = file_get_contents($_FILES['import_file']['tmp_name']); $payload = json_decode($json, true);
-    if (!is_array($payload) || !is_array($payload['settings'] ?? null)) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'Registry import was not valid JSON'], admin_url('options-general.php')));
+    if (!is_array($payload) || !is_array($payload['settings'] ?? null)) wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','plugin_msg'=>'Registry import was not valid JSON'], admin_url('admin.php')));
     $current = self::get_settings(); $merged = self::merge_with_defaults($current, $payload['settings']); update_option(self::OPT_KEY, $merged, false); self::sync_legacy_options($merged);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'imported','plugin_msg'=>'Registry settings imported'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'imported','plugin_msg'=>'Registry settings imported'], admin_url('admin.php'))); exit;
   }
 
   public static function handle_registry_reset() {
@@ -1240,7 +1344,7 @@ final class Plugin_UI_Suite_Plugin {
     check_admin_referer('plugin_ui_suite_registry_reset');
     $module = sanitize_key($_POST['module'] ?? ''); $settings = self::get_settings(); $defaults = self::default_settings();
     if ($module && isset($defaults[$module])) { $settings[$module] = $defaults[$module]; update_option(self::OPT_KEY, $settings, false); self::sync_legacy_options($settings); }
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'reset','plugin_msg'=>'Registry module settings reset'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'registry','updated'=>'reset','plugin_msg'=>'Registry module settings reset'], admin_url('admin.php'))); exit;
   }
 
   public static function handle_export() {
@@ -1290,7 +1394,7 @@ final class Plugin_UI_Suite_Plugin {
       if (isset($data['legacy']['stats']) && is_array($data['legacy']['stats'])) update_option('plugin_stats_ui_options', $data['legacy']['stats']);
     }
     self::sync_legacy_options(self::get_settings());
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'imported'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'imported'], admin_url('admin.php')));
     exit;
   }
 
@@ -1379,8 +1483,8 @@ final class Plugin_UI_Suite_Plugin {
     $settings = self::get_settings();
     $tab = sanitize_key($_GET['tab'] ?? 'global');
     if (in_array($tab, ['registry','proxy'], true) && (!class_exists('Plugin_UI_Suite_Registry') || !Plugin_UI_Suite_Registry::developer_mode_enabled())) $tab = 'global';
-    if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
-    echo '<div data-rps-ui class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code></p></details>';
+    if (!in_array($tab,['global','data-source','adoptables','adopted','featured','stats','payments','shop','quiz','forms','proxy','diagnostics','registry','updates','help'], true)) $tab='global';
+    echo '<div data-rps-ui class="wrap rps-admin"><a class="rps-skip-link" href="#rps-settings-content">Skip to settings</a><header class="rps-admin-header"><p class="rps-eyebrow">Your rescue, connected</p><h1>Rescue Plugin Suite</h1><p class="description">Manage rescue website displays, animal data, enquiries and donations from one place. Start with General, connect services in Integrations, then adjust each public experience.</p></header><details class="rps-shortcodes"><summary>Shortcode quick reference</summary><p>Default shortcodes: <code>[adoptables]</code> <code>[adopted]</code> <code>[stats]</code> <code>[adoption_form]</code> <code>[volunteer_form]</code> <code>[waiting_list_form]</code> <code>[lost_cat_form]</code> <code>[rescue_shop]</code> <code>[rescue_shop_basket]</code></p></details>';
     if (!empty($_GET['updated'])) echo '<div class="notice notice-success is-dismissible"><p>Settings saved.</p></div>';
     if (!empty($_GET['plugin_msg'])) echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(wp_unslash($_GET['plugin_msg'])) . '</p></div>';
     if (class_exists('Plugin_UI_Suite_Registry')) Plugin_UI_Suite_Registry::render_tabs($tab);
@@ -1392,6 +1496,7 @@ final class Plugin_UI_Suite_Plugin {
     elseif ($tab === 'stats') self::render_stats_tab($settings['stats'], $settings['global']);
     elseif ($tab === 'featured') self::render_featured_tab($settings);
     elseif ($tab === 'payments' && class_exists('Plugin_Payments_Module')) Plugin_Payments_Module::render_admin_page(true);
+    elseif ($tab === 'shop' && class_exists('Plugin_Rescue_Shop_Module')) Plugin_Rescue_Shop_Module::render_admin_page();
     elseif ($tab === 'quiz') self::render_quiz_tab($settings);
     elseif ($tab === 'forms') self::render_forms_tab($settings);
     elseif ($tab === 'proxy') self::render_proxy_tab($settings);
@@ -1473,6 +1578,7 @@ final class Plugin_UI_Suite_Plugin {
       self::row('Account name', '<input type="text" name="suite[proxy][account]" value="'.esc_attr($proxy['account'] ?? '').'" class="regular-text" /><p class="description">Active value: '.esc_html($configuration['account']['value'] ?? '').' (from '.esc_html($source_label('account')).').</p>');
       self::row('Username', '<input type="text" name="suite[proxy][username]" value="'.esc_attr($proxy['username'] ?? '').'" class="regular-text" autocomplete="off" /><p class="description">Active value is supplied by '.esc_html($source_label('username')).'.</p>');
       self::row('Password', '<input type="password" name="suite[proxy][password]" value="" class="regular-text" autocomplete="new-password" /><p class="description">'.(!empty($proxy['password']) ? 'Saved value present. ' : '').'Leave blank to keep the saved value. Active value is supplied by '.esc_html($source_label('password')).'.</p>');
+      ob_start(); self::checkbox_input('global','asm_reservation_report_enabled',$s['global']['asm_reservation_report_enabled'] ?? 0,'Use the optional Active Reservations Proxy report'); self::row('Advanced reservation details', ob_get_clean() . '<p class="description">Leave disabled to use ASM’s built-in reservation flags without a custom report. Enable only if the optional report is installed and you need its richer pending-adoption labels.</p>');
       self::row('Configuration precedence', '<p class="description">Environment variables (<code>ASM_BASE_URL</code>, <code>ASM_ACCOUNT</code>, <code>ASM_USERNAME</code>, <code>ASM_PASSWORD</code>, <code>ASM_API_KEY</code>) override <code>wp-config.php</code> constants, which override the saved Integration values. Secrets are masked and are never exposed to visitors.</p>');
       self::row('Documentation', '<a href="https://sheltermanager.com/site/en_asm3_help.html" target="_blank" rel="noopener">ASM API documentation</a>');
     } elseif ($sub === 'shelterluv') {
@@ -1505,7 +1611,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!array_key_exists($current, $items)) $current = array_key_first($items);
     echo '<nav class="plugin-suite-subnav" aria-label="'.esc_attr(ucwords(str_replace('-', ' ', $tab)).' settings sections').'">';
     foreach ($items as $key => $label) {
-      $url = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$tab,'subtab'=>$key], admin_url('options-general.php'));
+      $url = add_query_arg(['page'=>'plugin-ui-suite','tab'=>$tab,'subtab'=>$key], admin_url('admin.php'));
       printf('<a class="%s" href="%s" %s>%s</a>', $current === $key ? 'active' : '', esc_url($url), $current === $key ? 'aria-current="page"' : '', esc_html($label));
     }
     echo '</nav>';
@@ -1520,6 +1626,14 @@ final class Plugin_UI_Suite_Plugin {
       echo '</td></tr>';
     }
     echo '</tbody></table>';
+  }
+
+  private static function render_widget_layout_controls($module, $options) {
+    $layouts = $module === 'stats' ? ['tiles'=>'Comfortable tiles','compact'=>'Compact tiles','band'=>'Impact band'] : ['grid'=>'Grid cards','list'=>'List rows','blog'=>'Blog / story cards'];
+    ob_start(); self::select_input($module, 'layout_preset', $options['layout_preset'] ?? array_key_first($layouts), $layouts); self::row('Layout style', ob_get_clean());
+    if ($module === 'stats') return;
+    ob_start(); self::select_input($module, 'card_design', $options['card_design'] ?? 'classic', ['classic'=>'Classic photo card','compact'=>'Compact photo card','thumbnail'=>'Compact thumbnail row']); self::row('Card design', ob_get_clean());
+    ob_start(); self::checkbox_input($module, 'visitor_view_switch', $options['visitor_view_switch'] ?? 0, 'Let visitors switch between grid and list views'); self::row('Visitor view selector', ob_get_clean() . '<p class="description">Your selected layout is the default. Visitor choices last for this browser session and do not change site settings.</p>');
   }
 
   private static function render_adoptables_tab($o, $g) {
@@ -1543,7 +1657,7 @@ final class Plugin_UI_Suite_Plugin {
     foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','modal_divider_color'=>'Modal divider colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('adoptables',$k,$o[$k]); self::row($label, ob_get_clean()); }
     foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_padding','Card padding (px)',0,120,1],['card_radius','Card corner radius (px)',0,120,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('adoptables',$r[0],$o[$r[0]]); else self::number_input('adoptables',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
     ob_start(); self::checkbox_input('adoptables','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
-    ob_start(); self::select_input('adoptables','display_style',$o['display_style'] ?? 'classic',['classic'=>'Grid','list'=>'List']); self::row('Display style', ob_get_clean());
+    self::render_widget_layout_controls('adoptables', $o);
     echo '</table></div>';
 
     echo '<div class="plugin-suite-card plugin-suite-subsection '.($sub==='text'?'active':'').'" data-subtab="text"><h2>Text</h2><table class="form-table">';
@@ -1603,6 +1717,7 @@ final class Plugin_UI_Suite_Plugin {
 
     if($sub==='design') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Design</h2><table class="form-table">';
+      self::render_widget_layout_controls('adopted', $o);
       foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','text_primary_color'=>'Primary text colour','text_muted_color'=>'Muted text colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('adopted',$k,$o[$k]); self::row($label, ob_get_clean()); }
       foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('adopted',$r[0],$o[$r[0]]); else self::number_input('adopted',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
       ob_start(); self::checkbox_input('adopted','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
@@ -1629,10 +1744,13 @@ final class Plugin_UI_Suite_Plugin {
       ob_start(); self::checkbox_input('adopted','enable_deep_links',$o['enable_deep_links'] ?? 1,'Enable direct links and sharing to each adopted cat modal'); self::row('Deep links and share', ob_get_clean());
       foreach (['share_button_text'=>'Share button text','share_copied_text'=>'Share copied text'] as $k=>$label){ ob_start(); self::text_input('adopted',$k,$o[$k] ?? ''); self::row($label, ob_get_clean()); }
       ob_start(); self::textarea_input('adopted','modal_global_text',$o['modal_global_text'] ?? '',5); self::row('Modal text below story', ob_get_clean() . '<p class="description">Shown below the story section in adopted modals.</p>');
-      ob_start(); self::checkbox_input('adopted','adoptables_cta_enabled',$o['adoptables_cta_enabled'] ?? 0,'Show an adoptables link section in adopted modals'); self::row('Adoptables link section', ob_get_clean());
+      ob_start(); self::checkbox_input('adopted','adoptables_cta_enabled',$o['adoptables_cta_enabled'] ?? 1,'Show an adoptables link section in adopted modals'); self::row('Adoptables link section', ob_get_clean());
       ob_start(); self::text_input('adopted','adoptables_cta_text',$o['adoptables_cta_text'] ?? ''); self::row('Adoptables link text', ob_get_clean());
       ob_start(); self::text_input('adopted','adoptables_cta_button_text',$o['adoptables_cta_button_text'] ?? ''); self::row('Adoptables button text', ob_get_clean());
-      self::row('Adoptables page URL', '<input type="url" name="' . esc_attr(self::field_name('adopted','adoptables_cta_url')) . '" value="' . esc_attr($o['adoptables_cta_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr(home_url('/adopt/')) . '" />');
+      $cta_destination = class_exists('Plugin_Adopted_UI_Shortcode') ? Plugin_Adopted_UI_Shortcode::resolve_adoptables_page_url($o) : '';
+      $cta_help = '<p class="description">Optional override. Leave blank to use the General Adoptables UI page URL, or automatically find a published page containing the Adoptables widget.</p>';
+      if (!empty($o['adoptables_cta_enabled']) && $cta_destination === '') $cta_help .= '<p class="description">No published Adoptables page was found. Publish a page containing the Adoptables widget or set its URL here; the button stays hidden until a destination is available.</p>';
+      self::row('Adoptables page URL', '<input type="url" name="' . esc_attr(self::field_name('adopted','adoptables_cta_url')) . '" value="' . esc_attr($o['adoptables_cta_url'] ?? '') . '" class="regular-text code" placeholder="' . esc_attr($cta_destination) . '" />' . $cta_help);
       ob_start(); self::number_input('adopted','modal_max_width',$o['modal_max_width'] ?? 896,320,1600); self::row('Modal max width (px)', ob_get_clean());
       echo '</table></div>';
     } elseif ($sub==='embed') {
@@ -1653,7 +1771,8 @@ final class Plugin_UI_Suite_Plugin {
       foreach (['brand_color'=>'Brand colour','background_color'=>'Background colour','card_border_color'=>'Card border colour'] as $k=>$label){ ob_start(); self::colour_input('stats',$k,$o[$k]); self::row($label, ob_get_clean()); }
       foreach ([['paw_opacity','Paw print opacity',0,0.25,0.01],['paw_count','Paw print count',0,80,1],['font_family','Font family',0,0,0],['card_radius','Card corner radius (px)',0,200,1],['card_padding','Card padding (px)',0,200,1],['card_border_weight','Card border weight (px)',0,20,1]] as $r){ ob_start(); if($r[0]==='font_family') self::text_input('stats',$r[0],$o[$r[0]]); else self::number_input('stats',$r[0],$o[$r[0]],$r[2],$r[3],$r[4]); self::row($r[1], ob_get_clean()); }
       ob_start(); self::checkbox_input('stats','card_border_enabled',$o['card_border_enabled'],'Show card border'); self::row('Card border', ob_get_clean());
-      ob_start(); self::select_input('stats','layout_mode',$o['layout_mode'],['grid'=>'Comfortable','one_row'=>'Compact on tablet / desktop']); self::row('Card density', ob_get_clean());
+      self::render_widget_layout_controls('stats', $o);
+      ob_start(); self::select_input('global','stats_data_mode',$g['stats_data_mode'] ?? 'built_in',['built_in'=>'Built-in system data (recommended)','custom_report'=>'Optional custom reports (advanced)']); self::row('Impact statistics source', ob_get_clean() . '<p class="description">ASM uses its built-in monthly statistics and animals-in-care endpoints. Treatment totals need an optional report and display as unavailable when the system does not supply them. Custom report mode uses Summary By Year and Cats In Care Now. Other systems use configured statistics feeds or available adoption records.</p>');
       echo '</table></div>';
     } elseif($sub==='text') {
       echo '<div class="plugin-suite-card" style="grid-column:1/-1;"><h2>Text</h2><table class="form-table">';
@@ -1770,7 +1889,7 @@ final class Plugin_UI_Suite_Plugin {
   }
 
   private static function module_versions() {
-    return array_fill_keys(['suite_core','adoptables','adopted','statistics','forms','proxy','payments'], PLUGIN_SUITE_VERSION);
+    return array_fill_keys(['suite_core','adoptables','adopted','statistics','forms','proxy','payments','shop'], PLUGIN_SUITE_VERSION);
   }
 
   private static function record_version_event($event) {
@@ -1822,10 +1941,10 @@ final class Plugin_UI_Suite_Plugin {
       if (!empty($snapshot['legacy']['adopted'])) update_option('plugin_adopted_ui_options', $snapshot['legacy']['adopted']);
       if (!empty($snapshot['legacy']['stats'])) update_option('plugin_stats_ui_options', $snapshot['legacy']['stats']);
       self::record_version_event('snapshot_restore');
-      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot restored'], admin_url('options-general.php')));
+      wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot restored'], admin_url('admin.php')));
       exit;
     }
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','plugin_msg'=>'Snapshot not found'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','plugin_msg'=>'Snapshot not found'], admin_url('admin.php')));
     exit;
   }
 
@@ -1835,7 +1954,7 @@ final class Plugin_UI_Suite_Plugin {
     $id = sanitize_text_field($_POST['snapshot_id'] ?? '');
     $snapshots = array_values(array_filter(self::get_snapshots(), function($snapshot) use ($id){ return ($snapshot['id'] ?? '') !== $id; }));
     update_option(self::SNAP_KEY, $snapshots, false);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot deleted'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>'Snapshot deleted'], admin_url('admin.php')));
     exit;
   }
 
@@ -1870,7 +1989,7 @@ final class Plugin_UI_Suite_Plugin {
     }
     update_option(self::OPT_KEY, $settings, false);
     self::sync_legacy_options($settings);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>ucfirst($module).' imported'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'diagnostics','updated'=>'true','plugin_msg'=>ucfirst($module).' imported'], admin_url('admin.php')));
     exit;
   }
 
@@ -1885,7 +2004,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!is_array($packs)) $packs = [];
     $packs[sanitize_title($name)] = ['name'=>$name,'created'=>current_time('mysql'),'suite'=>self::exportable_settings(self::get_settings())];
     update_option('plugin_ui_suite_setting_packs', $packs, false);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack saved'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack saved'], admin_url('admin.php'))); exit;
   }
   public static function handle_load_pack() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
@@ -1899,7 +2018,7 @@ final class Plugin_UI_Suite_Plugin {
     if (isset($existing['proxy']) && is_array($existing['proxy'])) foreach (['account','username','password'] as $secret_key) if (empty($merged['proxy'][$secret_key]) && !empty($existing['proxy'][$secret_key])) $merged['proxy'][$secret_key] = $existing['proxy'][$secret_key];
     if (isset($existing['global']) && is_array($existing['global'])) foreach (['custom_api_key','shelterluv_api_key','petpoint_username','petpoint_password'] as $secret_key) if (empty($merged['global'][$secret_key]) && !empty($existing['global'][$secret_key])) $merged['global'][$secret_key] = $existing['global'][$secret_key];
     update_option(self::OPT_KEY, $merged, false); self::sync_legacy_options($merged);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack loaded'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'global','updated'=>'true','plugin_msg'=>'Settings pack loaded'], admin_url('admin.php'))); exit;
   }
 
   private static function exportable_settings($settings) {
@@ -1935,7 +2054,7 @@ final class Plugin_UI_Suite_Plugin {
     $settings = self::get_settings();
     $source_status = self::data_source_status($settings);
     if (!empty($source_status['missing'])) {
-      echo '<div class="notice notice-warning"><p>' . esc_html($source_status['label']) . ' is not fully configured. Missing: ' . esc_html(implode(', ', $source_status['missing'])) . '. Use the <a href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">setup wizard</a> or the relevant settings tab.</p></div>';
+      echo '<div class="notice notice-warning"><p>' . esc_html($source_status['label']) . ' is not fully configured. Missing: ' . esc_html(implode(', ', $source_status['missing'])) . '. Use the <a href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php'))) . '">setup wizard</a> or the relevant settings tab.</p></div>';
     }
   }
 
@@ -1946,7 +2065,7 @@ final class Plugin_UI_Suite_Plugin {
     $page = sanitize_key($_GET['page'] ?? '');
     if ($page === 'plugin-ui-suite-setup') return;
     delete_option(self::WIZARD_KEY);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php')));
     exit;
   }
 
@@ -1987,7 +2106,7 @@ final class Plugin_UI_Suite_Plugin {
     delete_option(self::WIZARD_KEY);
     self::sync_legacy_options($settings);
     self::record_version_event('setup_completed');
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','updated'=>'true','plugin_msg'=>'Setup completed'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','updated'=>'true','plugin_msg'=>'Setup completed'], admin_url('admin.php')));
     exit;
   }
 
@@ -2047,7 +2166,7 @@ final class Plugin_UI_Suite_Plugin {
       set_transient('plugin_ui_suite_last_proxy_error', '', 60);
       set_transient('plugin_ui_suite_last_proxy_success', current_time('mysql'), 86400);
     }
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('admin.php')));
     exit;
   }
 
@@ -2089,7 +2208,7 @@ final class Plugin_UI_Suite_Plugin {
     set_transient('plugin_ui_suite_provider_diagnostics', ['time' => current_time('mysql'), 'results' => $results], 30 * MINUTE_IN_SECONDS);
     $failed = array_filter($results, function($row){ return empty($row['ok']); });
     $msg = empty($failed) ? 'Provider diagnostics passed' : 'Provider diagnostics completed with warnings';
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>$msg], admin_url('admin.php')));
     exit;
   }
 
@@ -2120,7 +2239,7 @@ final class Plugin_UI_Suite_Plugin {
       $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $pattern));
     }
     wp_cache_flush();
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>'Proxy cache cleared'], admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'proxy','plugin_msg'=>'Proxy cache cleared'], admin_url('admin.php')));
     exit;
   }
 
@@ -2202,11 +2321,11 @@ final class Plugin_UI_Suite_Plugin {
   public static function handle_test_enquiry_integration() {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_test_enquiry_integration');
-    $entry = ['time'=>current_time('mysql'),'event'=>'test_enquiry_integration','source'=>'admin_test','page'=>admin_url('options-general.php?page=plugin-ui-suite&tab=forms'),'ip_hash'=>'test','user_agent'=>'Rescue Plugin Suite test','context'=>['animal_id'=>'test','animal_name'=>'Test animal','animal_code'=>'TEST','modal_url'=>'']];
+    $entry = ['time'=>current_time('mysql'),'event'=>'test_enquiry_integration','source'=>'admin_test','page'=>admin_url('admin.php?page=plugin-ui-suite&tab=forms'),'ip_hash'=>'test','user_agent'=>'Rescue Plugin Suite test','context'=>['animal_id'=>'test','animal_name'=>'Test animal','animal_code'=>'TEST','modal_url'=>'']];
     $settings = self::get_settings();
     if (!empty($settings['global']['enquiry_email'])) wp_mail($settings['global']['enquiry_email'], 'Rescue Plugin Suite test enquiry notification', 'This is a test notification from Rescue Plugin Suite.');
     $ok = self::send_enquiry_webhook($entry, $settings);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>$ok ? 'Test enquiry integration sent' : 'Test webhook queued for retry'], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>$ok ? 'Test enquiry integration sent' : 'Test webhook queued for retry'], admin_url('admin.php'))); exit;
   }
 
   public static function process_webhook_retry_queue($manual = false) {
@@ -2231,7 +2350,7 @@ final class Plugin_UI_Suite_Plugin {
     if (!current_user_can('manage_options')) wp_die('Permission denied.');
     check_admin_referer('plugin_ui_suite_retry_webhooks');
     $result = self::process_webhook_retry_queue(true);
-    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>'Webhook retry sent ' . (int)$result['sent'] . ' item(s); remaining queue: ' . (int)$result['remaining']], admin_url('options-general.php'))); exit;
+    wp_safe_redirect(add_query_arg(['page'=>'plugin-ui-suite','tab'=>'forms','plugin_msg'=>'Webhook retry sent ' . (int)$result['sent'] . ' item(s); remaining queue: ' . (int)$result['remaining']], admin_url('admin.php'))); exit;
   }
 
   private static function render_webhook_audit_table() {
@@ -2622,7 +2741,7 @@ final class Plugin_UI_Suite_Plugin {
 
     echo '<p class="plugin-setup-actions">';
     submit_button('Save and finish','primary','submit',false);
-    echo ' <a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite'], admin_url('options-general.php'))) . '">Skip for now</a>';
+    echo ' <a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite'], admin_url('admin.php'))) . '">Skip for now</a>';
     echo '</p></form></div>';
     echo '<script>(function(){function currentSource(){const checked=document.querySelector("input[name=\"suite[global][data_source]\"]:checked");return checked?checked.value:"asm";}function syncSourceUi(){const source=currentSource();document.querySelectorAll("[data-source-fields]").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-source-fields")===source);});document.querySelectorAll("[data-source-card]").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-source-card")===source);});}document.addEventListener("click",function(e){const btn=e.target.closest(".plugin-wizard-step-btn");if(btn){e.preventDefault();const step=btn.getAttribute("data-step");document.querySelectorAll(".plugin-suite-subsection[data-step]").forEach(function(el){el.classList.toggle("active",el.getAttribute("data-step")===step);});}const card=e.target.closest("[data-source-card]");if(card){const input=card.querySelector("input[type=radio]");if(input){input.checked=true;syncSourceUi();}}});document.addEventListener("change",function(e){if(e.target&&e.target.name==="suite[global][data_source]")syncSourceUi();});syncSourceUi();})();</script>';
     echo '</div>';
@@ -2654,7 +2773,7 @@ final class Plugin_UI_Suite_Plugin {
       'Release Notes' => 'Check the latest release before updating production sites.',
       'Support workflow' => '1) Run Diagnostics. 2) Copy System Information. 3) Search Known Issues. 4) Open a focused GitHub issue.'
     ];
-    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('Contextual help is available for each major module, with a dedicated support workflow for production rescue websites.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a> <a class="button" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_copy_system_information'), 'plugin_ui_suite_copy_system_information')) . '">'.esc_html__('Copy System Information','plugin-ui-suite').'</a></p></div>';
+    echo '<div class="plugin-suite-grid"><div class="plugin-suite-card"><h2>'.esc_html__('Help Centre','plugin-ui-suite').'</h2><p>'.esc_html__('Contextual help is available for each major module, with a dedicated support workflow for production rescue websites.','plugin-ui-suite').'</p><p><a class="button button-primary" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php'))) . '">'.esc_html__('Open setup wizard','plugin-ui-suite').'</a> <a class="button" href="' . esc_url(wp_nonce_url(admin_url('admin-post.php?action=plugin_ui_suite_copy_system_information'), 'plugin_ui_suite_copy_system_information')) . '">'.esc_html__('Copy System Information','plugin-ui-suite').'</a></p></div>';
     foreach ($sections as $title=>$content) echo '<div class="plugin-suite-card"><h2>'.esc_html($title).'</h2><p>'.esc_html($content).'</p></div>';
     echo '<div class="plugin-suite-card" style="grid-column:1/-1"><h2>GitHub support</h2><div class="plugin-suite-actions"><a class="button" href="'.esc_url(self::github_url('issues/new')).'" target="_blank" rel="noopener">Report a Bug</a><a class="button" href="'.esc_url(self::github_url('issues')).'" target="_blank" rel="noopener">Known Issues</a><a class="button" href="'.esc_url(self::github_url('issues/new?labels=enhancement')).'" target="_blank" rel="noopener">Feature Requests</a><a class="button" href="'.esc_url(self::github_url('releases/latest')).'" target="_blank" rel="noopener">Latest Releases</a><a class="button" href="'.esc_url(self::github_url()).'" target="_blank" rel="noopener">Repository</a></div></div>';
     if (class_exists('Plugin_UI_Suite_Registry')) foreach (Plugin_UI_Suite_Registry::help_items() as $guide) { echo '<div class="plugin-suite-card"><h2>'.esc_html($guide['title'] ?? '').'</h2><p>'.wp_kses_post($guide['content'] ?? '').'</p>'; if (!empty($guide['external_url'])) echo '<p><a class="button" href="'.esc_url($guide['external_url']).'" target="_blank" rel="noopener">'.esc_html__('Open official documentation','plugin-ui-suite').'</a></p>'; echo '</div>'; }
@@ -2696,7 +2815,7 @@ final class Plugin_UI_Suite_Plugin {
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'; wp_nonce_field('plugin_ui_suite_proxy_test'); echo '<input type="hidden" name="action" value="plugin_ui_suite_proxy_test" />'; submit_button('Test connection','secondary','submit',false); echo '</form>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'; wp_nonce_field('plugin_ui_suite_proxy_clear_cache'); echo '<input type="hidden" name="action" value="plugin_ui_suite_proxy_clear_cache" />'; submit_button('Clear proxy cache','secondary','submit',false); echo '</form>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">'; wp_nonce_field('plugin_ui_suite_provider_diagnostics'); echo '<input type="hidden" name="action" value="plugin_ui_suite_provider_diagnostics" />'; submit_button('Run provider diagnostics','secondary','submit',false); echo '</form>';
-    echo '<a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('options-general.php'))) . '">Open setup wizard</a>';
+    echo '<a class="button" href="' . esc_url(add_query_arg(['page'=>'plugin-ui-suite-setup'], admin_url('admin.php'))) . '">Open setup wizard</a>';
     echo '</div>';
     self::render_provider_diagnostics_results();
     echo '</div></div>';

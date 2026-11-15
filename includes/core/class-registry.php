@@ -69,6 +69,8 @@ final class Plugin_UI_Suite_Registry {
     foreach (self::navigation_items('admin') as $item) {
       if (!empty($item['parent_slug'])) {
         add_submenu_page($item['parent_slug'], $item['page_title'] ?? $item['label'], $item['menu_title'] ?? $item['label'], $item['capability'] ?? 'manage_options', $item['slug'], $item['callback']);
+      } elseif (!empty($item['top_level'])) {
+        add_menu_page($item['page_title'] ?? $item['label'], $item['menu_title'] ?? $item['label'], $item['capability'] ?? 'manage_options', $item['slug'], $item['callback'], $item['icon'] ?? 'dashicons-heart', $item['position'] ?? null);
       } else {
         add_options_page($item['page_title'] ?? $item['label'], $item['menu_title'] ?? $item['label'], $item['capability'] ?? 'manage_options', $item['slug'], $item['callback']);
       }
@@ -77,7 +79,7 @@ final class Plugin_UI_Suite_Registry {
   public static function render_tabs($active_slug) {
     echo '<nav class="plugin-suite-tabs" aria-label="Suite settings">';
     foreach (self::navigation_items('tab') as $item) {
-      $href = add_query_arg(['page'=>$item['parent_page'] ?? 'plugin-ui-suite','tab'=>$item['slug']], admin_url('options-general.php'));
+      $href = add_query_arg(['page'=>$item['parent_page'] ?? 'plugin-ui-suite','tab'=>$item['slug']], admin_url('admin.php'));
       printf('<a class="plugin-suite-tab %s" href="%s" %s>%s</a>', $active_slug === $item['slug'] ? 'active' : '', esc_url($href), $active_slug === $item['slug'] ? 'aria-current="page"' : '', esc_html($item['label']));
     }
     echo '</nav>';

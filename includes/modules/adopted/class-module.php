@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
- * Version: 15.1.2
+ * Version: 15.2.0
  * Author: Jordan Sutton | Webstax
  */
 
@@ -19,6 +19,7 @@ final class Plugin_Adopted_UI_Shortcode {
   public static function init() {
     add_shortcode(self::SHORTCODE, [__CLASS__, 'render_shortcode']);
     add_action('wp_enqueue_scripts', [__CLASS__, 'conditionally_enqueue_assets'], 20);
+    add_action('save_post_page', [__CLASS__, 'clear_adoptables_page_cache']);
 
     add_action('admin_menu', [__CLASS__, 'admin_menu']);
     add_action('admin_init', [__CLASS__, 'admin_init']);
@@ -134,7 +135,7 @@ final class Plugin_Adopted_UI_Shortcode {
       'share_button_text'   => 'Share',
       'share_copied_text'   => 'Link copied',
       'modal_global_text'   => '',
-      'adoptables_cta_enabled' => 0,
+      'adoptables_cta_enabled' => 1,
       'adoptables_cta_text' => 'Looking for your next best friend?',
       'adoptables_cta_button_text' => 'View animals for adoption',
       'adoptables_cta_url' => '',
@@ -576,9 +577,9 @@ final class Plugin_Adopted_UI_Shortcode {
     printf('<p><label>Button text<br><input type="text" class="regular-text" name="%s[adoptables_cta_button_text]" value="%s" /></label> ', $key, esc_attr($o['adoptables_cta_button_text']));
     self::reset_button('adoptables_cta_button_text');
     echo '</p>';
-    printf('<p><label>Adoptables page URL<br><input type="url" class="regular-text code" name="%s[adoptables_cta_url]" value="%s" placeholder="%s" /></label> ', $key, esc_attr($o['adoptables_cta_url']), esc_attr(home_url('/adopt/')));
+    printf('<p><label>Adoptables page URL<br><input type="url" class="regular-text code" name="%s[adoptables_cta_url]" value="%s" placeholder="%s" /></label> ', $key, esc_attr($o['adoptables_cta_url']), esc_attr(self::resolve_adoptables_page_url($o)));
     self::reset_button('adoptables_cta_url');
-    echo '</p>';
+    echo '</p><p class="description">Optional override. Leave blank to use the General Adoptables UI page URL, or automatically find a published page containing the Adoptables widget.</p>';
   }
 
   /* -------------------------
@@ -616,12 +617,49 @@ final class Plugin_Adopted_UI_Shortcode {
   /* -------------------------
    * Shortcode render
    * ------------------------- */
+  private static function adoptables_page_cache_key($tag) {
+    return 'rps_adoptables_page_' . md5((string)$tag);
+  }
+
+  public static function clear_adoptables_page_cache() {
+    $settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : [];
+    delete_transient(self::adoptables_page_cache_key($settings['shortcodes']['adoptables'] ?? 'adoptables'));
+  }
+
+  /** Use a configured destination or an actual published display page, never a guessed URL. */
+  public static function resolve_adoptables_page_url($options = [], $settings = null) {
+    if (!is_array($settings)) $settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : [];
+    foreach ([$options['adoptables_cta_url'] ?? '', $settings['global']['adoptables_page_url'] ?? ''] as $url) {
+      $url = esc_url_raw($url);
+      if ($url !== '') return $url;
+    }
+    $tag = $settings['shortcodes']['adoptables'] ?? 'adoptables';
+    $cache_key = self::adoptables_page_cache_key($tag);
+    $cached = get_transient($cache_key);
+    if (is_array($cached)) {
+      $id = (int)($cached['id'] ?? 0);
+      if (!$id) return '';
+      if (get_post_status($id) === 'publish') return get_permalink($id);
+    }
+    foreach (array_unique([$tag, 'plugin_adoptables_ui', 'asm-suite/adoptables']) as $search) {
+      $pages = get_posts(['post_type'=>'page', 'post_status'=>'publish', 'numberposts'=>100, 's'=>$search, 'orderby'=>'menu_order ID', 'order'=>'ASC']);
+      foreach ($pages as $page) {
+        if (!has_shortcode($page->post_content, $tag) && !has_shortcode($page->post_content, 'plugin_adoptables_ui') && !(function_exists('has_block') && has_block('asm-suite/adoptables', $page->post_content))) continue;
+        set_transient($cache_key, ['id'=>(int)$page->ID], 5 * MINUTE_IN_SECONDS);
+        return get_permalink($page->ID);
+      }
+    }
+    set_transient($cache_key, ['id'=>0], 5 * MINUTE_IN_SECONDS);
+    return '';
+  }
+
   public static function render_shortcode($atts = [], $content = null) {
     self::enqueue_assets();
     $o = self::get_options();
     $suite_settings = class_exists('Plugin_UI_Suite_Plugin') ? Plugin_UI_Suite_Plugin::get_settings() : [];
     $global_settings = is_array($suite_settings) && isset($suite_settings['global']) && is_array($suite_settings['global']) ? $suite_settings['global'] : [];
     $adopted_page_url = esc_url_raw($global_settings['adopted_page_url'] ?? '');
+    $adoptables_cta_url = self::resolve_adoptables_page_url($o, $suite_settings);
 
     $ff = trim((string)$o['font_family']);
     $font_css = ($ff === '') ? "font-family: inherit;" : ("font-family: " . esc_html($ff) . ", sans-serif;");
@@ -713,7 +751,7 @@ final class Plugin_Adopted_UI_Shortcode {
 
     ob_start();
     ?>
-<section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> id="asm-successstories-widget" aria-labelledby="asm-plugin-heading"
+<section <?php echo Plugin_UI_Suite_Plugin::widget_presentation_attributes(); ?> <?php echo Plugin_UI_Suite_Plugin::widget_layout_attributes('adopted'); ?> id="asm-successstories-widget" aria-labelledby="asm-plugin-heading"
      class="rps-widget w-full relative overflow-hidden rounded-2xl"
      style="background:var(--plugin-bg); <?php echo esc_attr($vars_css); ?>">
 
@@ -762,6 +800,7 @@ final class Plugin_Adopted_UI_Shortcode {
       </div>
     </div>
 
+    <?php Plugin_UI_Suite_Plugin::render_widget_view_switch('adopted'); ?>
     <?php if (!empty($o['show_top_navigation'])) : ?>
     <!-- TOP NAV -->
     <div class="rps-widget-toolbar flex items-center justify-between gap-3 mb-5">
@@ -805,14 +844,14 @@ final class Plugin_Adopted_UI_Shortcode {
           $seo_url = Plugin_UI_Suite_SEO::profile_url($seo_animal, true);
         }
       ?>
-        <article class="asm-card bg-white rounded-2xl shadow-md overflow-hidden w-full" style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);">
+        <article class="rps-animal-card asm-card bg-white rounded-2xl shadow-md overflow-hidden w-full" style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);">
           <?php if ($seo_img !== '') : ?>
-            <img src="<?php echo esc_url($seo_img); ?>" alt="<?php echo esc_attr($seo_name . ', an adopted cat'); ?>" loading="eager" decoding="async" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;" />
+            <div class="rps-card-media"><img src="<?php echo esc_url($seo_img); ?>" alt="<?php echo esc_attr($seo_name . ', an adopted cat'); ?>" loading="eager" decoding="async" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;" /></div>
           <?php endif; ?>
-          <div style="padding:var(--plugin-card-pad);">
-            <h3 class="plugin-card-name" style="margin:0;color:var(--plugin-text);"><?php if ($seo_url !== '') : ?><a href="<?php echo esc_url($seo_url); ?>" style="color:inherit;text-decoration:none;"><?php echo esc_html($seo_name); ?></a><?php else : ?><?php echo esc_html($seo_name); ?><?php endif; ?></h3>
-            <p class="plugin-card-meta" style="margin:.4rem 0 0;color:var(--plugin-muted);"><?php echo esc_html(implode(' • ', array_filter([$seo_sex, $seo_age, $seo_breed]))); ?></p>
-            <?php if ($seo_story !== '') : ?><p style="margin:.75rem 0 0;color:var(--plugin-text);line-height:1.6;"><?php echo esc_html(wp_trim_words($seo_story, 28)); ?></p><?php endif; ?>
+          <div class="rps-card-details" style="padding:var(--plugin-card-pad);">
+            <h3 class="rps-card-name plugin-card-name" style="margin:0;color:var(--plugin-text);"><?php if ($seo_url !== '') : ?><a href="<?php echo esc_url($seo_url); ?>" style="color:inherit;text-decoration:none;"><?php echo esc_html($seo_name); ?></a><?php else : ?><?php echo esc_html($seo_name); ?><?php endif; ?></h3>
+            <p class="rps-card-meta plugin-card-meta" style="margin:.4rem 0 0;color:var(--plugin-muted);"><?php echo esc_html(implode(' • ', array_filter([$seo_sex, $seo_age, $seo_breed]))); ?></p>
+            <?php if ($seo_story !== '') : ?><p class="rps-card-excerpt" style="margin:.75rem 0 0;color:var(--plugin-text);line-height:1.6;"><?php echo esc_html(wp_trim_words($seo_story, 28)); ?></p><?php endif; ?>
           </div>
         </article>
       <?php endforeach; ?>
@@ -850,7 +889,7 @@ final class Plugin_Adopted_UI_Shortcode {
 
   <div data-rps-ui id="asm-plugin-modal" class="hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="asm-plugin-modal-name" tabindex="-1" style="<?php echo esc_attr($vars_css); ?>">
     <div id="asm-plugin-modal-backdrop" class="absolute inset-0 bg-black/50"></div>
-    <div id="asm-plugin-modal-viewport" class="absolute inset-0 overflow-y-auto p-4 sm:p-6" style="min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;">
+    <div id="asm-plugin-modal-viewport" class="absolute inset-0 overflow-y-auto p-4 sm:p-6" style="min-height:100dvh;display:flex;align-items:center;justify-content:center;">
       <div id="asm-plugin-modal-panel" class="bg-white rounded-2xl shadow-2xl border-2 overflow-hidden flex flex-col" style="border-color:var(--plugin-brand);">
         <div class="sticky top-0 z-20 bg-white flex items-center justify-between px-4 sm:px-6 py-4 border-b">
           <div class="flex items-center gap-3 min-w-0">
@@ -891,12 +930,12 @@ final class Plugin_Adopted_UI_Shortcode {
                 <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--plugin-muted);">Sex</div><div id="asm-plugin-modal-sex" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--plugin-text);">—</div></div>
                 <div class="bg-white rounded-2xl p-3 border shadow-sm"><div class="text-xs font-bold" style="color:var(--plugin-muted);">Breed</div><div id="asm-plugin-modal-breed" class="text-sm lg:text-base font-extrabold leading-snug" style="color:var(--plugin-text);">—</div></div>
               </div>
-              <?php if (!empty($o['adoptables_cta_enabled']) && !empty($o['adoptables_cta_url'])) : ?>
+              <?php if (!empty($o['adoptables_cta_enabled']) && $adoptables_cta_url !== '') : ?>
                 <div id="asm-plugin-adoptables-cta" class="mt-5 rounded-2xl border p-4 bg-white shadow-sm" style="border-color:var(--plugin-brand);">
                   <?php if (trim((string)($o['adoptables_cta_text'] ?? '')) !== '') : ?>
                     <p class="font-semibold mb-3" style="color:var(--plugin-text);"><?php echo esc_html($o['adoptables_cta_text']); ?></p>
                   <?php endif; ?>
-                  <a class="inline-flex items-center justify-center px-4 h-11 rounded-xl border-2 font-bold shadow-sm" href="<?php echo esc_url($o['adoptables_cta_url']); ?>" style="background:var(--plugin-brand);border-color:var(--plugin-brand);color:#fff;text-decoration:none;">
+                  <a class="inline-flex items-center justify-center px-4 h-11 rounded-xl border-2 font-bold shadow-sm" href="<?php echo esc_url($adoptables_cta_url); ?>" style="background:var(--plugin-brand);border-color:var(--plugin-brand);color:#fff;text-decoration:none;">
                     <?php echo esc_html($o['adoptables_cta_button_text'] ?: 'View animals for adoption'); ?>
                   </a>
                 </div>
@@ -928,10 +967,10 @@ final class Plugin_Adopted_UI_Shortcode {
             </div>
           </div>
         </div>
-        <div id="asm-plugin-modal-animal-nav" class="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t bg-white">
-          <button id="asm-plugin-modal-prev-animal" type="button" class="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Previous adopted cat"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg><span>Previous cat</span></button>
-          <button id="asm-plugin-modal-next-animal" type="button" class="ml-auto inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Next adopted cat"><span>Next cat</span><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
-        </div>
+        <nav id="asm-plugin-modal-animal-nav" class="rps-modal-animal-nav" aria-label="Browse adopted animals">
+          <button id="asm-plugin-modal-prev-animal" type="button" class="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Previous adopted animal"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg><span>Previous animal</span></button>
+          <button id="asm-plugin-modal-next-animal" type="button" class="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border-2 bg-white shadow-sm hidden" style="border-color:var(--plugin-brand);color:var(--plugin-brand);" aria-label="Next adopted animal"><span>Next animal</span><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></button>
+        </nav>
       </div>
     </div>
   </div>
@@ -1338,6 +1377,7 @@ final class Plugin_Adopted_UI_Shortcode {
     const safeAge = escHtml(age);
     const safeSex = escHtml(sex);
     const safeBreed = escHtml(breed);
+    const excerpt = escHtml(String(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? '').replace(/<[^>]*>/g, '').trim().split(/\s+/).slice(0, 34).join(' '));
     const imageBlock = animalId
       ? `<img src="${escAttr(thumb)}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" />`
       : `<div class="w-full h-full flex items-center justify-center text-4xl">🐾</div>`;
@@ -1346,7 +1386,7 @@ final class Plugin_Adopted_UI_Shortcode {
       <a href="${escAttr(CFG.profileBase)}${encodeURIComponent(animalId)}/" class="rps-animal-card asm-card group text-left bg-white w-full" data-animalid="${safeId}"
            style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);" ${CFG.enableModals ? `aria-label="View adoption story for ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-plugin-modal"` : ''}>
         <span class="rps-card-media relative block"><span class="bg-gray-100 aspect-square w-full block" style="line-height:0;overflow:hidden;">${imageBlock}</span></span>
-        <span class="rps-card-details block"><span class="rps-card-name plugin-card-name block">${safeName}</span><span class="rps-card-meta plugin-card-meta block">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</span></span>
+        <span class="rps-card-details block"><span class="rps-card-name plugin-card-name block">${safeName}</span><span class="rps-card-meta plugin-card-meta block">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</span><span class="rps-card-excerpt">${excerpt}</span></span>
         <span class="rps-card-footer"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Our story <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></span>
       </a>
     `;
@@ -1406,6 +1446,8 @@ final class Plugin_Adopted_UI_Shortcode {
     const total = Array.isArray(shown) ? shown.length : 0;
     const hasPrev = currentModalAnimalIndex > 0;
     const hasNext = currentModalAnimalIndex >= 0 && currentModalAnimalIndex < total - 1;
+    const navigation = qs('asm-plugin-modal-animal-nav');
+    if (navigation) navigation.hidden = total <= 1;
     if (prev) { prev.classList.toggle('hidden', !hasPrev); prev.disabled = !hasPrev; }
     if (next) { next.classList.toggle('hidden', !hasNext); next.disabled = !hasNext; }
   }

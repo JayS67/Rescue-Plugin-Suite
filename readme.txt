@@ -1,5 +1,23 @@
 === Rescue Plugin Suite ===
-Stable tag: 15.1.2
+Stable tag: 15.2.0
+
+15.2.0
+- One top-level WordPress menu for settings, widgets, donations, Rescue Shop and updates.
+- Rescue Shop integrates the uploaded shop while retaining legacy products, orders, links and shortcodes.
+- Choose grid, list or blog animal layouts; classic, compact or thumbnail cards; optional visitor grid/list controls.
+- Choose impact tile, compact or band styles. Consistent modal navigation and an adopted-to-adoptables button.
+- ASM built-in monthly statistics and animals-in-care endpoints remove custom-report setup for supported totals.
+- Unknown totals display as unavailable. Optional custom reports remain available for additional metrics.
+- Accessible impact description and no inappropriate Dataset schema for the stats widget.
+
+SETUP FOR NEW FEATURES
+In the WordPress sidebar, open Rescue Plugin Suite. Widgets opens Adoptables; use the tabs for Adopted and Statistics. Each widget's Design section contains its layout options and animal card designs. Enable the visitor view switch separately for each animal widget. General contains transparent-background and heading/footer visibility options; dialogs stay opaque.
+
+Rescue Shop contains products, orders, categories and shop settings. Create pages containing [rescue_shop] and [rescue_shop_basket]. Legacy [straysafe_shop], [straysafe_shop_product] and [straysafe_shop_basket] embeds keep working. If the standalone shop is active, deactivate it (do not delete its data) before using the suite shop. Existing shop settings and Stripe keys remain separate from donation settings. Configure the shop's Stripe signing secret and webhook endpoint, then test checkout before switching to live mode. Checkout supports interactive e-cards. Physical products, downloads and other unsupported digital items remain enquiry-only. Shop orders and e-card files are retained on uninstall. Apache storage protection is included. On Nginx, the host must deny direct HTTP access to the uploads/straysafe-shop-private/ directory; image delivery uses the token endpoint. Keep directory listing disabled. Unpurchased uploads expire after 30 days; purchased image metadata is retained.
+
+Under Statistics > Design, use Built-in system data for ASM's monthly intake/adoption totals and current in-care count. The ASM API user needs animal and movement viewing permissions. Vaccination, neutering and microchip totals require an optional custom report; they are not estimated. Other rescue systems use their configured feeds where available. ASM reservation flags also work without a custom report; optional advanced reservation details can be enabled under Integrations > ASM if that report is installed. Do not expose private animal records in public feeds.
+
+If Search Console still reports an invalid description, inspect the affected live URL and schema type, clear site/CDN caches and request validation after deployment. The impact widget does not emit Dataset markup; other plugins or previously cached markup may still produce it.
 
 15.1.2
 - Hardened native WordPress manual and automatic updates.
@@ -87,6 +105,6 @@ Adopted profile format:
 /happy-endings/{animal-id}-{animal-name}/
 
 Animal URLs are included automatically in the WordPress XML sitemap at /wp-sitemap.xml.
-The suite emits relevant JSON-LD structured data for animal lists, statistics, quiz pages, forms and the rescue organisation. It also integrates with Yoast SEO and Rank Math canonical and description filters where those plugins are active.
+The suite emits relevant JSON-LD structured data for animal lists, quiz pages, forms and the rescue organisation. It also integrates with Yoast SEO and Rank Math canonical and description filters where those plugins are active.
 
 SEO performance still depends on the surrounding page title, written introductory content, hosting speed, image quality, internal links and the site's general WordPress SEO configuration.

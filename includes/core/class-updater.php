@@ -239,7 +239,8 @@ final class Plugin_UI_Suite_Updater {
     global $wp_filesystem;
     if (!is_object($wp_filesystem)) return new WP_Error('rescue_update_filesystem', 'The update filesystem is unavailable. The installed plugin was kept.');
     $required = ['plugin-ui-suite.php', 'includes/core/helpers.php', 'includes/core/class-registry.php', 'includes/core/class-plugin.php', 'includes/core/class-seo.php', 'includes/core/class-updater.php'];
-    foreach (['asm-proxy', 'forms', 'adoptables', 'adopted', 'statistics', 'payments'] as $module) $required[] = 'includes/modules/' . $module . '/class-module.php';
+    foreach (['asm-proxy', 'forms', 'adoptables', 'adopted', 'statistics', 'payments', 'shop'] as $module) $required[] = 'includes/modules/' . $module . '/class-module.php';
+    $required[] = 'includes/modules/shop/class-engine.php';
     foreach ($required as $file) {
       if (!$wp_filesystem->is_file(trailingslashit($source) . $file)) {
         return new WP_Error('rescue_update_incomplete', 'The Rescue Plugin Suite package is incomplete (' . $file . '). The installed plugin was kept.');
@@ -335,7 +336,7 @@ final class Plugin_UI_Suite_Updater {
       self::clear_update_caches();
       $args['saved'] = '1';
     } else return;
-    wp_safe_redirect(add_query_arg($args, admin_url('options-general.php')));
+    wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
     exit;
   }
   private static function validate_release_package() {

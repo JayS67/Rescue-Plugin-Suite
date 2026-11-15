@@ -12,7 +12,7 @@ $js = file_get_contents($root . '/assets/js/admin-sortable.js');
 $workflow = file_get_contents($root . '/.github/workflows/release.yml');
 $errors = [];
 function ok($cond, $msg){ global $errors; if (!$cond) $errors[] = $msg; }
-ok(substr_count($core, "'slug'=>'plugin-ui-suite'") === 1, 'Expected one suite settings admin registration.');
+ok(substr_count($core, "register_navigation('settings_root'") === 1, 'Expected one suite settings admin registration.');
 ok(strpos($core, "add_submenu_page('options-general.php','Rescue Plugin Suite Updates'") === false, 'Updates submenu must not be registered.');
 ok(strpos($core, "add_submenu_page('options-general.php','Payments:") === false, 'Payments submenus must not be registered.');
 ok(strpos($core, "'data-source'=>'Integrations'") !== false, 'Integrations tab missing.');

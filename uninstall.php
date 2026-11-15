@@ -2,6 +2,9 @@
 if (!defined('WP_UNINSTALL_PLUGIN')) exit;
 
 global $wpdb;
+// Shop records and private e-card files are retained, including when switching
+// between the standalone shop and the suite. Clear its cron only if unowned.
+if (!class_exists('StraySafe_Shop', false)) wp_clear_scheduled_hook('ssshop_delivery_tick');
 
 $settings = get_option('plugin_ui_suite_settings_v83', []);
 if (empty($settings['global']['delete_data_on_uninstall'])) {

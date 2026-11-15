@@ -210,3 +210,65 @@
 .rps-widget[data-rps-show-titles="false"][data-rps-show-subtitles="false"] .rps-widget-heading:not(:has(select,button,input)) { margin: 0; }
 /* Profile links remain ordinary links when modal presentation is disabled. */
 [data-rps-ui] .rps-animal-card { text-decoration: none; }
+
+/* Animal browsing controls occupy the same footer slots in both dialogs. */
+#asm-modal #asm-modal-viewport,
+#asm-plugin-modal #asm-plugin-modal-viewport { box-sizing: border-box; overflow: hidden; }
+#asm-modal #asm-modal-panel,
+#asm-plugin-modal #asm-plugin-modal-panel {
+  display: flex;
+  flex-direction: column;
+  height: min(88dvh, 900px);
+  max-height: calc(100dvh - 32px);
+  min-height: 0;
+}
+#asm-modal #asm-modal-scroll,
+#asm-plugin-modal #asm-plugin-modal-scroll { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+#asm-modal .rps-modal-animal-nav,
+#asm-plugin-modal .rps-modal-animal-nav {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  border-top: 1px solid #dce2eb;
+  background: #fff;
+}
+#asm-modal .rps-modal-animal-nav button,
+#asm-plugin-modal .rps-modal-animal-nav button {
+  position: static;
+  transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--asm-brand, var(--plugin-brand, #4c2373));
+  font-size: .875rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+#asm-modal .rps-modal-animal-nav button:first-child,
+#asm-plugin-modal .rps-modal-animal-nav button:first-child { grid-column: 1; justify-self: start; }
+#asm-modal .rps-modal-animal-nav button:last-child,
+#asm-plugin-modal .rps-modal-animal-nav button:last-child { grid-column: 2; justify-self: end; }
+#asm-modal .rps-modal-animal-nav button svg,
+#asm-plugin-modal .rps-modal-animal-nav button svg { width: 20px; height: 20px; flex: 0 0 auto; }
+#asm-modal .rps-modal-animal-nav[hidden],
+#asm-plugin-modal .rps-modal-animal-nav[hidden],
+#asm-modal .rps-modal-animal-nav button.hidden,
+#asm-plugin-modal .rps-modal-animal-nav button.hidden { display: none !important; }
+#asm-plugin-modal #asm-plugin-adoptables-cta { border-color: #dce2eb; box-shadow: none; }
+#asm-plugin-modal #asm-plugin-adoptables-cta a { height: auto; min-height: 44px; text-align: center; }

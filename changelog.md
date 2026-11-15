@@ -1,3 +1,14 @@
+## 15.2.0
+
+- Add a top-level suite admin menu with section links and compatible redirects for older settings URLs.
+- Integrate Rescue Shop, retaining existing shop data, legacy embeds and private e-card links.
+- Harden shop checkout, signed webhook verification, contributor permissions and private assets.
+- Add animal layout presets, three card designs and optional visitor grid/list controls per widget.
+- Add impact display presets and standardise modal previous/next navigation.
+- Enable an adopted-modal adoption CTA with configured or discovered adoptables page links.
+- Use documented ASM built-in endpoints for supported impact totals, with optional advanced custom reports.
+- Show unavailable metrics honestly; improve accessible impact descriptions and bound animal metadata descriptions.
+
 ## 15.1.2
 
 - Preserve WordPress error handling and rollback during plugin upgrades.

@@ -123,3 +123,21 @@ environment variables), `tests/settings-usability.php`, `tests/settings-save.php
 `tests/payment-settings.php`, `tests/update-preferences.php`, and
 `tests/updater-native-lifecycle.php`. The native lifecycle test is explicitly destructive
 and refuses to run without `RPS_UPDATER_TESTS=1`; use only a disposable installation.
+
+## WordPress sidebar navigation
+
+The suite has its own **Rescue Plugin Suite** top-level admin menu, with General,
+Integrations, Widgets, Forms, Donations, Diagnostics, Updates and Help Centre links.
+Widgets groups Adoptables, Adopted, Featured Animal, Statistics and Match Quiz; their
+existing tabs and customisation controls remain available. The menu requires
+`manage_options` and does not alter other plugins' sidebar entries.
+
+Canonical suite links use `wp-admin/admin.php?page=plugin-ui-suite`. Old bookmarks
+under `options-general.php` redirect while retaining the selected tab, subsection and
+notice parameters. Legacy module/payment routes and the hidden setup wizard continue
+to work. Saving settings returns to the new location.
+
+Run `tests/admin-navigation.cjs` against the disposable WordPress fixture with
+`RPS_ADMIN_USER`, `RPS_ADMIN_PASSWORD`, `RPS_SUBSCRIBER_USER` and
+`RPS_SUBSCRIBER_PASSWORD` supplied at runtime. It checks all sidebar sections, assets,
+highlighting, old URLs, the setup wizard, a settings save and subscriber access denial.
