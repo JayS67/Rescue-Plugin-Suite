@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Data Proxy
  * Description: Proxies rescue management JSON endpoints so credentials never reach browsers and animal images are served safely.
- * Version: 15.2.1
+ * Version: 15.2.2
  */
 
 if (!defined('ABSPATH')) exit;

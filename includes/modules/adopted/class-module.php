@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Adopted
  * Description: Provides [adopted] shortcode for the adopted animals widget with scoped styling and settings.
- * Version: 15.2.1
+ * Version: 15.2.2
  * Author: Jordan Sutton | Webstax
  */
 
@@ -1402,7 +1402,8 @@ final class Plugin_Adopted_UI_Shortcode {
     const safeNameAttr = escAttr(name);
     const safeAge = escHtml(age);
     const safeSex = escHtml(sex);
-    const safeBreed = escHtml(breed);
+    const safeBreed = escHtml(breed === '—' || breed === '-' ? '' : breed);
+    const cardMeta = [sex, age].filter(value => value && value !== '—' && value !== '-').map(escHtml).join(' · ');
     const excerpt = escHtml(cardExcerpt(a.ANIMALCOMMENTS ?? a.WEBSITEMEDIANOTES ?? a.DESCRIPTION ?? a.ANIMALDESCRIPTION ?? ''));
     const imageBlock = animalId
       ? `<img src="${escAttr(thumb)}" alt="${safeNameAttr}" class="block w-full h-full object-cover" loading="lazy" decoding="async" fetchpriority="auto" />`
@@ -1412,7 +1413,7 @@ final class Plugin_Adopted_UI_Shortcode {
       <a href="${escAttr(CFG.profileBase)}${encodeURIComponent(animalId)}/" class="rps-animal-card asm-card group text-left bg-white w-full" data-animalid="${safeId}"
            style="border-style:solid;border-color:var(--plugin-card-border-color);border-width:var(--plugin-card-border-width);" ${CFG.enableModals ? `aria-label="View adoption story for ${safeNameAttr}" aria-haspopup="dialog" aria-controls="asm-plugin-modal"` : ''}>
         <span class="rps-card-media relative block"><span class="bg-gray-100 aspect-square w-full block" style="line-height:0;overflow:hidden;">${imageBlock}</span></span>
-        <span class="rps-card-details block"><span class="rps-card-name plugin-card-name block">${safeName}</span><span class="rps-card-meta plugin-card-meta block">${safeSex} <span aria-hidden="true">·</span> ${safeAge}</span><span class="rps-card-excerpt">${excerpt}</span></span>
+        <span class="rps-card-details block"><span class="rps-card-name plugin-card-name block">${safeName}</span><span class="rps-card-meta plugin-card-meta block">${cardMeta}</span><span class="rps-card-excerpt">${excerpt}</span></span>
         <span class="rps-card-footer"><span class="rps-card-breed">${safeBreed}</span><span class="rps-card-link" aria-hidden="true">Our story <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span></span>
       </a>
     `;

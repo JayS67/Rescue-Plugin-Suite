@@ -2,7 +2,7 @@
 /**
  * Module: Rescue Plugin Suite Statistics
  * Description: Adds the statistics UI via shortcode [stats] with settings.
- * Version: 15.2.1
+ * Version: 15.2.2
  * Author: Jordan Sutton | Webstax
  */
 

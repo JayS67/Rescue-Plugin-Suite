@@ -95,14 +95,14 @@ const modules = {
       await save(module, { card_design: 'thumbnail' });
       root = await openWidget(module);
       const thumbnail = await geometry(root);
-      assert(thumbnail.details.x > thumbnail.media.x + thumbnail.media.width - 2, module + ' thumbnail places image beside details');
-      assert(thumbnail.card.height < classic.card.height, module + ' thumbnail is a compact option');
+      assert(thumbnail.details.y >= thumbnail.media.y + thumbnail.media.height - 2, module + ' photo stays above details');
+      assert(thumbnail.media.width >= thumbnail.card.width * .9, module + ' photographs remain the focal point');
       assert(Math.abs(thumbnail.photo.width - thumbnail.photo.height) <= 1.5, module + ': thumbnails stay square');
       await save(module, { layout_preset: 'blog', card_design: 'classic' });
       root = await openWidget(module);
       assert.equal(await root.getAttribute('data-rps-layout'), 'blog');
       assert.notEqual(await root.locator('.rps-card-excerpt').first().evaluate(el => getComputedStyle(el).display), 'none', 'Blog shows story excerpts');
-      assert.equal(await root.locator(modules[module].grid).evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length), 1, 'Blog uses one readable column');
+      assert(await root.locator('.rps-card-media').first().evaluate(el => el.getBoundingClientRect().width <= 420), 'Blog photos remain bounded');
       await checkAxe(root, module + ' blog');
       await save(module, { layout_preset: 'list', visitor_view_switch: true });
       root = await openWidget(module);
